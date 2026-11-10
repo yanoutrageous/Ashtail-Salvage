@@ -1,0 +1,780 @@
+extends RefCounted
+class_name CommandBus
+
+# All player and Debug UI commands go through CommandBus.
+
+signal command_requested(command_name: StringName, payload: Dictionary)
+signal state_changed(snapshot: Dictionary)
+signal result_available(summary: Dictionary)
+
+const DEFAULT_ACTOR_ID := &"player"
+const REJECTION_EVENT_OPTION_UNAVAILABLE := "event_option_unavailable"
+const REJECTION_CANNOT_EXTRACT := "cannot_extract"
+const REJECTION_NO_EXTRACT_REQUEST := "no_extract_request"
+const REJECTION_ABANDON_CONFIRMATION_REQUIRED := "abandon_confirmation_required"
+const REJECTION_RESTART_CONFIRMATION_REQUIRED := "restart_confirmation_required"
+const EncounterContractScript := preload("res://scripts/core/run/encounter/encounter_contract.gd")
+const DebugGateScript := preload("res://scripts/core/debug/debug_gate.gd")
+const RunEffectApplierScript := preload("res://scripts/core/run/run_effect_applier.gd")
+const M3ItemCatalogScript := preload("res://scripts/core/content/m3_item_catalog.gd")
+const RunStartConfigScript := preload("res://scripts/core/run/run_start_config.gd")
+const ItemCommandHandlerScript := preload("res://scripts/core/command/item_command_handler.gd")
+
+var context: RunContext
+var runtime_controller
+var room_resolver: RoomResolver = RoomResolver.new()
+var item_command_handler: ItemCommandHandler = ItemCommandHandlerScript.new()
+var command_sequence: int = 0
+
+
+func dispatch(command_name: StringName, payload: Dictionary = {}) -> Dictionary:
+	var command: Dictionary = _normalize_command(command_name, payload)
+	var command_payload: Dictionary = command.get("payload", {})
+	if _is_debug_command_request(command_name, command_payload) and not _debug_tools_enabled():
+		var blocked := DebugGateScript.disabled_result(DEFAULT_ACTOR_ID)
+		return CommandResult.from_action(command, blocked, [], [], _snapshot_delta_for(blocked))
+	if context == null and runtime_controller != null:
+		context = runtime_controller.context
+	var event_start: int = _event_count()
+	var transaction_start: int = _transaction_count()
+	if context != null:
+		context.active_command = command.duplicate(true)
+		if _is_debug_command_request(command_name, command_payload):
+			context.record_debug_command(String(command_name), command_payload)
+	command_requested.emit(command_name, command)
+	var action_result: Dictionary = {}
+	match command_name:
+		&"start_demo_run":
+			action_result = start_demo_run()
+		&"start_standard_run":
+			action_result = start_standard_run(command_payload)
+		&"move_by":
+			action_result = move_by(command_payload.get("delta", Vector2i.ZERO))
+		&"attempt_room_transition":
+			action_result = attempt_room_transition(command_payload.get("direction", Vector2i.ZERO))
+		&"toggle_flag_cell":
+			action_result = toggle_flag_cell(command_payload.get("pos", null))
+		&"flag_current_cell":
+			action_result = flag_current_cell()
+		&"search_current_room":
+			action_result = search_current_room()
+		&"interact_current_room":
+			action_result = interact_current_room()
+		&"interact":
+			action_result = interact()
+		&"fight_current_enemy":
+			action_result = fight_current_enemy()
+		&"apply_runtime_combat_damage":
+			action_result = apply_runtime_combat_damage(command_payload)
+		&"resolve_runtime_combat":
+			action_result = resolve_runtime_combat(command_payload)
+		&"resolve_runtime_combat_defeat":
+			action_result = resolve_runtime_combat_defeat(command_payload)
+		&"flee_runtime_combat":
+			action_result = flee_runtime_combat(command_payload)
+		&"teleport_to_explored":
+			action_result = teleport_to_explored(command_payload.get("pos", Vector2i.ZERO))
+		&"select_event_option":
+			action_result = select_event_option(StringName(command_payload.get("option_id", &"default")))
+		&"select_encounter_option":
+			action_result = select_encounter_option(StringName(command_payload.get("option_id", &"default")))
+		&"pickup_ground_item":
+			action_result = pickup_ground_item(String(command_payload.get("instance_id", "")))
+		&"replace_ground_item":
+			action_result = replace_ground_item(String(command_payload.get("ground_instance_id", command_payload.get("instance_id", ""))), String(command_payload.get("drop_instance_id", "")))
+		&"drop_inventory_item":
+			action_result = drop_inventory_item(String(command_payload.get("instance_id", "")))
+		&"use_consumable", &"use_item":
+			action_result = use_consumable(String(command_payload.get("instance_id", "")))
+		&"equip_item":
+			action_result = equip_item(String(command_payload.get("instance_id", "")))
+		&"unequip_item":
+			action_result = unequip_item(String(command_payload.get("instance_id", "")))
+		&"abandon_run":
+			var explicit_confirmation: Variant = command_payload.get("confirmed", false)
+			action_result = abandon_run(
+				String(command_payload.get("reason", "player_abandoned")),
+				explicit_confirmation is bool and bool(explicit_confirmation)
+			)
+		&"confirm_failure_salvage":
+			action_result = confirm_failure_salvage(command_payload.get("selected_instance_ids", []))
+		&"retry_terminal_commit":
+			action_result = retry_terminal_commit()
+		&"discard_unsaved_terminal_commit":
+			var explicit_confirmation: Variant = command_payload.get("confirmed", false)
+			action_result = discard_unsaved_terminal_commit(
+				explicit_confirmation is bool and bool(explicit_confirmation)
+			)
+		&"request_extract":
+			action_result = request_extract()
+		&"confirm_extract":
+			action_result = confirm_extract()
+		&"cancel_extract":
+			action_result = cancel_extract()
+		&"extract":
+			action_result = extract()
+		&"restart_run":
+			action_result = restart_run()
+		&"debug_restart_run":
+			action_result = debug_restart_run()
+		&"confirm_tutorial_popup":
+			action_result = confirm_tutorial_popup()
+		&"open_map":
+			action_result = _mark_open_map_placeholder()
+		&"debug_add_run_black_coin":
+			action_result = debug_add_run_black_coin(int(command_payload.get("amount", 25)))
+		&"debug_teleport_to_exit":
+			action_result = debug_teleport_to_exit()
+		&"debug_teleport_to":
+			action_result = debug_teleport_to(_vector2i_from(command_payload.get("pos", Vector2i.ZERO)), bool(command_payload.get("enter_room", true)))
+		&"debug_reveal_full_map":
+			action_result = debug_reveal_full_map()
+		&"debug_spawn_test_item_floor":
+			action_result = debug_spawn_test_item(RunAssetLedger.LOCATION_ROOM_FLOOR)
+		&"debug_spawn_test_item_backpack":
+			action_result = debug_spawn_test_item(RunAssetLedger.LOCATION_INVENTORY)
+		&"debug_heal_full":
+			action_result = debug_heal_full()
+		&"debug_force_extract":
+			action_result = debug_force_extract()
+		&"debug_force_fail":
+			action_result = debug_force_fail(String(command_payload.get("reason", "debug_forced_failure")))
+		_:
+			action_result = _blocked(&"unknown_command", "unknown_command")
+	if context != null:
+		context.active_command.clear()
+	var produced_events: Array[Dictionary] = _events_since(event_start)
+	var produced_transactions: Array[Dictionary] = _transactions_since(transaction_start)
+	var command_result := CommandResult.from_action(command, action_result, produced_events, produced_transactions, _snapshot_delta_for(action_result))
+	# Room-entry feedback is a read-only projection of the already-committed
+	# resolver result.  Keeping it on the command envelope lets presentation show
+	# exact damage/pressure without re-reading private room rules.
+	if action_result.has("room_entry_result"):
+		command_result["room_entry_result"] = (action_result.get("room_entry_result", {}) as Dictionary).duplicate(true)
+	return command_result
+
+
+func bind_context(next_context: RunContext) -> void:
+	context = next_context
+	room_resolver.bind_runtime_controller(null)
+	if context != null and context.run_active:
+		room_resolver.enter_room(context)
+		_emit_state()
+
+
+func bind_runtime_controller(next_controller) -> void:
+	runtime_controller = next_controller
+	context = runtime_controller.context if runtime_controller != null else null
+	room_resolver.bind_runtime_controller(runtime_controller)
+	if context != null and context.run_active:
+		room_resolver.enter_room(context)
+		_emit_state()
+
+
+func start_demo_run() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.start_demo_run(room_resolver)
+	_emit_state()
+	return result
+
+
+func start_standard_run(payload: Dictionary = {}) -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var run_start_config: Dictionary = payload.get("run_start_config", {})
+	var validation := RunStartConfigScript.validate(run_start_config)
+	if not bool(validation.get("ok", false)):
+		var blocked := _blocked(&"invalid_run_start_config", "invalid_run_start_config")
+		blocked["issues"] = validation.get("issues", [])
+		return blocked
+	var result: Dictionary = runtime_controller.start_standard_run(room_resolver, run_start_config)
+	_emit_state()
+	return result
+
+
+func attempt_room_transition(direction: Vector2i) -> Dictionary:
+	return move_by(direction)
+
+
+func move_by(delta: Vector2i) -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", "command_blocked")
+	if abs(delta.x) + abs(delta.y) != 1:
+		context.blocked_reason = "invalid_direction"
+		context.last_message = "Invalid move: only four-direction movement is allowed."
+		_emit_state()
+		return _blocked(&"invalid_direction", "invalid_direction")
+	var target: Vector2i = context.get_current_pos() + delta
+	if not context.is_inside(target):
+		context.blocked_reason = "out_of_bounds"
+		context.last_message = "Blocked by map boundary."
+		_emit_state()
+		return _blocked(&"out_of_bounds", "out_of_bounds")
+	if context.intel_map.is_flagged(target):
+		context.blocked_reason = "blocked_flagged"
+		context.last_message = "Blocked by flag."
+		_emit_state()
+		return _blocked(&"blocked_flagged", "blocked_flagged")
+	if context.move_requires_revealed and not context.intel_map.is_revealed(target):
+		context.blocked_reason = "blocked_hidden"
+		context.last_message = "Blocked: target is not revealed."
+		_emit_state()
+		return _blocked(&"blocked_hidden", "blocked_hidden")
+
+	context.blocked_reason = ""
+	context.player_pos = target
+	context.current_pos = target
+	RunInventory.record_move(context)
+	var room_entry: Dictionary = room_resolver.enter_room(context)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	var result := {"ok": true, "status": &"moved", "position": target, "actor_id": DEFAULT_ACTOR_ID}
+	if room_entry.has("room_entry_result"):
+		result["room_entry_result"] = (room_entry.get("room_entry_result", {}) as Dictionary).duplicate(true)
+	return result
+
+
+func toggle_flag_cell(pos = null) -> Dictionary:
+	if context == null or context.intel_map == null:
+		return _blocked(&"not_ready", "not_ready")
+	var target: Vector2i = context.get_current_pos() if pos == null else pos
+	var was_flagged := context.intel_map.is_flagged(target)
+	context.intel_map.toggle_flag(target)
+	if not was_flagged and context.intel_map.is_flagged(target) and not context.intel_map.is_revealed(target):
+		context.run_stats["flags_placed"] = int(context.run_stats.get("flags_placed", 0)) + 1
+	context.last_message = "Flag toggled at %s." % _format_pos(target)
+	_emit_state()
+	return {"ok": true, "status": &"flag_toggled", "position": target, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func flag_current_cell() -> Dictionary:
+	return toggle_flag_cell()
+
+
+func search_current_room() -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.search_current_room(context)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func interact_current_room() -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	if context.current_room_type == &"Exit":
+		if context.phase == &"confirm_extract":
+			return confirm_extract()
+		else:
+			return request_extract()
+	var result: Dictionary = room_resolver.interact_current_room(context)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func interact() -> Dictionary:
+	return interact_current_room()
+
+
+func fight_current_enemy() -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.fight_current_enemy(context)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func apply_runtime_combat_damage(payload: Dictionary) -> Dictionary:
+	if not _is_g41_runtime_payload(payload):
+		return _blocked(&"unauthorized_runtime_command", "unauthorized_runtime_command")
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.apply_runtime_combat_damage(context, payload)
+	_emit_state(&"combat")
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func resolve_runtime_combat(payload: Dictionary) -> Dictionary:
+	if not _is_g41_runtime_payload(payload):
+		return _blocked(&"unauthorized_runtime_command", "unauthorized_runtime_command")
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.resolve_runtime_combat(context, payload)
+	_emit_state()
+	return result
+
+
+func resolve_runtime_combat_defeat(payload: Dictionary) -> Dictionary:
+	if not _is_g41_runtime_payload(payload):
+		return _blocked(&"unauthorized_runtime_command", "unauthorized_runtime_command")
+	if context == null:
+		return _blocked(&"not_ready", "not_ready")
+	var result: Dictionary = room_resolver.resolve_runtime_combat_defeat(context, payload)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func flee_runtime_combat(payload: Dictionary) -> Dictionary:
+	if not _is_g41_runtime_payload(payload):
+		return _blocked(&"unauthorized_runtime_command", "unauthorized_runtime_command")
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.flee_runtime_combat(context, payload)
+	_emit_state()
+	return result
+
+
+func select_event_option(option_id: StringName = &"default") -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	var result: Dictionary = room_resolver.select_event_option(context, option_id)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func select_encounter_option(option_id: StringName = &"default") -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", _current_blocked_reason())
+	if context == null:
+		return _blocked(&"not_ready", "not_ready")
+	match context.current_room_type:
+		&"Normal", &"Chest":
+			if option_id in [&"default", &"search", &"open_chest"]:
+				return search_current_room()
+		&"Event":
+			return select_event_option(option_id)
+		&"Monster":
+			if option_id in [&"default", EncounterContractScript.OPTION_ATTACK_BASIC]:
+				return fight_current_enemy()
+	context.blocked_reason = "encounter_option_unavailable"
+	context.last_message = "Encounter option unavailable."
+	_emit_state()
+	return _blocked(&"encounter_option_unavailable", "encounter_option_unavailable")
+
+
+func pickup_ground_item(instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_PICKUP, {"instance_id": instance_id})
+
+
+func replace_ground_item(ground_instance_id: String = "", drop_instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_REPLACE, {
+		"ground_instance_id": ground_instance_id,
+		"drop_instance_id": drop_instance_id,
+	})
+
+
+func drop_inventory_item(instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_DROP, {"instance_id": instance_id})
+
+
+func use_consumable(instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_USE, {"instance_id": instance_id})
+
+
+func equip_item(instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_EQUIP, {"instance_id": instance_id})
+
+
+func unequip_item(instance_id: String = "") -> Dictionary:
+	return _execute_item_command(ItemCommandHandlerScript.ACTION_UNEQUIP, {"instance_id": instance_id})
+
+
+func _execute_item_command(action: StringName, payload: Dictionary) -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", "command_blocked")
+	var handled: Dictionary = item_command_handler.execute(context, action, payload)
+	var result: Dictionary = handled.get("action_result", _blocked(&"blocked", "item_command_handler_invalid_result"))
+	if bool(handled.get("emit_state", false)):
+		_emit_state()
+	return result
+
+
+func abandon_run(reason: String = "player_abandoned", confirmed: bool = false) -> Dictionary:
+	if not confirmed:
+		return _blocked(&"abandon_confirmation_required", REJECTION_ABANDON_CONFIRMATION_REQUIRED)
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.abandon_run(reason)
+	_emit_state()
+	if bool(result.get("ok", false)) and context != null and context.result_snapshot.has("outcome"):
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func confirm_failure_salvage(selected_instance_ids: Array) -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.confirm_failure_salvage(selected_instance_ids)
+	_emit_state()
+	if bool(result.get("ok", false)) and context != null and context.phase == &"failed":
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func retry_terminal_commit() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	# This retries persistence of the same immutable terminal snapshot. It does
+	# not re-emit result_available and therefore cannot run settlement twice.
+	var result: Dictionary = runtime_controller.retry_terminal_commit()
+	_emit_state()
+	return result
+
+
+func discard_unsaved_terminal_commit(confirmed: bool = false) -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	# This command records that the player explicitly abandoned an unpersisted
+	# terminal result. It never emits result_available or marks progress saved.
+	var result: Dictionary = runtime_controller.discard_unsaved_terminal_commit(confirmed)
+	_emit_state()
+	return result
+
+
+func teleport_to_explored(pos: Vector2i) -> Dictionary:
+	if not _can_accept_command():
+		return _blocked(&"blocked", "command_blocked")
+	if context.intel_map == null or context.truth_map == null:
+		return _blocked(&"not_ready", "not_ready")
+	if not context.is_inside(pos):
+		context.blocked_reason = "out_of_bounds"
+		context.last_message = "Teleport target is outside the map."
+		_emit_state()
+		return _blocked(&"out_of_bounds", "out_of_bounds")
+	var eligibility: Dictionary = context.truth_map.get_return_eligibility(pos, context.intel_map)
+	if bool(context.intel_map.get_cell_info(pos).get("flagged", false)):
+		eligibility = {"eligible": false, "reason_code": "flagged", "intent": &"inspect_only"}
+	if not bool(eligibility.get("eligible", false)):
+		var reason := String(eligibility.get("reason_code", "not_return_eligible"))
+		context.blocked_reason = reason
+		context.last_message = "Return blocked: %s." % reason
+		_emit_state()
+		return _blocked(&"return_blocked", reason)
+
+	context.blocked_reason = ""
+	context.player_pos = pos
+	context.current_pos = pos
+	room_resolver.enter_room(context)
+	context.last_message = "Teleported to explored room (%d,%d)." % [pos.x, pos.y]
+	_emit_state()
+	return {"ok": true, "status": &"teleported", "position": pos, "actor_id": DEFAULT_ACTOR_ID, "return_eligibility": eligibility}
+
+
+func request_extract() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.request_extract(room_resolver, _active_command_id(), DEFAULT_ACTOR_ID)
+	_emit_state()
+	return result
+
+
+func confirm_extract() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.confirm_extract(room_resolver)
+	_emit_state()
+	if bool(result.get("ok", false)) and context != null and context.extracted:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func cancel_extract() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.cancel_extract()
+	_emit_state()
+	return result
+
+
+func extract() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.extract(room_resolver, _active_command_id(), DEFAULT_ACTOR_ID)
+	_emit_state()
+	if bool(result.get("ok", false)) and context != null and context.extracted:
+		result_available.emit(context.result_snapshot)
+	return result
+
+
+func restart_run() -> Dictionary:
+	return _blocked(&"restart_confirmation_required", REJECTION_RESTART_CONFIRMATION_REQUIRED)
+
+
+func debug_restart_run() -> Dictionary:
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.restart_run(room_resolver)
+	_emit_state()
+	return result
+
+
+func debug_add_run_black_coin(amount: int = 25) -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	var clamped := maxi(0, amount)
+	if clamped <= 0:
+		return _blocked(&"invalid_amount", "invalid_amount")
+	context.asset_ledger.add_currency(RunAssetLedger.CURRENCY_BLACK, clamped, "debug_command")
+	context.asset_ledger.sync_compat_fields(context)
+	context.last_message = "Debug added %d run black coin through RunAssetLedger." % clamped
+	context.record_event(RunEventLog.EVENT_ITEM_GAINED, _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"currency_id": &"black_coin", "amount": clamped})
+	_emit_state()
+	return {"ok": true, "status": &"debug_black_coin_added", "amount": clamped, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func debug_teleport_to_exit() -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	var exits := context.truth_map.get_exits()
+	if exits.is_empty():
+		return _blocked(&"no_exit", "no_exit")
+	return debug_teleport_to(exits[0], true)
+
+
+func debug_teleport_to(pos: Vector2i, enter_room: bool = true) -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	if not context.is_inside(pos):
+		return _blocked(&"out_of_bounds", "out_of_bounds")
+	var debug_mode := &"debug_enter" if enter_room else &"debug_move"
+	context.player_pos = pos
+	context.current_pos = pos
+	context.last_message = "Debug teleport to %s (%s)." % [_format_pos(pos), String(debug_mode)]
+	context.record_event(RunEventLog.EVENT_ROOM_ENTERED, _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"position": pos, "mode": debug_mode})
+	if enter_room:
+		room_resolver.enter_room(context)
+	else:
+		context.intel_map.reveal_cell(pos, context.truth_map)
+		context.current_room_type = context.truth_map.get_room_type(pos)
+		context.current_adjacent_mines = context.minefield_service.count_adjacent_mines(context.truth_map, pos)
+	_emit_state()
+	if context.failed:
+		result_available.emit(context.result_snapshot)
+	return {"ok": true, "status": &"debug_teleported", "position": pos, "enter_room": enter_room, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func debug_reveal_full_map() -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	if context.intel_map == null or context.truth_map == null:
+		return _blocked(&"not_ready", "not_ready")
+	for x in range(context.width):
+		for y in range(context.height):
+			context.intel_map.reveal_cell(Vector2i(x, y), context.truth_map)
+	context.last_message = "Debug revealed the full known map through IntelMap."
+	context.record_event(&"debug_command", _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"command": "debug_reveal_full_map", "width": context.width, "height": context.height})
+	_emit_state()
+	return {"ok": true, "status": &"debug_map_revealed", "width": context.width, "height": context.height, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func debug_spawn_test_item(preferred_location: StringName) -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	var location := preferred_location
+	if not (location in [RunAssetLedger.LOCATION_ROOM_FLOOR, RunAssetLedger.LOCATION_INVENTORY]):
+		location = RunAssetLedger.LOCATION_ROOM_FLOOR
+	var item_def := M3ItemCatalogScript.debug_item()
+	# Catalog entries default to room_floor for real drops. This QA command must
+	# explicitly override that default; otherwise the "Spawn Backpack Item"
+	# button silently creates another floor entity and cannot seed inventory art
+	# states for review.
+	item_def["reward_location"] = location
+	item_def["source"] = "debug_command"
+	var result: Dictionary = context.asset_ledger.add_reward_items([item_def], location, context.get_current_pos(), "debug_command")
+	context.asset_ledger.sync_compat_fields(context)
+	context.last_reward = result.duplicate(true)
+	context.last_message = "Debug spawned a test item to %s through RunAssetLedger." % String(location)
+	context.record_event(RunEventLog.EVENT_ITEM_GAINED, _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"command": "debug_spawn_test_item", "location": location, "result": result.duplicate(true)})
+	_emit_state()
+	return {"ok": true, "status": &"debug_test_item_spawned", "location": location, "result": result, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func debug_heal_full() -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	var hp_delta := context.max_hp - context.hp
+	var applied: Dictionary = RunEffectApplierScript.apply_effects(context, [
+		RunEffectApplierScript.effect_hp_delta(hp_delta, "debug_heal_full"),
+	], runtime_controller)
+	context.last_message = "Debug restored HP to full through RunEffectApplier."
+	context.record_event(&"debug_command", _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"command": "debug_heal_full", "hp": context.hp, "max_hp": context.max_hp, "hp_delta": hp_delta, "effect_results": applied.get("effect_results", [])})
+	_emit_state()
+	return {"ok": bool(applied.get("ok", false)), "status": &"debug_healed_full", "hp": context.hp, "max_hp": context.max_hp, "hp_delta": hp_delta, "effect_results": applied.get("effect_results", []), "actor_id": DEFAULT_ACTOR_ID}
+
+
+func debug_force_extract() -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.debug_force_extract()
+	_emit_state()
+	result_available.emit(context.result_snapshot)
+	return result
+
+
+func debug_force_fail(reason: String = "debug_forced_failure") -> Dictionary:
+	if not _has_active_run():
+		return _blocked(&"not_ready", "not_ready")
+	if runtime_controller == null:
+		return _blocked(&"not_ready", "runtime_controller_missing")
+	var result: Dictionary = runtime_controller.debug_force_fail(reason)
+	_emit_state()
+	result_available.emit(context.result_snapshot)
+	return result
+
+
+func confirm_tutorial_popup() -> Dictionary:
+	TutorialService.confirm_popup(context)
+	_emit_state()
+	return {"ok": true, "status": &"tutorial_popup_confirmed", "actor_id": DEFAULT_ACTOR_ID}
+
+
+func _can_accept_command() -> bool:
+	return context != null and context.can_accept_command()
+
+
+func _has_active_run() -> bool:
+	return context != null and context.run_started and context.run_active and context.asset_ledger != null
+
+
+func _current_blocked_reason() -> String:
+	if context == null:
+		return "not_ready"
+	if context.has_blocking_tutorial_popup():
+		return "tutorial_lock"
+	return "command_blocked"
+
+
+func _is_debug_command_request(command_name: StringName, payload: Dictionary) -> bool:
+	return DebugGateScript.is_debug_command(command_name, payload)
+
+
+func _debug_tools_enabled() -> bool:
+	return DebugGateScript.is_debug_tools_enabled()
+
+
+func _is_g41_runtime_payload(payload: Dictionary) -> bool:
+	var source := String(payload.get("source", ""))
+	return source == "g41_combat_simulation" or source == "g41_in_run_runtime"
+
+
+func _mark_open_map_placeholder() -> Dictionary:
+	if context == null:
+		return _blocked(&"not_ready", "not_ready")
+	context.run_stats["map_open_count"] = int(context.run_stats.get("map_open_count", 0)) + 1
+	context.last_message = "Map overlay placeholder opened."
+	_emit_state()
+	return {"ok": true, "status": &"map_opened", "actor_id": DEFAULT_ACTOR_ID}
+
+
+func _emit_state(change_scope: StringName = &"all") -> void:
+	if context != null:
+		var snapshot := _combat_state_snapshot() if change_scope == &"combat" else context.get_status_snapshot()
+		snapshot["_change_scope"] = change_scope
+		state_changed.emit(snapshot)
+
+
+func _combat_state_snapshot() -> Dictionary:
+	return {
+		"run_id": context.run_id,
+		"mode": context.mode,
+		"phase": context.phase,
+		"run_active": context.run_active,
+		"failed": context.failed,
+		"hp": context.hp,
+		"max_hp": context.max_hp,
+		"power": context.power,
+		"pressure": context.pressure,
+		"protocol_level": context.protocol_level,
+		"current_room": context.current_room_type,
+		"position": context.get_current_pos(),
+		"last_message": context.last_message,
+		"outcome": context.outcome,
+	}
+
+
+func _format_pos(pos: Vector2i) -> String:
+	return "(%d,%d)" % [pos.x, pos.y]
+
+
+func _normalize_command(command_name: StringName, payload: Dictionary) -> Dictionary:
+	command_sequence += 1
+	var actor_id: StringName = StringName(payload.get("actor_id", DEFAULT_ACTOR_ID))
+	var source: String = String(payload.get("source", "ui"))
+	return {
+		"command_id": "cmd_%04d_%s" % [command_sequence, String(command_name)],
+		"command_name": command_name,
+		"actor_id": actor_id,
+		"source": source,
+		"payload": payload.duplicate(true),
+		"sequence": command_sequence,
+	}
+
+
+func _blocked(status: StringName, reason: String) -> Dictionary:
+	return {"ok": false, "status": status, "reason": reason, "blocked_reason": reason, "reason_code": reason, "message_key": "command.rejected.%s" % reason, "actor_id": DEFAULT_ACTOR_ID}
+
+
+func _event_count() -> int:
+	if context == null or context.run_event_log == null:
+		return 0
+	return context.run_event_log.size()
+
+
+func _transaction_count() -> int:
+	if context == null or context.transaction_log == null:
+		return 0
+	return context.transaction_log.size()
+
+
+func _events_since(start_index: int) -> Array[Dictionary]:
+	if context == null or context.run_event_log == null:
+		return []
+	return context.run_event_log.get_events_since(start_index)
+
+
+func _transactions_since(start_index: int) -> Array[Dictionary]:
+	if context == null or context.transaction_log == null:
+		return []
+	return context.transaction_log.get_entries_since(start_index)
+
+
+func _snapshot_delta_for(action_result: Dictionary) -> Dictionary:
+	return {
+		"status": action_result.get("status", &""),
+		"reason_code": String(action_result.get("reason", action_result.get("blocked_reason", ""))),
+		"refresh": &"run_status",
+	}
+
+
+func _active_command_id() -> String:
+	if context == null:
+		return ""
+	return String(context.active_command.get("command_id", ""))
+
+
+func _vector2i_from(value: Variant) -> Vector2i:
+	if value is Vector2i:
+		return value
+	if value is Vector2:
+		var vector := value as Vector2
+		return Vector2i(int(vector.x), int(vector.y))
+	if value is Dictionary:
+		var dict := value as Dictionary
+		return Vector2i(int(dict.get("x", 0)), int(dict.get("y", 0)))
+	return Vector2i.ZERO

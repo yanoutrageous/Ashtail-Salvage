@@ -1,0 +1,847 @@
+extends Control
+class_name MapOverlayPanel
+
+const RunUIViewModel := preload("res://scripts/ui/shell/run_ui_view_model.gd")
+const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
+const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
+const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
+const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
+const Art24MapOverlayLayoutScript := preload("res://scripts/presentation/art24/art24_map_overlay_layout.gd")
+const SemanticActionHintScript := preload("res://scripts/core/input/semantic_action_hint.gd")
+const MapCellLayerLayoutScript := preload("res://scripts/ui/map_shared/map_cell_layer_layout.gd")
+
+signal cell_action_requested(marker: Dictionary)
+signal close_requested
+
+var view_model: MiniMapViewModel
+var selected_feedback_text: String = ""
+var selected_marker: Dictionary = {}
+var layout_profile: Dictionary = {}
+var layout_metrics: Dictionary = {}
+var marker_size: Vector2 = Vector2(42, 42)
+var title_font_size: int = 20
+var footer_font_size: int = 13
+var previous_focus_owner: Control
+var ui_scale_factor := 1.0
+const LEGACY_MAP_OVERLAY_VALIDATION_MARKER := "Click hidden cells to flag"
+
+
+func apply_view_model(next_view_model: MiniMapViewModel) -> void:
+	view_model = next_view_model
+	if not layout_profile.is_empty():
+		apply_layout_profile(layout_profile)
+	else:
+		_rebuild_grid()
+
+
+func apply_layout_profile(profile: Dictionary) -> void:
+	layout_profile = profile.duplicate(true)
+	ui_scale_factor = Art10UISkinKitScript.normalize_runtime_ui_scale_factor(
+		float(layout_profile.get("ui_scale_factor", ui_scale_factor))
+	)
+	layout_profile["ui_scale_factor"] = ui_scale_factor
+	set_meta("runtime_ui_scale_factor", ui_scale_factor)
+	var is_low := bool(layout_profile.get("is_low_resolution", false))
+	var is_high := bool(layout_profile.get("is_high_resolution", false))
+	var grid_size := Vector2i(
+		maxi(1, view_model.width if view_model != null else 10),
+		maxi(1, view_model.height if view_model != null else 10)
+	)
+	layout_metrics = Art24MapOverlayLayoutScript.calculate(layout_profile, grid_size)
+	title_font_size = Art10UISkinKitScript.scaled_font_size(16 if is_low else (20 if is_high else 18), ui_scale_factor)
+	footer_font_size = Art10UISkinKitScript.scaled_font_size(13, ui_scale_factor)
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	offset_left = 0.0
+	offset_top = 0.0
+	offset_right = 0.0
+	offset_bottom = 0.0
+	var dimmer := get_node_or_null("Dimmer") as ColorRect
+	if dimmer != null:
+		dimmer.color = Color(0.0, 0.0, 0.0, 0.84)
+	var panel := get_node_or_null("Panel") as Control
+	if panel != null:
+		# Budget the real M7 grid dimensions plus title, feedback and frame
+		# padding. This keeps 7x7, 10x10 and 13x13 maps inside the same ART24
+		# fullscreen composition without returning to a narrow dialog.
+		var cell_size := float(layout_metrics.get("marker_size", 36.0))
+		marker_size = Vector2(cell_size, cell_size)
+		panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_set_rect(panel, layout_metrics.get("panel_rect", Rect2(120, 18, 1040, 604)))
+		_apply_overlay_panel_style(panel)
+	var content := get_node_or_null("Panel/Content") as VBoxContainer
+	if content != null:
+		content.add_theme_constant_override("separation", int(layout_metrics.get("content_gap", 5)))
+	_rebuild_grid()
+
+
+func set_ui_scale_factor(value: float) -> void:
+	var resolved := Art10UISkinKitScript.normalize_runtime_ui_scale_factor(value)
+	ui_scale_factor = resolved
+	set_meta("runtime_ui_scale_factor", resolved)
+	if layout_profile.is_empty():
+		_rebuild_grid()
+		return
+	layout_profile["ui_scale_factor"] = resolved
+	apply_layout_profile(layout_profile)
+
+
+func get_ui_scale_factor() -> float:
+	return ui_scale_factor
+
+
+func show_overlay() -> void:
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner != null and focus_owner != self and not is_ancestor_of(focus_owner):
+		previous_focus_owner = focus_owner
+	visible = true
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	if get_parent() != null:
+		get_parent().move_child(self, get_parent().get_child_count() - 1)
+	_rebuild_grid()
+	call_deferred("_focus_preferred_control")
+
+
+func hide_overlay() -> void:
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	get_viewport().gui_release_focus()
+	var focus_target := previous_focus_owner
+	previous_focus_owner = null
+	if is_instance_valid(focus_target):
+		call_deferred("_restore_focus_reference_if_valid", weakref(focus_target))
+
+
+func _restore_focus_reference_if_valid(reference: WeakRef) -> void:
+	var focus_target: Variant = reference.get_ref() if reference != null else null
+	if (
+		focus_target is Control
+		and is_instance_valid(focus_target)
+		and not (focus_target as Control).is_queued_for_deletion()
+		and (focus_target as Control).is_inside_tree()
+		and (focus_target as Control).is_visible_in_tree()
+		and (focus_target as Control).focus_mode != Control.FOCUS_NONE
+	):
+		(focus_target as Control).grab_focus()
+
+
+func toggle_overlay() -> void:
+	if visible:
+		hide_overlay()
+	else:
+		show_overlay()
+
+
+func _ready() -> void:
+	Art10UISkinKitScript.apply_player_ui_theme(self)
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Keep directional focus on cells rather than the full-screen backdrop.
+	focus_mode = Control.FOCUS_CLICK
+	_apply_layer_order()
+	_rebuild_grid()
+
+
+func _apply_layer_order() -> void:
+	z_as_relative = true
+	z_index = 0
+	var dimmer := get_node_or_null("Dimmer") as CanvasItem
+	if dimmer != null:
+		dimmer.z_as_relative = true
+		dimmer.z_index = 0
+		if dimmer is Control:
+			(dimmer as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var panel := get_node_or_null("Panel") as CanvasItem
+	if panel != null:
+		panel.z_as_relative = true
+		panel.z_index = 10
+		if panel is Control:
+			(panel as Control).mouse_filter = Control.MOUSE_FILTER_PASS
+	for path in ["Panel/Content", "Panel/Content/Title", "Panel/Content/Grid", "Panel/Content/Footer"]:
+		var passthrough := get_node_or_null(path) as Control
+		if passthrough != null:
+			passthrough.mouse_filter = Control.MOUSE_FILTER_PASS
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	var right_click := event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT and (event as InputEventMouseButton).pressed
+	var toggle_map := event.is_action_pressed("open_map")
+	if event.is_action_pressed("cancel") or toggle_map or right_click:
+		_request_user_close()
+		get_viewport().set_input_as_handled()
+
+
+func _gui_input(event: InputEvent) -> void:
+	if not visible or not (event is InputEventMouseButton):
+		return
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	if _point_hits_map_content(mouse_event.position):
+		return
+	_request_user_close()
+	accept_event()
+
+
+func _point_hits_map_content(local_point: Vector2) -> bool:
+	var root_rect := get_global_rect()
+	for path in [
+		"Panel/Content/Title",
+		"Panel/Content/Grid",
+		"Panel/Content/Detail",
+		"Panel/Content/SelectedAction",
+		"Panel/Content/Footer",
+	]:
+		var control := get_node_or_null(path) as Control
+		if control == null or not control.visible:
+			continue
+		var global_rect := control.get_global_rect()
+		var local_rect := Rect2(global_rect.position - root_rect.position, global_rect.size)
+		if local_rect.has_point(local_point):
+			return true
+	return false
+
+
+func _request_user_close() -> void:
+	if not visible:
+		return
+	hide_overlay()
+	close_requested.emit()
+
+
+func preferred_focus_control() -> Control:
+	var grid := get_node_or_null("Panel/Content/Grid") as GridContainer
+	if grid != null:
+		var preferred_pos := Vector2i(selected_marker.get("pos", Vector2i(-1, -1)))
+		if preferred_pos.x >= 0 and preferred_pos.y >= 0:
+			var preferred := grid.get_node_or_null("MapCell_%d_%d" % [preferred_pos.x, preferred_pos.y]) as Button
+			if preferred != null and not preferred.is_queued_for_deletion():
+				return preferred
+		for child in grid.get_children():
+			if child is Button and not child.is_queued_for_deletion():
+				return child as Button
+	return self
+
+
+func _focus_preferred_control() -> void:
+	if not visible:
+		return
+	var control := preferred_focus_control()
+	if control != null and control.is_inside_tree():
+		control.grab_focus()
+
+
+func _rebuild_grid() -> void:
+	# Hidden snapshots still update view_model and layout_profile. Opening the
+	# overlay builds the latest cells once instead of rebuilding every run tick.
+	if not is_visible_in_tree():
+		return
+	var grid := get_node_or_null("Panel/Content/Grid") as GridContainer
+	var title := get_node_or_null("Panel/Content/Title") as Label
+	var detail := _ensure_detail_label()
+	var action_button := _ensure_action_button()
+	var footer := get_node_or_null("Panel/Content/Footer") as Label
+	_order_content_sections()
+	if grid == null:
+		return
+	var focus_pos := Vector2i(-1, -1)
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner != null and grid.is_ancestor_of(focus_owner) and focus_owner.has_meta("map_pos"):
+		focus_pos = Vector2i(focus_owner.get_meta("map_pos", focus_pos))
+	elif not selected_marker.is_empty():
+		focus_pos = Vector2i(selected_marker.get("pos", focus_pos))
+	var grid_gap := int(layout_metrics.get("grid_gap", 3 if marker_size.x <= 38.0 else 5))
+	grid.add_theme_constant_override("h_separation", grid_gap)
+	grid.add_theme_constant_override("v_separation", grid_gap)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	for child in grid.get_children():
+		grid.remove_child(child)
+		child.queue_free()
+
+	_synchronize_selected_marker()
+	_apply_overlay_text_hierarchy(title, detail, action_button, footer)
+	if title != null:
+		Art10UISkinKitScript.apply_composition_label(title, &"title", title_font_size, Color(0.92, 0.82, 0.61))
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.text = "区域扫描图"
+	if detail != null:
+		detail.visible = true
+		Art10UISkinKitScript.apply_composition_label(detail, &"body", maxi(18, title_font_size), PresentationTheme.text_color())
+		detail.autowrap_mode = TextServer.AUTOWRAP_OFF
+		detail.max_lines_visible = 1
+		detail.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		detail.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		detail.text = _selected_detail_text()
+	if footer != null:
+		Art10UISkinKitScript.apply_composition_label(footer, &"status", maxi(13, footer_font_size), PresentationTheme.color_for_key(&"ui.muted"))
+		footer.autowrap_mode = TextServer.AUTOWRAP_OFF
+		footer.max_lines_visible = 1
+		footer.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		footer.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_refresh_footer_text()
+
+	if view_model == null:
+		return
+
+	grid.columns = max(1, view_model.width)
+	if view_model.width > 0 and view_model.height > 0:
+		var markers_by_pos := _markers_by_position(view_model.room_markers)
+		for y in range(view_model.height):
+			for x in range(view_model.width):
+				_add_marker_node(grid, _public_marker_or_unknown(markers_by_pos, Vector2i(x, y)))
+	else:
+		for marker in view_model.room_markers:
+			_add_marker_node(grid, marker)
+	_refresh_selection_presentation()
+	if visible and focus_pos != Vector2i(-1, -1):
+		call_deferred("_focus_marker_position", focus_pos)
+
+
+func _add_marker_node(grid: GridContainer, marker: Dictionary) -> void:
+	var theme_key := StringName(marker.get("theme_key", &"mini.normal"))
+	var label_text := String(marker.get("label", "?"))
+	var button := Button.new()
+	var marker_pos: Vector2i = marker.get("pos", Vector2i.ZERO)
+	button.name = "MapCell_%d_%d" % [marker_pos.x, marker_pos.y]
+	button.set_meta("map_pos", marker_pos)
+	button.set_meta("map_marker", marker.duplicate(true))
+	button.set_meta("map_marker_state", PresentationMapping.map_marker_state(marker))
+	button.custom_minimum_size = marker_size
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	button.focus_mode = Control.FOCUS_ALL
+	button.text = ""
+	button.clip_contents = true
+	button.tooltip_text = String(marker.get("detail_text", marker.get("tooltip", "")))
+	var marker_color := PresentationTheme.color_for_key(theme_key)
+	if label_text == "?":
+		marker_color = Color(0.58, 0.72, 0.68, 0.74)
+	button.add_theme_color_override("font_color", marker_color)
+	button.add_theme_font_size_override("font_size", maxi(13, int(min(marker_size.x, marker_size.y) * 0.52)))
+	var state := PresentationMapping.map_marker_state(marker)
+	var selected := _is_selected_marker(marker)
+	var adjacent := _public_adjacent_mines(marker)
+	var layer_layout := MapCellLayerLayoutScript.calculate(marker_size, adjacent >= 0)
+	button.set_meta("map_cell_layer_layout", layer_layout.duplicate(true))
+	button.set_meta("map_cell_clip_contract", true)
+	_apply_marker_button_style(button, theme_key, state, selected)
+	var texture := Art09ManifestAssetMappingScript.resolve_texture(_map_overlay_asset_ref_for_marker(marker))
+	if texture != null:
+		var semantic_icon := TextureRect.new()
+		semantic_icon.name = "SemanticMarker"
+		semantic_icon.texture = texture
+		semantic_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		semantic_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		semantic_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		semantic_icon.z_index = int(layer_layout.get("semantic_z", 20))
+		MapCellLayerLayoutScript.apply_rect(semantic_icon, Rect2(layer_layout.get("semantic_rect", Rect2())))
+		button.add_child(semantic_icon)
+		button.set_meta("semantic_texture", texture)
+	else:
+		var semantic_fallback := Label.new()
+		semantic_fallback.name = "SemanticFallback"
+		semantic_fallback.text = label_text
+		semantic_fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		semantic_fallback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		semantic_fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		semantic_fallback.z_index = int(layer_layout.get("semantic_z", 20))
+		semantic_fallback.add_theme_color_override("font_color", marker_color)
+		semantic_fallback.add_theme_font_size_override("font_size", maxi(11, int(min(marker_size.x, marker_size.y) * 0.42)))
+		MapCellLayerLayoutScript.apply_rect(semantic_fallback, Rect2(layer_layout.get("semantic_rect", Rect2())))
+		button.add_child(semantic_fallback)
+	var focus_outline := Panel.new()
+	focus_outline.name = "FocusSelectionOutline"
+	focus_outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	focus_outline.z_index = int(layer_layout.get("focus_z", 40))
+	focus_outline.visible = selected
+	focus_outline.add_theme_stylebox_override(
+		"panel",
+		_marker_style(Color(0, 0, 0, 0), PresentationTheme.color_for_key(&"ui.accent"), 2)
+	)
+	MapCellLayerLayoutScript.apply_rect(focus_outline, Rect2(layer_layout.get("focus_rect", Rect2())))
+	button.add_child(focus_outline)
+	button.modulate = _modulate_for_marker_state(state, selected)
+	button.pressed.connect(func() -> void: _activate_marker(marker))
+	button.focus_entered.connect(func() -> void:
+		_select_marker(marker)
+		focus_outline.visible = true
+	)
+	button.focus_exited.connect(func() -> void:
+		focus_outline.visible = _is_selected_marker(marker)
+	)
+	_add_adjacent_mine_count(button, marker, layer_layout)
+	grid.add_child(button)
+
+
+func _add_adjacent_mine_count(button: Button, marker: Dictionary, layer_layout: Dictionary = {}) -> void:
+	var adjacent := _public_adjacent_mines(marker)
+	if adjacent < 0:
+		return
+	if layer_layout.is_empty():
+		layer_layout = MapCellLayerLayoutScript.calculate(button.custom_minimum_size, true)
+	var count_rect := Rect2(layer_layout.get("count_rect", Rect2()))
+	var badge_background := ColorRect.new()
+	badge_background.name = "AdjacentMineBadgeBackground"
+	badge_background.color = Color(0.015, 0.025, 0.028, 0.92)
+	badge_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_background.z_index = int(layer_layout.get("count_z", 30))
+	MapCellLayerLayoutScript.apply_rect(badge_background, count_rect)
+	button.add_child(badge_background)
+	var count_label := Label.new()
+	count_label.name = "AdjacentMineCount"
+	button.add_child(count_label)
+	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	count_label.z_index = int(layer_layout.get("count_z", 30)) + 1
+	var count_font := Art10UISkinKitScript.pixel_font()
+	if count_font is Font:
+		count_label.add_theme_font_override("font", count_font as Font)
+	count_label.add_theme_font_size_override("font_size", clampi(int(count_rect.size.y * 0.62), 9, 15))
+	count_label.add_theme_constant_override("line_spacing", 0)
+	count_label.add_theme_color_override("font_color", Color(0.98, 0.94, 0.78, 1.0))
+	count_label.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.03, 1.0))
+	count_label.add_theme_constant_override("outline_size", 1)
+	count_label.text = str(adjacent)
+	MapCellLayerLayoutScript.apply_rect(count_label, count_rect)
+	# Entering the themed tree can temporarily retain Label's previous minimum
+	# height. Re-assert the authored badge extent at idle before the next draw.
+	count_label.set_deferred("size", count_rect.size)
+
+
+func _set_rect(control: Control, rect: Rect2) -> void:
+	if control == null:
+		return
+	control.offset_left = rect.position.x
+	control.offset_top = rect.position.y
+	control.offset_right = rect.position.x + rect.size.x
+	control.offset_bottom = rect.position.y + rect.size.y
+
+
+func _apply_overlay_panel_style(control: Control) -> void:
+	if not (control is PanelContainer):
+		return
+	var panel := control as PanelContainer
+	# The host remains tightly fitted, but it must be opaque enough that protocol
+	# copy and room art cannot remain legible through grid gaps.
+	var backing := StyleBoxFlat.new()
+	backing.bg_color = Color(0.045, 0.050, 0.042, 0.99)
+	backing.border_color = Color(0.54, 0.46, 0.30, 0.96)
+	backing.set_border_width_all(2)
+	backing.content_margin_left = 0
+	backing.content_margin_top = 0
+	backing.content_margin_right = 0
+	backing.content_margin_bottom = 0
+	panel.add_theme_stylebox_override("panel", backing)
+	panel.set_meta("map_content_backing_alpha", backing.bg_color.a)
+
+
+func _apply_overlay_text_hierarchy(title: Label, detail: Label, action_button: Button, footer: Label) -> void:
+	var text_width := float(layout_metrics.get("text_width", 620.0))
+	if title != null:
+		title.custom_minimum_size = Vector2(text_width, float(layout_metrics.get("title_height", 32)))
+		title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		title.add_theme_stylebox_override("normal", Art10UISkinKitScript.transparent_style_box(0))
+	if detail != null:
+		detail.custom_minimum_size = Vector2(text_width, float(layout_metrics.get("detail_height", 36)))
+		detail.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		detail.add_theme_stylebox_override("normal", Art10UISkinKitScript.transparent_style_box(0))
+	if action_button != null:
+		action_button.custom_minimum_size = Vector2(
+			roundf(220.0 * ui_scale_factor),
+			float(layout_metrics.get("action_height", 50))
+		)
+		action_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		Art10UISkinKitScript.apply_button(
+			action_button,
+			&"primary",
+			Art10UISkinKitScript.scaled_font_size(14, ui_scale_factor)
+		)
+	if footer != null:
+		footer.custom_minimum_size = Vector2(text_width, float(layout_metrics.get("footer_height", 26)))
+		footer.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		footer.add_theme_stylebox_override("normal", Art10UISkinKitScript.transparent_style_box(0))
+
+
+func _apply_marker_button_style(button: Button, theme_key: StringName, state: StringName, selected: bool) -> void:
+	var border := PresentationTheme.color_for_key(theme_key)
+	# A confirmed flag/unflag action must keep the cell's semantic state visible.
+	# Selection is represented by a restrained brightness lift and by hover/
+	# pressed styles; it must not replace the UE-like red flag tile with cyan.
+	var tile_style := _art24_map_tile_style(state, false)
+	button.add_theme_stylebox_override("normal", tile_style)
+	button.add_theme_stylebox_override("hover", _art24_map_tile_style(state, true))
+	button.add_theme_stylebox_override("pressed", _art24_map_tile_style(state, true))
+	button.add_theme_stylebox_override("focus", _art24_map_tile_style(state, true))
+	button.add_theme_stylebox_override("disabled", Art10UISkinKitScript.transparent_style_box(0))
+	button.add_theme_color_override("font_color", border)
+
+
+func _art24_map_tile_style(state: StringName, selected: bool) -> StyleBox:
+	# Selection may brighten neutral/unknown cells, but it must never replace a
+	# semantic marker (flag, player, hazard, chest, exit or event) with the cyan
+	# generic selected tile.
+	var semantic_state := state in [&"flagged", &"event", &"player", &"mine", &"monster", &"chest", &"exit"]
+	var token := "selected" if selected and not semantic_state else "explored"
+	if not selected or semantic_state:
+		match state:
+			&"unknown":
+				token = "unknown"
+			&"scanned":
+				token = "scanned"
+			&"flagged", &"event":
+				token = "flagged"
+			&"player":
+				token = "player"
+			&"mine":
+				token = "danger"
+			&"monster":
+				token = "danger"
+	var texture := load("res://assets/art24/ui/map_tile_%s.png" % token) as Texture2D
+	if texture == null:
+		return Art10UISkinKitScript.transparent_style_box(0)
+	var style := StyleBoxTexture.new()
+	style.texture = texture
+	style.texture_margin_left = 8
+	style.texture_margin_top = 8
+	style.texture_margin_right = 8
+	style.texture_margin_bottom = 8
+	# The tile border uses an 8 px source slice, but its icon needs only a 4 px
+	# rendered safe inset. Leaving content margins implicit made the player icon
+	# enlarge one GridContainer row beyond the requested marker size.
+	style.content_margin_left = 4
+	style.content_margin_top = 4
+	style.content_margin_right = 4
+	style.content_margin_bottom = 4
+	style.draw_center = true
+	if token == "flagged":
+		# UE communicates a player-authored danger flag with a red cell field.  The
+		# source tile remains copper/yellow and reusable; tint only the background
+		# style so the separately rendered flag icon keeps its gold identity.
+		style.modulate_color = Color(1.20, 0.42, 0.42, 1.0)
+	return style
+
+
+func _icon_width_for_marker_state(state: StringName, size: Vector2) -> int:
+	var base: float = minf(size.x, size.y)
+	var desired: int
+	match state:
+		&"flagged", &"event":
+			desired = int(base * 0.92)
+		&"player", &"exit", &"mine", &"monster", &"chest":
+			desired = int(base * 0.82)
+		&"scanned":
+			desired = int(base * 0.72)
+		&"unknown":
+			desired = int(base * 0.58)
+		_:
+			desired = int(base * 0.70)
+	# Four rendered pixels on both sides belong to the tile border, not the icon.
+	return mini(desired, maxi(8, int(base) - 8))
+
+
+func _modulate_for_marker_state(state: StringName, selected: bool) -> Color:
+	if selected:
+		return Color(1.10, 1.10, 1.06, 1.0)
+	match state:
+		&"unknown":
+			return Color(0.72, 0.78, 0.74, 0.58)
+		&"explored":
+			return Color(0.88, 0.96, 0.91, 0.82)
+		&"scanned":
+			return Color(0.94, 1.0, 0.96, 0.96)
+		&"flagged", &"event", &"player":
+			return Color(1.0, 1.0, 1.0, 1.0)
+		_:
+			return Color(0.96, 1.0, 0.96, 0.92)
+
+
+func _public_adjacent_mines(marker: Dictionary) -> int:
+	return PresentationMapping.public_adjacent_mines(marker)
+
+
+func _map_overlay_asset_ref_for_marker(marker: Dictionary) -> Dictionary:
+	var state := PresentationMapping.map_marker_state(marker)
+	match state:
+		&"flagged", &"event":
+			return Art21UIPlacementContractScript.map_ref(state)
+		&"monster":
+			return Art09ManifestAssetMappingScript.asset_ref(&"icon.room.monster", &"icon.minimap.explored", &"map_overlay_marker", state)
+		_:
+			return Art09ManifestAssetMappingScript.art19_map64_ref(state)
+
+
+func _is_selected_marker(marker: Dictionary) -> bool:
+	if selected_marker.is_empty():
+		return false
+	var marker_pos: Vector2i = marker.get("pos", Vector2i(-9999, -9999))
+	var selected_pos: Vector2i = selected_marker.get("pos", Vector2i(-8888, -8888))
+	return marker_pos == selected_pos
+
+
+func _marker_style(bg: Color, border: Color, border_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.border_width_left = border_width
+	style.border_width_top = border_width
+	style.border_width_right = border_width
+	style.border_width_bottom = border_width
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	style.content_margin_left = 4
+	style.content_margin_top = 4
+	style.content_margin_right = 4
+	style.content_margin_bottom = 4
+	return style
+
+
+func show_action_feedback(marker: Dictionary, result: Dictionary) -> void:
+	var pos: Vector2i = marker.get("pos", Vector2i.ZERO)
+	var refreshed_marker := _marker_at_position(pos)
+	selected_marker = refreshed_marker if not refreshed_marker.is_empty() else marker.duplicate(true)
+	var accepted: bool = bool(result.get("accepted", result.get("ok", false)))
+	var reason: String = String(result.get("reason_code", result.get("reason", "")))
+	if accepted:
+		# A successful flag change is already visible in the selected tile; an
+		# additional framed status line only repeats the same result.
+		selected_feedback_text = ""
+	else:
+		selected_feedback_text = "格子 (%d,%d)：%s" % [pos.x, pos.y, RunUIViewModel.reason_label(reason)]
+	_refresh_selection_presentation()
+	call_deferred("_focus_marker_position", pos)
+
+
+func show_open_feedback(_source: StringName) -> void:
+	# The UE overview keeps its status row quiet until the player acts. Opening
+	# the map is already visually explicit; repeating it added an unnecessary
+	# second footer line and competed with the control hint.
+	selected_feedback_text = ""
+	_refresh_selection_presentation()
+
+
+func _select_marker(marker: Dictionary) -> void:
+	selected_marker = marker.duplicate(true)
+	selected_feedback_text = ""
+	_refresh_selection_presentation()
+
+
+func _activate_marker(marker: Dictionary) -> void:
+	# Match the production UE overview: activating a cell is the cell action.
+	# Pointer clicks and ui_accept both arrive through BaseButton.pressed, so
+	# there is one shared route and no pointer-specific command path to double
+	# submit. Focus movement remains selection-only for keyboard/gamepad review.
+	_select_marker(marker)
+	_execute_selected_marker()
+
+
+func _execute_selected_marker() -> void:
+	if selected_marker.is_empty() or not bool(selected_marker.get("action_enabled", false)):
+		return
+	cell_action_requested.emit(selected_marker.duplicate(true))
+
+
+func _refresh_footer_text() -> void:
+	var footer := get_node_or_null("Panel/Content/Footer") as Label
+	if footer == null:
+		return
+	var confirm_hint := SemanticActionHintScript.current_binding_label(&"ui_accept")
+	var map_hint := SemanticActionHintScript.current_binding_label(&"open_map")
+	var cancel_hint := SemanticActionHintScript.current_binding_label(&"cancel")
+	footer.text = "左键执行格子 · %s执行焦点格 · %s / %s / 右键 / 点击外部关闭" % [
+		confirm_hint if not confirm_hint.is_empty() else "Enter",
+		map_hint if not map_hint.is_empty() else "M",
+		cancel_hint if not cancel_hint.is_empty() else "Esc",
+	]
+
+
+func _focus_marker_position(pos: Vector2i) -> void:
+	if not visible:
+		return
+	var button := get_node_or_null("Panel/Content/Grid/MapCell_%d_%d" % [pos.x, pos.y]) as Button
+	if button != null and button.is_visible_in_tree() and not button.disabled:
+		button.grab_focus()
+		return
+	var fallback := preferred_focus_control()
+	if fallback != null:
+		fallback.grab_focus()
+
+
+func _ensure_detail_label() -> Label:
+	var content := get_node_or_null("Panel/Content") as VBoxContainer
+	if content == null:
+		return null
+	var detail := get_node_or_null("Panel/Content/Detail") as Label
+	if detail != null:
+		return detail
+	detail = Label.new()
+	detail.name = "Detail"
+	detail.visible = false
+	detail.custom_minimum_size = Vector2.ZERO
+	detail.mouse_filter = Control.MOUSE_FILTER_PASS
+	content.add_child(detail)
+	return detail
+
+
+func _ensure_action_button() -> Button:
+	var content := get_node_or_null("Panel/Content") as VBoxContainer
+	if content == null:
+		return null
+	var action_button := get_node_or_null("Panel/Content/SelectedAction") as Button
+	if action_button != null:
+		return action_button
+	action_button = Button.new()
+	action_button.name = "SelectedAction"
+	action_button.focus_mode = Control.FOCUS_ALL
+	action_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	action_button.pressed.connect(_execute_selected_marker)
+	content.add_child(action_button)
+	return action_button
+
+
+func _order_content_sections() -> void:
+	var content := get_node_or_null("Panel/Content") as VBoxContainer
+	if content == null:
+		return
+	var ordered_names := [&"Title", &"Grid", &"Detail", &"SelectedAction", &"Footer"]
+	for index in range(ordered_names.size()):
+		var child := content.get_node_or_null(String(ordered_names[index]))
+		if child != null:
+			content.move_child(child, index)
+
+
+func _selected_detail_text() -> String:
+	if selected_marker.is_empty():
+		return "点击格子查看状态。"
+	# Keep the scan grid dominant. Technical models may provide four diagnostic
+	# lines, but the UE overlay presents selection status as one compact band.
+	return String(selected_marker.get("detail_text", "选中格详情不可用。")).replace("\n", " · ")
+
+
+func _synchronize_selected_marker() -> void:
+	if view_model == null or view_model.room_markers.is_empty():
+		selected_marker = {}
+		return
+	if not selected_marker.is_empty():
+		var refreshed := _marker_at_position(Vector2i(selected_marker.get("pos", Vector2i(-1, -1))))
+		if not refreshed.is_empty():
+			selected_marker = refreshed
+			return
+	for marker in view_model.room_markers:
+		if bool(marker.get("is_current", false)):
+			selected_marker = marker.duplicate(true)
+			return
+	selected_marker = view_model.room_markers[0].duplicate(true)
+
+
+func _refresh_selection_presentation() -> void:
+	var detail := get_node_or_null("Panel/Content/Detail") as Label
+	if detail != null:
+		var has_feedback := not selected_feedback_text.is_empty()
+		detail.text = selected_feedback_text if has_feedback else _selected_detail_text()
+		detail.add_theme_color_override(
+			"font_color",
+			PresentationTheme.color_for_key(&"ui.danger") if has_feedback else PresentationTheme.text_color()
+		)
+	var action_button := get_node_or_null("Panel/Content/SelectedAction") as Button
+	if action_button != null:
+		var action_label := String(selected_marker.get("action_label", "不可执行"))
+		var action_enabled := not selected_marker.is_empty() and bool(selected_marker.get("action_enabled", false))
+		action_button.disabled = not action_enabled
+		action_button.visible = action_enabled
+		action_button.mouse_filter = Control.MOUSE_FILTER_STOP if action_enabled else Control.MOUSE_FILTER_IGNORE
+		action_button.text = action_label
+		action_button.tooltip_text = "" if action_enabled else RunUIViewModel.reason_label(String(selected_marker.get("disabled_reason", "")))
+	var grid := get_node_or_null("Panel/Content/Grid") as GridContainer
+	if grid != null:
+		for child in grid.get_children():
+			if not (child is Button):
+				continue
+			var button := child as Button
+			var marker: Dictionary = button.get_meta("map_marker", {})
+			var state := PresentationMapping.map_marker_state(marker)
+			var selected := _is_selected_marker(marker)
+			_apply_marker_button_style(button, StringName(marker.get("theme_key", &"mini.normal")), state, selected)
+			button.modulate = _modulate_for_marker_state(state, selected)
+			(button.get_node("FocusSelectionOutline") as Control).visible = selected
+		if action_button != null and not selected_marker.is_empty():
+			var selected_pos: Vector2i = selected_marker.get("pos", Vector2i(-1, -1))
+			var selected_button := grid.get_node_or_null("MapCell_%d_%d" % [selected_pos.x, selected_pos.y]) as Button
+			if selected_button != null:
+				action_button.focus_neighbor_top = action_button.get_path_to(selected_button)
+	_wire_action_focus_neighbors(grid, action_button)
+	_refresh_footer_text()
+
+
+func _wire_action_focus_neighbors(grid: GridContainer, action_button: Button) -> void:
+	if grid == null or action_button == null:
+		return
+	var buttons: Array[Button] = []
+	for child in grid.get_children():
+		if child is Button:
+			var button := child as Button
+			buttons.append(button)
+	var columns := maxi(1, grid.columns)
+	# Explicit grid edges keep directional focus inside the open modal.
+	for index in range(buttons.size()):
+		var button := buttons[index]
+		button.focus_neighbor_left = button.get_path_to(buttons[index - 1 if index % columns > 0 else index])
+		button.focus_neighbor_right = button.get_path_to(buttons[index + 1 if index % columns < columns - 1 and index + 1 < buttons.size() else index])
+		button.focus_neighbor_top = button.get_path_to(buttons[index - columns if index >= columns else index])
+		button.focus_neighbor_bottom = button.get_path_to(buttons[index + columns if index + columns < buttons.size() else index])
+	action_button.focus_neighbor_left = NodePath(".")
+	action_button.focus_neighbor_right = NodePath(".")
+	action_button.focus_neighbor_bottom = NodePath(".")
+	if not action_button.visible or action_button.disabled:
+		return
+	var bottom_start := maxi(0, buttons.size() - columns)
+	for index in range(bottom_start, buttons.size()):
+		buttons[index].focus_neighbor_bottom = buttons[index].get_path_to(action_button)
+
+
+func _markers_by_position(markers: Array[Dictionary]) -> Dictionary:
+	var result: Dictionary = {}
+	for marker in markers:
+		var pos: Vector2i = marker.get("pos", Vector2i(-1, -1))
+		if pos.x >= 0 and pos.y >= 0:
+			result[_pos_key(pos)] = marker.duplicate(true)
+	return result
+
+
+func _public_marker_or_unknown(markers_by_pos: Dictionary, pos: Vector2i) -> Dictionary:
+	var marker: Variant = markers_by_pos.get(_pos_key(pos), null)
+	if marker is Dictionary:
+		return (marker as Dictionary).duplicate(true)
+	return {
+		"pos": pos,
+		"label": "?",
+		"known_state": &"unknown",
+		"room_type": &"Unknown",
+		"detail_text": "格子 (%d,%d) · 未知区域" % [pos.x, pos.y],
+		"action_id": &"toggle_flag",
+		"action_label": "标记风险",
+		"action_enabled": true,
+		"display_only": true,
+		"read_only": true,
+	}
+
+
+func _marker_at_position(pos: Vector2i) -> Dictionary:
+	if view_model == null:
+		return {}
+	for marker in view_model.room_markers:
+		if Vector2i(marker.get("pos", Vector2i(-1, -1))) == pos:
+			return marker.duplicate(true)
+	return {}
+
+
+func _pos_key(pos: Vector2i) -> String:
+	return "%d,%d" % [pos.x, pos.y]

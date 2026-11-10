@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://cdh4i7t822fby"
+
+[deps]
+
+files=["res://data/assets/asset_manifest.source.translation", "res://data/assets/asset_manifest.godot.translation", "res://data/assets/asset_manifest.type.translation", "res://data/assets/asset_manifest.category.translation", "res://data/assets/asset_manifest.usage.translation", "res://data/assets/asset_manifest.import.translation", "res://data/assets/asset_manifest.license.translation", "res://data/assets/asset_manifest.replacement.translation", "res://data/assets/asset_manifest.linked.translation", "res://data/assets/asset_manifest.linked.translation", "res://data/assets/asset_manifest.note.translation", "res://data/assets/asset_manifest.theme.translation", "res://data/assets/asset_manifest.presentation.translation", "res://data/assets/asset_manifest.state.translation", "res://data/assets/asset_manifest.variant.translation", "res://data/assets/asset_manifest.source.translation"]
+
+source_file="res://data/assets/asset_manifest.csv"
+dest_files=["res://data/assets/asset_manifest.source.translation", "res://data/assets/asset_manifest.godot.translation", "res://data/assets/asset_manifest.type.translation", "res://data/assets/asset_manifest.category.translation", "res://data/assets/asset_manifest.usage.translation", "res://data/assets/asset_manifest.import.translation", "res://data/assets/asset_manifest.license.translation", "res://data/assets/asset_manifest.replacement.translation", "res://data/assets/asset_manifest.linked.translation", "res://data/assets/asset_manifest.linked.translation", "res://data/assets/asset_manifest.note.translation", "res://data/assets/asset_manifest.theme.translation", "res://data/assets/asset_manifest.presentation.translation", "res://data/assets/asset_manifest.state.translation", "res://data/assets/asset_manifest.variant.translation", "res://data/assets/asset_manifest.source.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

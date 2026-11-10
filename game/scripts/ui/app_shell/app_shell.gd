@@ -1,0 +1,1151 @@
+extends Control
+class_name AppShell
+
+const NavigationIntentScript := preload("res://scripts/ui/app_shell/navigation_intent.gd")
+const PageRouterScript := preload("res://scripts/ui/app_shell/page_router.gd")
+const NavigationTransitionCoordinatorScript := preload("res://scripts/ui/app_shell/navigation_transition_coordinator.gd")
+const MainMenuShellScript := preload("res://scripts/ui/main_menu/main_menu_shell.gd")
+const DeployPrepShellScript := preload("res://scripts/ui/deploy_prep/deploy_prep_shell.gd")
+const LongTermShellScript := preload("res://scripts/ui/long_term/long_term_shell.gd")
+const RunStartRouteAdapterScript := preload("res://scripts/core/run/run_start_route_adapter.gd")
+const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
+const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
+const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
+const SettingsManagerScript := preload("res://scripts/core/settings/settings_manager.gd")
+const SettingsPanelScript := preload("res://scripts/ui/settings/settings_panel.gd")
+const ModalFocusStackScript := preload("res://scripts/ui/shell/modal_focus_stack.gd")
+const MetaActionRequestIdScript := preload("res://scripts/core/progression/meta_action_request_id.gd")
+const ContentDBAccessScript := preload("res://scripts/core/content/content_db_access.gd")
+
+signal host_route_requested(intent: Dictionary)
+signal page_changed(page_id: StringName, payload: Dictionary)
+signal meta_action_requested(action: Dictionary)
+signal ui_scale_changed(factor: float)
+
+var _pages: Dictionary = {}
+var main_menu_shell: Control:
+	get: return _pages.get(PageRouterScript.PAGE_MAIN_MENU) as Control
+var deploy_page: Control:
+	get: return _pages.get(PageRouterScript.PAGE_DEPLOY_PREP) as Control
+var long_term_page: Control:
+	get: return _pages.get(PageRouterScript.PAGE_LONG_TERM) as Control
+var settings_page: Control
+var settings_panel: PanelContainer
+var settings_modal_art: TextureRect
+var settings_close_button: Button
+var exit_confirm_panel: Control
+var exit_confirm_body: Label
+var settings_manager: Node
+var _owned_settings_manager: Node
+var current_snapshot: Dictionary = {}
+var _has_snapshot := false
+var _snapshot_revision := 0
+var _meta_request_sequence := 0
+var _last_meta_result_delivery: Dictionary = {}
+var _current_page_id: StringName = PageRouterScript.PAGE_MAIN_MENU
+var _shell_active := true
+var _ui_scale_factor := 1.0
+var _reduced_motion := false
+var _prewarm_queue: Array[Dictionary] = []
+var _prewarm_resources: Array[Resource] = []
+var _prewarm_thread: Thread
+var _prewarm_shutdown_join: Callable
+var _prewarm_after_msec := 0
+var _prewarm_queued := false
+var _navigation_transition_coordinator: RefCounted
+var modal_focus_stack = ModalFocusStackScript.new()
+var _page_snapshot_revisions: Dictionary = {
+	PageRouterScript.PAGE_MAIN_MENU: -1,
+	PageRouterScript.PAGE_DEPLOY_PREP: -1,
+	PageRouterScript.PAGE_LONG_TERM: -1,
+}
+var _snapshot_refresh_counts: Dictionary = {
+	PageRouterScript.PAGE_MAIN_MENU: 0,
+	PageRouterScript.PAGE_DEPLOY_PREP: 0,
+	PageRouterScript.PAGE_LONG_TERM: 0,
+}
+
+
+func build() -> void:
+	_release_page_prewarm()
+	_cancel_active_navigation_transition(&"shell_rebuilt", false)
+	modal_focus_stack.clear(false)
+	_navigation_transition_coordinator = NavigationTransitionCoordinatorScript.new()
+	_last_meta_result_delivery.clear()
+	_clear_children()
+	_ui_scale_factor = Art10UISkinKitScript.runtime_ui_scale_factor()
+	Art10UISkinKitScript.apply_player_ui_theme(self)
+	_reset_page_snapshot_revisions()
+	if not visibility_changed.is_connected(_on_shell_visibility_changed):
+		visibility_changed.connect(_on_shell_visibility_changed)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_build_settings_overlay()
+	_build_exit_confirm_layer()
+	_ensure_settings_manager_bound()
+	_apply_bound_runtime_settings()
+	_ensure_page(PageRouterScript.PAGE_MAIN_MENU)
+	_shell_active = is_visible_in_tree()
+	show_main()
+	_prewarm_after_msec = Time.get_ticks_msec() + 250
+	set_process(true)
+
+
+func _process(_delta: float) -> void:
+	if get_visible_page_id() != PageRouterScript.PAGE_MAIN_MENU or Time.get_ticks_msec() < _prewarm_after_msec:
+		return
+	if _navigation_transition_coordinator != null and bool(_navigation_transition_coordinator.call("is_busy")):
+		return
+	var started := Time.get_ticks_usec()
+	if not _prewarm_queued:
+		for page_id: StringName in [PageRouterScript.PAGE_DEPLOY_PREP, PageRouterScript.PAGE_LONG_TERM]:
+			var variants: Array[StringName] = []
+			variants.assign([&"deploy_default", &"deploy_map"] if page_id == PageRouterScript.PAGE_DEPLOY_PREP else [&"long_term_default", &"long_term_goals"])
+			for path: String in ContentDBAccessScript.get_asset_paths_for_variants(variants):
+				_prewarm_queue.append({"page": page_id, "path": path})
+		_prewarm_queued = true
+		return
+	if _prewarm_thread != null:
+		if _prewarm_thread.is_alive():
+			return
+		var resource := _collect_prewarm_thread(_prewarm_thread, get_tree(), _prewarm_shutdown_join)
+		if resource != null:
+			_prewarm_resources.append(resource)
+		_prewarm_thread = null
+		_prewarm_shutdown_join = Callable()
+	# At most one completed resource and one new request per frame; never build nodes here.
+	while not _prewarm_queue.is_empty() and Time.get_ticks_usec() - started < 1000:
+		var next: Dictionary = _prewarm_queue.pop_front()
+		if _pages.has(next["page"]):
+			continue
+		var path := str(next["path"])
+		var thread := Thread.new()
+		if thread.start(_load_prewarm_resource.bind(path), Thread.PRIORITY_LOW) == OK:
+			_prewarm_thread = thread
+			_prewarm_shutdown_join = _make_shutdown_join(thread)
+			get_tree().root.tree_exiting.connect(_prewarm_shutdown_join, CONNECT_ONE_SHOT)
+		return
+	if _prewarm_queue.is_empty() and _prewarm_thread == null:
+		set_process(false)
+
+
+func _exit_tree() -> void:
+	_release_page_prewarm()
+
+
+func _release_page_prewarm() -> void:
+	if _prewarm_thread != null and is_inside_tree():
+		_discard_prewarm_thread(_prewarm_thread, get_tree(), _prewarm_shutdown_join)
+	_prewarm_thread = null
+	_prewarm_shutdown_join = Callable()
+	_prewarm_queue.clear()
+	_prewarm_resources.clear()
+	_prewarm_queued = false
+
+
+static func _load_prewarm_resource(path: String) -> Resource:
+	# A joined worker avoids the 4.6.3 threaded-request token race; no scene nodes are touched.
+	return ResourceLoader.load(path, "Texture2D")
+
+
+static func _join_prewarm_thread(thread: Thread) -> void:
+	# Root exit is the only blocking path: no future process frame can collect a live worker then.
+	if thread.is_started():
+		thread.wait_to_finish()
+
+
+static func _make_shutdown_join(thread: Thread) -> Callable:
+	return func() -> void: _join_prewarm_thread(thread)
+
+
+static func _collect_prewarm_thread(thread: Thread, tree: SceneTree, shutdown_join: Callable) -> Resource:
+	if tree.root.tree_exiting.is_connected(shutdown_join):
+		tree.root.tree_exiting.disconnect(shutdown_join)
+	return thread.wait_to_finish() as Resource if thread.is_started() else null
+
+
+static func _discard_prewarm_thread(thread: Thread, tree: SceneTree, shutdown_join: Callable) -> void:
+	if thread.is_alive():
+		var collect_request := func() -> void: _discard_prewarm_thread(thread, tree, shutdown_join)
+		tree.process_frame.connect(collect_request, CONNECT_ONE_SHOT)
+	else:
+		_collect_prewarm_thread(thread, tree, shutdown_join)
+
+
+func set_ui_scale_factor(value: float) -> bool:
+	_ui_scale_factor = Art10UISkinKitScript.set_runtime_ui_scale_factor(value)
+	Art10UISkinKitScript.apply_player_ui_theme(self)
+	_apply_ui_scale_to_pages()
+	_layout_settings_overlay()
+	return is_equal_approx(_ui_scale_factor, Art10UISkinKitScript.normalize_runtime_ui_scale_factor(value))
+
+
+func get_ui_scale_factor() -> float:
+	return _ui_scale_factor
+
+
+func _apply_ui_scale_to_pages() -> void:
+	for page: Control in _pages.values():
+		if page != null and page.has_method("set_ui_scale_factor"):
+			page.call("set_ui_scale_factor", _ui_scale_factor)
+	if settings_panel != null:
+		if settings_panel.has_method("set_ui_scale_factor"):
+			settings_panel.call("set_ui_scale_factor", _ui_scale_factor)
+		else:
+			settings_panel.set_meta("runtime_ui_scale_factor", _ui_scale_factor)
+
+
+func apply_snapshot(snapshot: Dictionary) -> void:
+	current_snapshot = snapshot.duplicate(true)
+	_has_snapshot = true
+	_snapshot_revision += 1
+	_refresh_visible_snapshot_page()
+	if exit_confirm_panel != null and exit_confirm_panel.visible and is_visible_in_tree():
+		_refresh_exit_confirm_text()
+
+
+func get_snapshot_refresh_counts() -> Dictionary:
+	return _snapshot_refresh_counts.duplicate(true)
+
+
+func show_main() -> void:
+	if not _cancel_navigation_transition_for_external_page_change():
+		return
+	_show_main_internal()
+
+
+func _show_main_internal() -> void:
+	_current_page_id = PageRouterScript.PAGE_MAIN_MENU
+	_set_page_visible(main_menu_shell)
+	_hide_settings(false)
+	_hide_exit_confirm(false)
+
+
+func show_deploy(_tab_id: StringName = &"overview") -> void:
+	if not _cancel_navigation_transition_for_external_page_change():
+		return
+	_show_deploy_internal(_tab_id)
+
+
+func _show_deploy_internal(tab_id: StringName = &"overview") -> void:
+	_ensure_page(PageRouterScript.PAGE_DEPLOY_PREP)
+	_current_page_id = PageRouterScript.PAGE_DEPLOY_PREP
+	_set_page_visible(deploy_page)
+	_hide_settings(false)
+	_hide_exit_confirm(false)
+	if deploy_page != null and deploy_page.has_method("show_tab"):
+		deploy_page.call("show_tab", tab_id)
+
+
+func show_long_term(_entry_id: StringName = NavigationIntentScript.LONG_TERM_DEFAULT_MODULE) -> void:
+	if not _cancel_navigation_transition_for_external_page_change():
+		return
+	_show_long_term_internal(_entry_id)
+
+
+func _show_long_term_internal(entry_id: StringName = NavigationIntentScript.LONG_TERM_DEFAULT_MODULE) -> void:
+	_ensure_page(PageRouterScript.PAGE_LONG_TERM)
+	_current_page_id = PageRouterScript.PAGE_LONG_TERM
+	_set_page_visible(long_term_page)
+	_hide_settings(false)
+	_hide_exit_confirm(false)
+	if long_term_page != null and long_term_page.has_method("show_module"):
+		long_term_page.call("show_module", NavigationIntentScript.normalize_long_term_module_id(entry_id))
+
+
+func show_settings() -> bool:
+	if not _cancel_navigation_transition_for_external_page_change():
+		return false
+	return _show_settings_internal()
+
+
+func _show_settings_internal() -> bool:
+	if modal_focus_stack.top_modal_id() == &"settings":
+		return true
+	_current_page_id = PageRouterScript.PAGE_SETTINGS_PLACEHOLDER
+	if settings_page != null:
+		settings_page.visible = true
+	_hide_exit_confirm(false)
+	_set_page_visible(main_menu_shell)
+	if settings_panel == null or not bool(settings_panel.call("open_panel")):
+		_show_main_internal()
+		_restore_main_menu_focus()
+		return false
+	var preferred_focus := settings_panel.call("preferred_focus_control") as Control
+	if not modal_focus_stack.push(
+		&"settings",
+		settings_page,
+		preferred_focus,
+		Callable(self, "_cancel_settings_modal")
+	):
+		settings_panel.call("close_panel", false)
+		_show_main_internal()
+		_restore_main_menu_focus()
+		return false
+	return true
+
+
+func set_shell_active(value: bool) -> void:
+	if not value:
+		_cancel_active_navigation_transition(&"shell_deactivated", false)
+	_shell_active = value and is_visible_in_tree()
+	_sync_page_lifecycle()
+
+
+func get_visible_page_id() -> StringName:
+	if not _shell_active or not is_visible_in_tree():
+		return &""
+	if settings_page != null and settings_page.visible:
+		return PageRouterScript.PAGE_SETTINGS_PLACEHOLDER
+	if exit_confirm_panel != null and exit_confirm_panel.visible:
+		return PageRouterScript.PAGE_EXIT_CONFIRM
+	return _current_page_id
+
+
+func get_main_page() -> Control:
+	return _ensure_page(PageRouterScript.PAGE_MAIN_MENU)
+
+
+func get_deploy_page() -> Control:
+	return _ensure_page(PageRouterScript.PAGE_DEPLOY_PREP)
+
+
+func get_long_term_page() -> Control:
+	return _ensure_page(PageRouterScript.PAGE_LONG_TERM)
+
+
+func request_deploy_primary_action() -> void:
+	get_deploy_page().call("request_primary_action")
+
+
+func show_deploy_action_message(message: String) -> void:
+	get_deploy_page().call("show_action_message", message)
+
+
+func get_navigation_transition_snapshot() -> Dictionary:
+	if _navigation_transition_coordinator == null:
+		return {}
+	return _navigation_transition_coordinator.call("snapshot") as Dictionary
+
+
+func get_settings_panel() -> PanelContainer:
+	return settings_panel
+
+
+func handle_cancel_event(event: InputEvent) -> bool:
+	if (
+		event == null
+		or event.is_echo()
+		or not _shell_active
+		or not is_visible_in_tree()
+		or not event.is_action_pressed("cancel")
+	):
+		return false
+	if modal_focus_stack.handle_cancel_event(event):
+		return true
+	var active_page := _pages.get(_current_page_id) as Control
+	if active_page != null and active_page.has_method("handle_cancel_event"):
+		return bool(active_page.call("handle_cancel_event", event))
+	return false
+
+
+func modal_policy_snapshot() -> Dictionary:
+	return modal_focus_stack.snapshot()
+
+
+func bind_settings_manager(manager: Node) -> void:
+	if settings_manager == manager:
+		if settings_manager == null:
+			_ensure_settings_manager_bound()
+			return
+		_connect_settings_manager()
+		_bind_settings_panel_to_manager()
+		_apply_bound_runtime_settings()
+		return
+	var reopen_settings := (
+		settings_panel != null
+		and settings_page != null
+		and settings_page.visible
+		and settings_panel.visible
+	)
+	if settings_panel != null:
+		settings_panel.call("close_panel", false)
+		settings_panel.call("bind_settings_manager", null)
+	_disconnect_settings_manager()
+	settings_manager = manager
+	if _owned_settings_manager != null and _owned_settings_manager != manager:
+		var released_manager := _owned_settings_manager
+		_owned_settings_manager = null
+		if is_instance_valid(released_manager):
+			if released_manager.get_parent() == self:
+				remove_child(released_manager)
+			released_manager.queue_free()
+	_connect_settings_manager()
+	_bind_settings_panel_to_manager()
+	_apply_bound_runtime_settings()
+	if settings_manager == null:
+		_ensure_settings_manager_bound()
+	if reopen_settings and settings_panel != null:
+		settings_panel.call("open_panel")
+
+
+func get_bound_settings_manager() -> Node:
+	return settings_manager
+
+
+func get_owned_settings_manager() -> Node:
+	return _owned_settings_manager
+
+
+func owns_bound_settings_manager() -> bool:
+	return settings_manager != null and settings_manager == _owned_settings_manager
+
+
+func _ensure_settings_manager_bound() -> void:
+	if settings_manager != null and is_instance_valid(settings_manager) and not settings_manager.is_queued_for_deletion():
+		_connect_settings_manager()
+		_bind_settings_panel_to_manager()
+		return
+	settings_manager = null
+	var autoload_manager := get_node_or_null("/root/SettingsManager")
+	if autoload_manager != null:
+		bind_settings_manager(autoload_manager)
+		return
+	var owned_manager := SettingsManagerScript.new() as Node
+	owned_manager.name = "OwnedSettingsManager"
+	_owned_settings_manager = owned_manager
+	add_child(owned_manager)
+	bind_settings_manager(owned_manager)
+
+
+func _bind_settings_panel_to_manager() -> void:
+	if settings_panel != null:
+		settings_panel.call("bind_settings_manager", settings_manager)
+
+
+func _connect_settings_manager() -> void:
+	if settings_manager == null or not is_instance_valid(settings_manager):
+		return
+	var applied_callback := Callable(self, "_on_runtime_settings_applied")
+	if settings_manager.has_signal("settings_applied") and not settings_manager.is_connected("settings_applied", applied_callback):
+		settings_manager.connect("settings_applied", applied_callback)
+	var reverted_callback := Callable(self, "_on_runtime_settings_reverted")
+	if settings_manager.has_signal("settings_reverted") and not settings_manager.is_connected("settings_reverted", reverted_callback):
+		settings_manager.connect("settings_reverted", reverted_callback)
+
+
+func _disconnect_settings_manager() -> void:
+	if settings_manager == null or not is_instance_valid(settings_manager):
+		return
+	var applied_callback := Callable(self, "_on_runtime_settings_applied")
+	if settings_manager.has_signal("settings_applied") and settings_manager.is_connected("settings_applied", applied_callback):
+		settings_manager.disconnect("settings_applied", applied_callback)
+	var reverted_callback := Callable(self, "_on_runtime_settings_reverted")
+	if settings_manager.has_signal("settings_reverted") and settings_manager.is_connected("settings_reverted", reverted_callback):
+		settings_manager.disconnect("settings_reverted", reverted_callback)
+
+
+func _apply_bound_runtime_settings() -> void:
+	if settings_manager == null or not is_instance_valid(settings_manager) or not settings_manager.has_method("get_applied_settings"):
+		return
+	var runtime_settings: Dictionary = settings_manager.call("get_applied_settings")
+	_apply_runtime_settings_to_pages(runtime_settings)
+
+
+func _on_runtime_settings_applied(runtime_settings: Dictionary) -> void:
+	_apply_runtime_settings_to_pages(runtime_settings)
+
+
+func _on_runtime_settings_reverted(runtime_settings: Dictionary, _reason: StringName) -> void:
+	_apply_runtime_settings_to_pages(runtime_settings)
+
+
+func _apply_runtime_settings_to_pages(runtime_settings: Dictionary) -> void:
+	var requested_ui_scale := float(int(runtime_settings.get("ui_scale_percent", 100))) / 100.0
+	var normalized_ui_scale := Art10UISkinKitScript.normalize_runtime_ui_scale_factor(requested_ui_scale)
+	var ui_scale_did_change := not is_equal_approx(_ui_scale_factor, normalized_ui_scale)
+	set_ui_scale_factor(normalized_ui_scale)
+	if ui_scale_did_change:
+		ui_scale_changed.emit(_ui_scale_factor)
+	_reduced_motion = bool(runtime_settings.get("reduce_motion", false))
+	if _navigation_transition_coordinator != null and bool(_navigation_transition_coordinator.call("is_busy")):
+		var active_token := int(_navigation_transition_coordinator.call("active_token"))
+		_navigation_transition_coordinator.call("set_reduced_motion", active_token, _reduced_motion)
+	for page: Control in _pages.values():
+		if page != null and page.has_method("set_reduced_motion_enabled"):
+			page.call("set_reduced_motion_enabled", _reduced_motion)
+
+
+func _clear_children() -> void:
+	for child in get_children():
+		if child == _owned_settings_manager:
+			continue
+		remove_child(child)
+		child.queue_free()
+	_pages.clear()
+	settings_page = null
+	settings_panel = null
+	exit_confirm_panel = null
+
+
+func _ensure_page(page_id: StringName) -> Control:
+	if _pages.has(page_id):
+		return _pages[page_id] as Control
+	var page_script: Script
+	var page_name: String
+	match page_id:
+		PageRouterScript.PAGE_MAIN_MENU:
+			page_script = MainMenuShellScript
+			page_name = "MainMenuShell"
+		PageRouterScript.PAGE_DEPLOY_PREP:
+			page_script = DeployPrepShellScript
+			page_name = "DeployPrepShell"
+		PageRouterScript.PAGE_LONG_TERM:
+			page_script = LongTermShellScript
+			page_name = "LongTermShell"
+		_:
+			return null
+	var page := page_script.new() as Control
+	page.name = page_name
+	page.visible = false
+	_pages[page_id] = page
+	add_child(page)
+	# Control input follows sibling order even when overlays have a higher z_index.
+	move_child(page, 0)
+	page.call("build", {}, current_snapshot if _has_snapshot else {})
+	if _has_snapshot:
+		_page_snapshot_revisions[page_id] = _snapshot_revision
+		_snapshot_refresh_counts[page_id] = int(_snapshot_refresh_counts.get(page_id, 0)) + 1
+	page.call("set_reduced_motion_enabled", _reduced_motion)
+	page.call("set_page_active", false)
+	page.connect("navigation_intent_requested", _on_navigation_intent_requested)
+	if page_id == PageRouterScript.PAGE_MAIN_MENU:
+		page.connect("navigation_transition_requested", _on_main_menu_navigation_transition_requested)
+		page.connect("navigation_transition_finished", _on_main_menu_navigation_transition_finished)
+		page.connect("navigation_transition_cancel_requested", _on_main_menu_navigation_transition_cancel_requested)
+	if page.has_signal("deploy_start_intent_requested"):
+		page.connect("deploy_start_intent_requested", _on_deploy_start_intent_requested)
+	if page.has_signal("meta_action_requested"):
+		page.connect("meta_action_requested", _forward_meta_action.bind(page_id))
+	return page
+
+
+func _forward_meta_action(action: Dictionary, source_page: StringName = &"") -> void:
+	var forwarded := action.duplicate(true)
+	if source_page.is_empty():
+		source_page = StringName(forwarded.get("source_page", &""))
+	forwarded["source_page"] = source_page
+	if str(forwarded.get("request_id", "")).is_empty():
+		_meta_request_sequence += 1
+		forwarded["request_id"] = MetaActionRequestIdScript.generate(&"app")
+	if deploy_page != null and deploy_page.has_method("get_selected_instance_ids"):
+		var selected: Dictionary = deploy_page.call("get_selected_instance_ids")
+		forwarded["selected_equipment_ids"] = (selected.get("selected_equipment_ids", []) as Array).duplicate()
+		forwarded["selected_consumable_ids"] = (selected.get("selected_consumable_ids", []) as Array).duplicate()
+	meta_action_requested.emit(forwarded)
+
+
+func apply_meta_action_result(envelope: Dictionary) -> bool:
+	var source_page := StringName(envelope.get("source_page", &""))
+	var target_page := _pages.get(source_page) as Control
+	if target_page == null or not target_page.has_method("apply_meta_action_result"):
+		return false
+	var accepted := bool(target_page.call("apply_meta_action_result", envelope))
+	_last_meta_result_delivery = {
+		"request_id": str(envelope.get("request_id", "")),
+		"source_page": source_page,
+		"action": StringName(envelope.get("action", &"")),
+		"target_id": str(envelope.get("target_id", "")),
+		"accepted": accepted,
+		"snapshot_revision": _snapshot_revision,
+		"page_snapshot_revision": int(_page_snapshot_revisions.get(source_page, -1)),
+	}
+	return accepted
+
+
+func get_meta_result_delivery_snapshot() -> Dictionary:
+	return {
+		"current_snapshot_revision": _snapshot_revision,
+		"last_delivery": _last_meta_result_delivery.duplicate(true),
+	}
+
+
+func _build_settings_overlay() -> void:
+	settings_page = Control.new()
+	settings_page.name = "SettingsOverlay"
+	settings_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	UILayerContractScript.apply_layer(settings_page, &"overlay")
+	settings_page.visible = false
+	add_child(settings_page)
+	var dim := _add_color_rect(settings_page, "SettingsOverlayDim", Rect2(0, 0, 1280, 720), Color(0.015, 0.025, 0.03, 0.72))
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	settings_modal_art = _add_art21_texture(
+		settings_page,
+		"SettingsModalPanel",
+		Rect2(232, 58, 816, 604),
+		&"main_menu.scene.menu.modal.panel"
+	)
+	settings_panel = SettingsPanelScript.new() as PanelContainer
+	settings_panel.name = "SettingsPanel"
+	settings_panel.position = Vector2(340, 96)
+	settings_panel.size = Vector2(600, 462)
+	settings_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	settings_page.add_child(settings_panel)
+	settings_panel.call("set_external_cancel_authority", true)
+	settings_panel.connect("close_requested", _close_settings_to_main)
+	if settings_panel.has_signal("test_room_requested"):
+		settings_panel.connect("test_room_requested", _on_test_room_requested)
+	settings_close_button = settings_panel.get("close_button") as Button
+	if settings_close_button != null:
+		var action_row := settings_close_button.get_parent()
+		action_row.remove_child(settings_close_button)
+		var close_reserve := Control.new()
+		close_reserve.name = "SettingsExternalCloseReserve"
+		close_reserve.custom_minimum_size = Vector2(98.0, 32.0)
+		action_row.add_child(close_reserve)
+		settings_page.add_child(settings_close_button)
+		settings_close_button.name = "SettingsCloseButton"
+		settings_page.move_child(settings_close_button, settings_page.get_child_count() - 1)
+	_layout_settings_overlay()
+	var viewport := get_viewport()
+	if viewport != null:
+		var layout_callback := Callable(self, "_layout_settings_overlay")
+		if not viewport.size_changed.is_connected(layout_callback):
+			viewport.size_changed.connect(layout_callback)
+
+
+func _layout_settings_overlay() -> void:
+	if settings_page == null or settings_panel == null or settings_modal_art == null:
+		return
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var safe := Vector2(20.0, 16.0)
+	var modal_size := Vector2(
+		minf(816.0, maxf(640.0, viewport_size.x - safe.x * 2.0)),
+		minf(604.0, maxf(420.0, viewport_size.y - safe.y * 2.0))
+	)
+	modal_size.x = minf(modal_size.x, viewport_size.x - safe.x * 2.0)
+	modal_size.y = minf(modal_size.y, viewport_size.y - safe.y * 2.0)
+	var modal_rect := Rect2((viewport_size - modal_size) * 0.5, modal_size)
+	Art10UISkinKitScript.set_rect(settings_modal_art, modal_rect)
+	var inner_rect := Rect2(
+		modal_rect.position + Vector2(48.0, 50.0),
+		modal_rect.size - Vector2(96.0, 122.0)
+	)
+	Art10UISkinKitScript.set_rect(settings_panel, inner_rect)
+	if settings_close_button != null:
+		var close_size := Art10UISkinKitScript.scaled_control_minimum(
+			Vector2(90.0, 32.0),
+			minf(_ui_scale_factor, 1.25)
+		)
+		Art10UISkinKitScript.set_rect(
+			settings_close_button,
+			Rect2(inner_rect.end - Vector2(close_size.x, close_size.y + 2.0), close_size)
+		)
+
+
+func _build_exit_confirm_layer() -> void:
+	exit_confirm_panel = Control.new()
+	exit_confirm_panel.name = "ExitConfirmDialog"
+	exit_confirm_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	UILayerContractScript.apply_layer(exit_confirm_panel, &"modal")
+	exit_confirm_panel.visible = false
+	add_child(exit_confirm_panel)
+	var dim := _add_color_rect(exit_confirm_panel, "ExitConfirmDim", Rect2(0, 0, 1280, 720), Color(0.015, 0.02, 0.025, 0.76))
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_add_art21_texture(exit_confirm_panel, "ExitConfirmModalPanel", Rect2(232, 142, 816, 436), &"main_menu.scene.menu.modal.panel")
+	_add_overlay_label(exit_confirm_panel, "ExitConfirmTitle", Rect2(350, 190, 580, 50), "退出游戏", 32, Color(0.97, 0.70, 0.35))
+	exit_confirm_body = _add_overlay_label(exit_confirm_panel, "ExitConfirmBody", Rect2(350, 266, 580, 126), "", 17, Color(0.94, 0.90, 0.80))
+	exit_confirm_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	exit_confirm_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	exit_confirm_body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_add_art21_modal_button(exit_confirm_panel, "ExitConfirmAccept", Rect2(392, 444, 190, 58), "确认退出", func() -> void: get_tree().quit())
+	_add_art21_modal_button(exit_confirm_panel, "ExitConfirmCancel", Rect2(698, 444, 190, 58), "取消", func() -> void: _hide_exit_confirm())
+	_refresh_exit_confirm_text()
+
+
+func _on_navigation_intent_requested(intent: Dictionary) -> void:
+	if _navigation_transition_coordinator != null and bool(_navigation_transition_coordinator.call("is_busy")):
+		return
+	var commit_result := _commit_navigation_intent(intent)
+	page_changed.emit(
+		StringName(commit_result.get("page_id", PageRouterScript.PAGE_MAIN_MENU)),
+		(commit_result.get("payload", {}) as Dictionary).duplicate(true)
+	)
+
+
+func _on_main_menu_navigation_transition_requested(intent: Dictionary, profile_id: StringName, entry_id: StringName) -> void:
+	if _navigation_transition_coordinator == null or main_menu_shell == null:
+		_restore_main_menu_entry_focus(entry_id)
+		return
+	var route := PageRouterScript.route_for_intent(intent)
+	var target_page := StringName(route.get("page", PageRouterScript.PAGE_MAIN_MENU))
+	if (
+		_current_page_id != PageRouterScript.PAGE_MAIN_MENU
+		or not _shell_active
+		or not main_menu_shell.visible
+		or _profile_for_page(target_page) != profile_id
+	):
+		_restore_main_menu_entry_focus(entry_id)
+		return
+	var reduced_motion := false
+	if main_menu_shell.has_method("is_reduced_motion_enabled"):
+		reduced_motion = bool(main_menu_shell.call("is_reduced_motion_enabled"))
+	var requested: Dictionary = _navigation_transition_coordinator.call(
+		"request_transition",
+		PageRouterScript.PAGE_MAIN_MENU,
+		target_page,
+		profile_id,
+		entry_id,
+		reduced_motion,
+		{"intent": intent.duplicate(true)}
+	)
+	if not bool(requested.get("ok", false)):
+		_restore_main_menu_entry_focus(entry_id)
+		return
+	var token := int(requested.get("token", 0))
+	if not _prepare_navigation_target(target_page):
+		var prepare_failure: Dictionary = _navigation_transition_coordinator.call(
+			"mark_prepared", token, false, &"target_prepare_failed"
+		)
+		_recover_main_menu_transition(prepare_failure, entry_id)
+		return
+	var prepared: Dictionary = _navigation_transition_coordinator.call("mark_prepared", token, true)
+	if not bool(prepared.get("ok", false)):
+		_recover_main_menu_transition(prepared, entry_id)
+		return
+	var playback_started := false
+	if main_menu_shell.has_method("play_navigation_transition"):
+		playback_started = bool(main_menu_shell.call(
+			"play_navigation_transition", token, profile_id, entry_id, reduced_motion
+		))
+	if not playback_started:
+		var playback_failure: Dictionary = _navigation_transition_coordinator.call(
+			"fail_transition", token, &"presenter_start_failed"
+		)
+		_recover_main_menu_transition(playback_failure, entry_id)
+
+
+func _on_main_menu_navigation_transition_finished(token: int) -> void:
+	if _navigation_transition_coordinator == null:
+		return
+	var playback_result: Dictionary = _navigation_transition_coordinator.call("mark_playback_finished", token)
+	if not bool(playback_result.get("ok", false)):
+		return
+	var commit_request_result: Dictionary = _navigation_transition_coordinator.call("take_commit", token)
+	if not bool(commit_request_result.get("ok", false)):
+		var take_failure: Dictionary = _navigation_transition_coordinator.call(
+			"fail_transition", token, &"commit_request_failed"
+		)
+		_recover_main_menu_transition(take_failure)
+		return
+	var commit_request := commit_request_result.get("commit_request", {}) as Dictionary
+	var request_payload := commit_request.get("payload", {}) as Dictionary
+	var raw_intent: Variant = request_payload.get("intent", {})
+	if not (raw_intent is Dictionary) or (raw_intent as Dictionary).is_empty():
+		var intent_failure: Dictionary = _navigation_transition_coordinator.call(
+			"resolve_commit", token, false, &"intent_missing"
+		)
+		_recover_main_menu_transition(intent_failure)
+		page_changed.emit(PageRouterScript.PAGE_MAIN_MENU, {})
+		return
+	var intent := (raw_intent as Dictionary).duplicate(true)
+	var commit_result := _commit_navigation_intent(intent)
+	var committed := bool(commit_result.get("ok", false))
+	var resolve_result: Dictionary = _navigation_transition_coordinator.call(
+		"resolve_commit", token, committed, &"route_commit_failed"
+	)
+	if not committed:
+		_recover_main_menu_transition(resolve_result)
+	page_changed.emit(
+		StringName(commit_result.get("page_id", PageRouterScript.PAGE_MAIN_MENU)),
+		(commit_result.get("payload", {}) as Dictionary).duplicate(true)
+	)
+
+
+func _on_main_menu_navigation_transition_cancel_requested(token: int, reason_code: StringName) -> void:
+	if _navigation_transition_coordinator == null:
+		return
+	var cancelled: Dictionary = _navigation_transition_coordinator.call("cancel", token, reason_code)
+	if not bool(cancelled.get("ok", false)):
+		return
+	if main_menu_shell != null and main_menu_shell.has_method("cancel_navigation_transition"):
+		main_menu_shell.call("cancel_navigation_transition", token, false)
+	_recover_main_menu_transition(cancelled)
+
+
+func _commit_navigation_intent(intent: Dictionary) -> Dictionary:
+	var route := PageRouterScript.route_for_intent(intent)
+	var page_id := StringName(route.get("page", PageRouterScript.PAGE_MAIN_MENU))
+	var committed_page_id := page_id
+	var page_payload := NavigationIntentScript.payload(intent)
+	var committed := true
+	match page_id:
+		PageRouterScript.PAGE_DEPLOY_PLACEHOLDER:
+			if _ensure_page(PageRouterScript.PAGE_DEPLOY_PREP) == null:
+				committed = false
+				committed_page_id = PageRouterScript.PAGE_MAIN_MENU
+				_show_main_internal()
+			else:
+				var deploy_payload := page_payload
+				_show_deploy_internal(StringName(deploy_payload.get("tab", &"overview")))
+		PageRouterScript.PAGE_LONG_TERM:
+			if _ensure_page(PageRouterScript.PAGE_LONG_TERM) == null:
+				committed = false
+				committed_page_id = PageRouterScript.PAGE_MAIN_MENU
+				_show_main_internal()
+			else:
+				var long_term_payload := page_payload
+				var long_term_module_id := NavigationIntentScript.normalize_long_term_module_id(StringName(
+					long_term_payload.get("module_id", long_term_payload.get("entry_id", NavigationIntentScript.LONG_TERM_DEFAULT_MODULE))
+				))
+				long_term_payload["module_id"] = long_term_module_id
+				long_term_payload["entry_id"] = long_term_module_id
+				page_payload = long_term_payload
+				_show_long_term_internal(long_term_module_id)
+		PageRouterScript.PAGE_SETTINGS_PLACEHOLDER:
+			if not _show_settings_internal():
+				committed = false
+				committed_page_id = PageRouterScript.PAGE_MAIN_MENU
+		PageRouterScript.PAGE_EXIT_CONFIRM:
+			if exit_confirm_panel == null:
+				committed = false
+				committed_page_id = PageRouterScript.PAGE_MAIN_MENU
+				_show_main_internal()
+			else:
+				_show_exit_confirm()
+		PageRouterScript.PAGE_RUN:
+			host_route_requested.emit(intent)
+		_:
+			_show_main_internal()
+	return {
+		"ok": committed,
+		"page_id": committed_page_id,
+		"payload": page_payload,
+	}
+
+
+func _profile_for_page(page_id: StringName) -> StringName:
+	match page_id:
+		PageRouterScript.PAGE_DEPLOY_PLACEHOLDER:
+			return NavigationTransitionCoordinatorScript.PROFILE_ENTER_CAVE
+		PageRouterScript.PAGE_LONG_TERM:
+			return NavigationTransitionCoordinatorScript.PROFILE_DESCEND
+		PageRouterScript.PAGE_SETTINGS_PLACEHOLDER:
+			return NavigationTransitionCoordinatorScript.PROFILE_OPEN_OVERLAY
+		PageRouterScript.PAGE_EXIT_CONFIRM:
+			return NavigationTransitionCoordinatorScript.PROFILE_OPEN_CONFIRM
+		_:
+			return &""
+
+
+func _prepare_navigation_target(page_id: StringName) -> bool:
+	match page_id:
+		PageRouterScript.PAGE_DEPLOY_PLACEHOLDER, PageRouterScript.PAGE_LONG_TERM:
+			return _ensure_page(page_id) != null
+		PageRouterScript.PAGE_SETTINGS_PLACEHOLDER:
+			return settings_page != null and settings_panel != null and settings_manager != null
+		PageRouterScript.PAGE_EXIT_CONFIRM:
+			return exit_confirm_panel != null
+		_:
+			return false
+
+
+func _recover_main_menu_transition(result: Dictionary, fallback_focus: StringName = &"") -> void:
+	var last_result := result.get("last_result", {}) as Dictionary
+	if last_result.is_empty():
+		var result_snapshot := result.get("snapshot", {}) as Dictionary
+		last_result = result_snapshot.get("last_result", {}) as Dictionary
+	var recovery := last_result.get("recovery", {}) as Dictionary
+	var focus_id := StringName(recovery.get("focus_id", fallback_focus))
+	var finished_token := int(last_result.get("token", 0))
+	if main_menu_shell != null and main_menu_shell.has_method("cancel_navigation_transition") and finished_token > 0:
+		main_menu_shell.call("cancel_navigation_transition", finished_token, false)
+	if _shell_active and is_visible_in_tree() and StringName(recovery.get("page", PageRouterScript.PAGE_MAIN_MENU)) == PageRouterScript.PAGE_MAIN_MENU:
+		show_main()
+		_restore_main_menu_entry_focus(focus_id)
+
+
+func _restore_main_menu_entry_focus(entry_id: StringName) -> void:
+	if not _shell_active or main_menu_shell == null or not main_menu_shell.visible:
+		return
+	var target_entry := entry_id if entry_id != &"" else &"deploy"
+	if main_menu_shell.has_method("_set_focus_state"):
+		main_menu_shell.call("_set_focus_state", target_entry)
+	var button := main_menu_shell.get_node_or_null("PrimaryActionRoot/MainMenuEntry_%s" % String(target_entry)) as Button
+	if button != null and is_instance_valid(button):
+		button.call_deferred("grab_focus")
+
+
+func _cancel_active_navigation_transition(reason_code: StringName, restore_focus: bool = true) -> bool:
+	if _navigation_transition_coordinator == null or not bool(_navigation_transition_coordinator.call("is_busy")):
+		return true
+	var token := int(_navigation_transition_coordinator.call("active_token"))
+	var cancelled: Dictionary = _navigation_transition_coordinator.call("cancel", token, reason_code)
+	if not bool(cancelled.get("ok", false)):
+		return false
+	if main_menu_shell != null and main_menu_shell.has_method("cancel_navigation_transition"):
+		main_menu_shell.call("cancel_navigation_transition", token, restore_focus)
+	if restore_focus:
+		_recover_main_menu_transition(cancelled)
+	return true
+
+
+func _cancel_navigation_transition_for_external_page_change() -> bool:
+	if _navigation_transition_coordinator == null or not bool(_navigation_transition_coordinator.call("is_busy")):
+		return true
+	return _cancel_active_navigation_transition(&"external_page_change", false)
+
+
+func _on_deploy_start_intent_requested(intent: Dictionary) -> void:
+	var payload := NavigationIntentScript.payload(intent)
+	payload = RunStartRouteAdapterScript.payload_from_route_payload(payload)
+	if NavigationIntentScript.target(intent) == NavigationIntentScript.TARGET_RUN and bool(payload.get("uses_existing_route", false)):
+		intent["payload"] = payload
+		host_route_requested.emit(intent)
+
+
+func _set_page_visible(active_page: Control) -> void:
+	for page: Control in _pages.values():
+		if page != null:
+			page.visible = page == active_page
+	_refresh_snapshot_page(active_page)
+	_sync_page_lifecycle()
+
+
+func _sync_page_lifecycle() -> void:
+	var shell_visible := _shell_active and is_visible_in_tree()
+	var overlay_visible := (settings_page != null and settings_page.visible) or (exit_confirm_panel != null and exit_confirm_panel.visible)
+	var active_page: Control = null
+	if shell_visible and not overlay_visible:
+		active_page = _pages.get(_current_page_id) as Control
+	for page: Control in _pages.values():
+		if page == null:
+			continue
+		var page_active := page == active_page
+		if page.has_method("set_page_active"):
+			if not page.has_method("is_page_active") or bool(page.call("is_page_active")) != page_active:
+				page.call("set_page_active", page_active)
+		else:
+			page.process_mode = Node.PROCESS_MODE_INHERIT if page_active else Node.PROCESS_MODE_DISABLED
+	if settings_page != null:
+		settings_page.process_mode = Node.PROCESS_MODE_INHERIT if shell_visible and settings_page.visible else Node.PROCESS_MODE_DISABLED
+	if exit_confirm_panel != null:
+		exit_confirm_panel.process_mode = Node.PROCESS_MODE_INHERIT if shell_visible and exit_confirm_panel.visible else Node.PROCESS_MODE_DISABLED
+	if not shell_visible and is_inside_tree():
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus != null and (focus == self or is_ancestor_of(focus)):
+			get_viewport().gui_release_focus()
+
+
+func _on_shell_visibility_changed() -> void:
+	if not is_visible_in_tree():
+		_cancel_active_navigation_transition(&"shell_hidden", false)
+	_shell_active = is_visible_in_tree()
+	_sync_page_lifecycle()
+
+
+func _refresh_visible_snapshot_page() -> void:
+	if not is_visible_in_tree():
+		return
+	for page: Control in _pages.values():
+		if page != null and page.visible:
+			_refresh_snapshot_page(page)
+			return
+
+
+func _refresh_snapshot_page(page: Control) -> void:
+	if not _has_snapshot or page == null or not page.visible or not is_visible_in_tree():
+		return
+	var page_id := _snapshot_page_id(page)
+	if page_id == &"" or int(_page_snapshot_revisions.get(page_id, -1)) == _snapshot_revision:
+		return
+	if not page.has_method("apply_snapshot"):
+		return
+	page.call("apply_snapshot", current_snapshot)
+	_page_snapshot_revisions[page_id] = _snapshot_revision
+	_snapshot_refresh_counts[page_id] = int(_snapshot_refresh_counts.get(page_id, 0)) + 1
+
+
+func _snapshot_page_id(page: Control) -> StringName:
+	for page_id: StringName in _pages:
+		if _pages[page_id] == page:
+			return page_id
+	return &""
+
+
+func _reset_page_snapshot_revisions() -> void:
+	for page_id: StringName in _page_snapshot_revisions:
+		_page_snapshot_revisions[page_id] = -1
+
+
+func _show_exit_confirm() -> void:
+	if modal_focus_stack.top_modal_id() == &"exit_confirm":
+		return
+	_refresh_exit_confirm_text()
+	_hide_settings(false)
+	if exit_confirm_panel != null:
+		var cancel_button := exit_confirm_panel.get_node_or_null("ExitConfirmCancel") as Button
+		if not modal_focus_stack.push(
+			&"exit_confirm",
+			exit_confirm_panel,
+			cancel_button,
+			Callable(self, "_cancel_exit_confirm_modal")
+		):
+			exit_confirm_panel.visible = false
+			_sync_page_lifecycle()
+			return
+		_sync_page_lifecycle()
+
+
+func _hide_exit_confirm(restore_focus: bool = true) -> void:
+	var restored_by_stack := false
+	if modal_focus_stack.top_modal_id() == &"exit_confirm":
+		restored_by_stack = modal_focus_stack.pop(&"exit_confirm", restore_focus)
+	elif exit_confirm_panel != null:
+		exit_confirm_panel.visible = false
+	_sync_page_lifecycle()
+	if restore_focus and not restored_by_stack:
+		_restore_main_menu_focus()
+
+
+func _hide_settings(restore_focus: bool = true) -> void:
+	if settings_panel != null:
+		settings_panel.call("close_panel", false)
+	var restored_by_stack := false
+	if modal_focus_stack.top_modal_id() == &"settings":
+		restored_by_stack = modal_focus_stack.pop(&"settings", restore_focus)
+	elif settings_page != null:
+		settings_page.visible = false
+	_sync_page_lifecycle()
+	if restore_focus and not restored_by_stack:
+		_restore_main_menu_focus()
+
+
+func _cancel_exit_confirm_modal(_reason: StringName = &"cancel") -> void:
+	_hide_exit_confirm(true)
+
+
+func _cancel_settings_modal(_reason: StringName = &"cancel") -> void:
+	_close_settings_to_main()
+
+
+func _close_settings_to_main() -> void:
+	_current_page_id = PageRouterScript.PAGE_MAIN_MENU
+	_set_page_visible(main_menu_shell)
+	var had_modal_focus := modal_focus_stack.top_modal_id() == &"settings"
+	_hide_settings(true)
+	_hide_exit_confirm(false)
+	if not had_modal_focus:
+		_restore_main_menu_focus()
+	page_changed.emit(PageRouterScript.PAGE_MAIN_MENU, {"source_page": PageRouterScript.PAGE_SETTINGS_PLACEHOLDER})
+
+
+func _on_test_room_requested() -> void:
+	_current_page_id = PageRouterScript.PAGE_RUN
+	_hide_settings(false)
+	_hide_exit_confirm(false)
+	var payload := {
+		"entry_id": &"i4_debug_test_room",
+		"entry_label": "隔离测试场",
+		"source_page": PageRouterScript.PAGE_SETTINGS_PLACEHOLDER,
+		"route_mode": &"demo_run",
+		"debug_test_room": true,
+		"scenario_id": &"demo_7x7",
+		"seed_value": 1001,
+		"preview_only": false,
+	}
+	var intent := NavigationIntentScript.make_run(&"settings_test_room", payload)
+	host_route_requested.emit(intent)
+	page_changed.emit(PageRouterScript.PAGE_RUN, payload)
+
+
+func _restore_main_menu_focus() -> void:
+	if _shell_active and _current_page_id == PageRouterScript.PAGE_MAIN_MENU and main_menu_shell != null and main_menu_shell.visible and main_menu_shell.has_method("_grab_default_focus"):
+		main_menu_shell.call_deferred("_grab_default_focus")
+
+
+func _refresh_exit_confirm_text() -> void:
+	if exit_confirm_body == null:
+		return
+	var has_active_run := bool(current_snapshot.get("run_active", false))
+	if has_active_run:
+		exit_confirm_body.text = "检测到当前存在进行中探索。退出游戏只会关闭程序，不执行探索放弃、结算或资源变动；当前不保证重新启动后能够恢复本次探索。若要放弃探索，请进入出发探索页执行强确认。"
+	else:
+		exit_confirm_body.text = "确认退出游戏？本操作只关闭程序，不执行探索放弃、结算或资源变动。"
+
+
+func _add_art21_texture(parent: Control, node_name: String, rect: Rect2, visual_key: StringName) -> TextureRect:
+	var texture := Art21UIPlacementContractScript.main_menu_scene_texture(visual_key)
+	if texture == null:
+		return null
+	var texture_rect := TextureRect.new()
+	texture_rect.name = node_name
+	texture_rect.texture = texture
+	texture_rect.position = rect.position.round()
+	texture_rect.size = rect.size.round()
+	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	texture_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(texture_rect)
+	return texture_rect
+
+
+func _add_overlay_label(parent: Control, node_name: String, rect: Rect2, text: String, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.text = text
+	label.position = rect.position.round()
+	label.size = rect.size.round()
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_shadow_color", Color(0.05, 0.03, 0.02, 0.82))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	var composition_role := &"title" if node_name.ends_with("Title") else &"body"
+	Art10UISkinKitScript.apply_composition_label(label, composition_role, font_size, color)
+	parent.add_child(label)
+	return label
+
+
+func _add_art21_modal_button(parent: Control, node_name: String, rect: Rect2, text: String, callback: Callable) -> Button:
+	_add_art21_texture(parent, "%sTexture" % node_name, rect, &"main_menu.scene.menu.modal.button")
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	_style_art21_modal_button(button, rect)
+	button.pressed.connect(callback)
+	parent.add_child(button)
+	return button
+
+
+func _style_art21_modal_button(button: Button, rect: Rect2) -> void:
+	button.position = rect.position.round()
+	button.size = rect.size.round()
+	button.focus_mode = Control.FOCUS_ALL
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var empty := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		button.add_theme_stylebox_override(state, empty)
+	var font := Art10UISkinKitScript.pixel_font()
+	if font is Font:
+		button.add_theme_font_override("font", font as Font)
+	button.add_theme_font_size_override("font_size", 21)
+	button.add_theme_color_override("font_color", Color(0.96, 0.81, 0.48))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 0.93, 0.68))
+	button.add_theme_color_override("font_pressed_color", Color(0.82, 0.64, 0.35))
+
+
+func _add_color_rect(parent: Control, node_name: String, rect: Rect2, color: Color) -> ColorRect:
+	var color_rect := ColorRect.new()
+	color_rect.name = node_name
+	color_rect.color = color
+	color_rect.offset_left = rect.position.x
+	color_rect.offset_top = rect.position.y
+	color_rect.offset_right = rect.position.x + rect.size.x
+	color_rect.offset_bottom = rect.position.y + rect.size.y
+	color_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(color_rect)
+	return color_rect
