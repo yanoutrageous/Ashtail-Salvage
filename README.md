@@ -1,10 +1,12 @@
 # 灰尾回收 · Ashtail Salvage
 
+**M1.5** 修复了事件房关闭对话后无法移动、Esc 无法暂停，以及进房准备失败却提交新坐标的问题。教学地图使用原有的机关、骰局、祭坛和旅商。普通探索从 Lv3 起才可能抽到补给商店。关闭教学说明后可以继续走动，学习插旗仍需单独支付 100 点。[M1.5 验证记录](docs/validation.md#m15)
+
 **M1** 是主线首个体素联调里程碑。在 A2 的 Z2 玩法基础上，接入 [B 组的 22 间体素事件房](https://github.com/yanoutrageous/Ashtail-Salvage/pull/2)、[C 组的人物、怪物、武器和战斗特效](https://github.com/yanoutrageous/Ashtail-Salvage/pull/1)及组内 UI 联调版本。M1 包含移动、交互、存档和宝箱房摆设的修复，默认启用主音量和音效。
 
 ## 开始试玩
 
-使用 Godot **4.6.3** 打开本仓库的 `game/project.godot`，在编辑器中按 F5 运行。使用组内 M1 Windows 完整包时，完整解压后双击 `Start_Game.cmd`，等待首次资源导入完成。
+试玩 M1.5 时，使用 Godot **4.6.3** 打开本仓库的 `game/project.godot`，在编辑器中按 F5 运行。此前组内分发的 M1 Windows 包对应旧版本。运行该包时，完整解压后双击 `Start_Game.cmd`，等待首次资源导入完成。
 
 Windows 完整包将存档与临时文件写入解压目录下的 `player-data`。正常退出时保存，异常终止后可恢复最后的检查点。离线不扣生命或药效时间。更新试玩包时保留 `player-data`。游戏使用 Z2 新档规则。
 
