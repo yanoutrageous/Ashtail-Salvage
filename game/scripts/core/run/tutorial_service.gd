@@ -7,7 +7,7 @@ const POPUP_DEFS := {
 	&"spawn_intro": {
 		"title": "新员工说明",
 		"message_template": "欢迎入职灰尾回收。\n\n你是封锁区临时回收员。本次目标是读取区域扫描图，避开雷险，搜刮物资，并找到撤离信标。\n\n移动：{move_up} / {move_down} / {move_left} / {move_right}\n\n调度台 A-7：公司建议你带回物资。更建议你带回自己。",
-		"blocking": true,
+		"blocking": false,
 		"once": true,
 		"room_scoped": false,
 		"confirm_text": "开始作业",
@@ -107,7 +107,7 @@ const POPUP_DEFS := {
 	&"exit_goal": {
 		"title": "撤离信标",
 		"message_template": "到达撤离信标后，使用 {request_extract} 打开撤离确认。\n\n教程撤离只记录完成状态，不结算收益或回收物。五四三二一撤离协议表示当前封锁区风险；数字越低，调度台越不建议继续深入。\n\n调度台 A-7：撤离是建议。不撤离是自主选择。相关条款已说明。",
-		"blocking": true,
+		"blocking": false,
 		"once": true,
 		"room_scoped": false,
 		"confirm_text": "我知道了",
@@ -122,6 +122,30 @@ const EVENT_POPUP_IDS := {
 	&"altar": &"altar_rule",
 	&"trap": &"trap_rule",
 }
+
+
+static func is_guidance_popup(popup: Dictionary) -> bool:
+	var popup_id := StringName(popup.get("id", &""))
+	return popup_id == &"tutorial_objective" or POPUP_DEFS.has(popup_id)
+
+
+static func is_blocking_popup(popup: Dictionary) -> bool:
+	if popup.is_empty() or is_guidance_popup(popup):
+		return false
+	# The legacy checkpoint field is retained for compatibility, but this is
+	# a business risk decision in both standard and tutorial runs, not a lesson.
+	return str(popup.get("id", "")) == "flag_entry_confirm" or bool(popup.get("blocking", false))
+
+
+static func normalized_popup(popup: Dictionary) -> Dictionary:
+	var normalized := popup.duplicate(true)
+	if is_guidance_popup(normalized):
+		normalized["blocking"] = false
+		normalized["presentation_kind"] = &"guidance"
+	elif str(normalized.get("id", "")) == "flag_entry_confirm":
+		normalized["blocking"] = true
+		normalized["presentation_kind"] = &"risk_confirmation"
+	return normalized
 
 
 static func popup_definitions() -> Dictionary:
@@ -168,8 +192,8 @@ static func trigger_for(context: RunContext, pos: Vector2i) -> StringName:
 	}
 	if trigger_id == &"spawn_intro" and context.profile_fields.get("z2_progression_version") == 1 and not context.profile_fields.get("flag_unlocked", false):
 		context.tutorial_popup["title"] = "学习插旗标记"
-		context.tutorial_popup["message"] = "你已获得100点教学天赋点。\n\n花费100点学习插旗：在区域图上标记可能有风险的房间；进入插旗房间前需要再次确认。\n\n完成教学后到达Lv1，再前往营地申领首次物资。"
-		context.tutorial_popup["confirm_text"] = "100点 · 学习插旗"
+		context.tutorial_popup["message"] = "你已获得100点教学天赋点。\n\n通过教学目标中的“100点 · 学习插旗”主动学习，在区域图上标记可能有风险的房间。你可以先自由探索，学习入口不会因离开本房而消失；收起说明不会扣点。\n\n进入插旗房间前仍需再次确认。学习后到达撤离信标完成教学、升至Lv1，再前往营地申领首次物资。"
+		context.tutorial_popup["confirm_text"] = "收起说明"
 	return trigger_id
 
 

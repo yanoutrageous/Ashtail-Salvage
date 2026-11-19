@@ -230,6 +230,10 @@ func _finish_event_result(context: RunContext, pos: Vector2i, result: Dictionary
 		context.current_pos = context.player_pos
 		RunInventory.record_move(context)
 		var entered := enter_room(context)
+		if not bool(entered.get("ok", false)):
+			# Keep the preparation error authoritative so the outer action also
+			# rolls back the shortcut fee, completion, movement and entry costs.
+			return entered
 		result["room_entry_result"] = entered.get("room_entry_result", {})
 		result["position"] = context.get_current_pos()
 	return result

@@ -468,8 +468,8 @@ func _handle_cancel_input(event: InputEvent) -> bool:
 		return false
 	if persistence_controller.is_blocked():
 		return true
-	# A blocking tutorial prompt owns the current input context. Escape/Back
-	# must not open another modal above the teaching decision.
+	# A restored flag-entry risk decision can precede its view binding. Keep a
+	# safe cancellation route; pure teaching guidance never consumes Escape.
 	if screen_state == SCREEN_RUN and run_context != null and run_context.has_blocking_tutorial_popup():
 		if str(run_context.tutorial_popup.get("id", "")) == "flag_entry_confirm":
 			_dispatch_command(&"cancel_flag_entry")
@@ -833,6 +833,8 @@ func _build_run_overlay() -> void:
 	tutorial_popup_panel.name = "TutorialPopupPanel"
 	tutorial_popup_panel.confirmed.connect(_on_tutorial_popup_confirmed)
 	tutorial_popup_panel.cancelled.connect(func() -> void: _dispatch_command(&"cancel_flag_entry"))
+	tutorial_popup_panel.learn_flag_requested.connect(_on_tutorial_flag_learning_requested)
+	tutorial_popup_panel.guidance_dismissed.connect(_on_tutorial_guidance_dismissed)
 	surface_overlay_slot.add_child(tutorial_popup_panel)
 
 
@@ -978,6 +980,7 @@ func _bind_runtime_modal_controller() -> void:
 		run_surface,
 		{
 			&"event": event_modal_root,
+			&"flag_entry_confirm": tutorial_popup_panel,
 			&"loot_result": loot_panel,
 			&"extract_confirm": extract_panel,
 			&"combat_flee_confirm": extract_panel,
@@ -1932,8 +1935,9 @@ func _confirm_extract_from_ui() -> void:
 	if not has_opening_authorization and not _require_world_interaction(&"exit"):
 		return
 	_clear_exit_interaction_authorization()
-	_pop_runtime_modal(&"extract_confirm")
-	_dispatch_command(&"confirm_extract", {}, true, false)
+	var result := _dispatch_command(&"confirm_extract", {}, true, false)
+	if result.get("ok", false) and _runtime_modal_is_top(&"extract_confirm"):
+		_pop_runtime_modal(&"extract_confirm")
 
 
 func _cancel_extract_from_ui() -> void:
@@ -2275,15 +2279,18 @@ func _run_room_label(room_type: StringName) -> String:
 
 
 func _is_runtime_modal_open() -> bool:
+	# Registered roots are owned by the modal stack (including covered entries).
+	# Compatibility/debug surfaces may only block while actually visible: a
+	# child of a hidden EventModalRoot must never become a second input lock.
 	return (
 		(modal_controller != null and modal_controller.blocks_gameplay_input())
-		or (event_panel != null and event_panel.visible)
-		or (loot_panel != null and loot_panel.visible)
-		or (extract_panel != null and extract_panel.visible)
-		or (ground_loot_panel != null and ground_loot_panel.visible)
-		or (result_panel != null and result_panel.visible)
-		or (dev_diagnostics_panel != null and dev_diagnostics_panel.visible)
-		or (debug_panel != null and debug_panel.visible)
+		or (event_panel != null and event_panel.is_visible_in_tree())
+		or (loot_panel != null and loot_panel.is_visible_in_tree())
+		or (extract_panel != null and extract_panel.is_visible_in_tree())
+		or (ground_loot_panel != null and ground_loot_panel.is_visible_in_tree())
+		or (result_panel != null and result_panel.is_visible_in_tree())
+		or (dev_diagnostics_panel != null and dev_diagnostics_panel.is_visible_in_tree())
+		or (debug_panel != null and debug_panel.is_visible_in_tree())
 	)
 
 
@@ -2302,6 +2309,9 @@ func _gameplay_input_blocked() -> bool:
 
 
 func _sync_player_input_enabled() -> void:
+	if tutorial_popup_panel != null:
+		var covered := _is_runtime_modal_open() and not _runtime_modal_is_top(&"flag_entry_confirm")
+		tutorial_popup_panel.set_presentation_occluded(covered or (map_overlay_panel != null and map_overlay_panel.visible))
 	if player_controller != null:
 		player_controller.set_input_enabled(not _gameplay_input_blocked())
 
@@ -2331,11 +2341,7 @@ func _hide_runtime_popups() -> void:
 	extract_modal_mode = &"extract"
 	pending_combat_flee_direction = Vector2i.ZERO
 	_clear_exit_interaction_authorization()
-	if event_panel != null:
-		event_panel.visible = false
-	if z2_event_adapter != null:
-		z2_event_adapter.hide()
-		z2_event_adapter.dialogue.dismiss()
+	_cancel_event_modal(&"hide_runtime_popups")
 	if loot_panel != null:
 		loot_panel.call("hide_panel")
 	if extract_panel != null:
@@ -2534,7 +2540,10 @@ func _apply_full_view_models() -> void:
 	if run_surface == null and layout_profile_label != null:
 		layout_profile_label.text = "Layout: %s" % current_layout_profile_id
 	if tutorial_popup_panel != null:
-		tutorial_popup_panel.set_presentation_occluded(map_overlay_panel != null and map_overlay_panel.visible)
+		_sync_flag_entry_confirmation(snapshot)
+		var covered := _is_runtime_modal_open() and not _runtime_modal_is_top(&"flag_entry_confirm")
+		tutorial_popup_panel.set_presentation_occluded(covered or (map_overlay_panel != null and map_overlay_panel.visible))
+		tutorial_popup_panel.apply_training_state(snapshot, runtime_controller.is_tutorial_learning_required())
 		tutorial_popup_panel.apply_layout_profile(layout_profile)
 		tutorial_popup_panel.apply_popup(snapshot.get("tutorial_popup", {}))
 	if inventory_panel != null:
@@ -2865,7 +2874,37 @@ func _debug_teleport_to_room_type(room_type: StringName) -> void:
 	debug_panel_controller.teleport_to_room_type(room_type)
 
 
+func _sync_flag_entry_confirmation(snapshot: Dictionary) -> void:
+	var popup: Dictionary = snapshot.get("tutorial_popup", {})
+	var pending := bool(snapshot.get("run_active", false)) and str(popup.get("id", "")) == "flag_entry_confirm"
+	if pending and not _runtime_modal_is_top(&"flag_entry_confirm"):
+		_push_runtime_modal(&"flag_entry_confirm", tutorial_popup_panel,
+			tutorial_popup_panel.get_node_or_null("Panel/Content/CancelButton") as Control,
+			Callable(self, "_cancel_flag_entry_modal"))
+	elif not pending and _runtime_modal_is_top(&"flag_entry_confirm"):
+		_pop_runtime_modal(&"flag_entry_confirm")
+
+
+func _cancel_flag_entry_modal(_reason: StringName = &"cancel") -> void:
+	if run_context != null and str(run_context.tutorial_popup.get("id", "")) == "flag_entry_confirm":
+		_dispatch_command(&"cancel_flag_entry")
+	elif _runtime_modal_is_top(&"flag_entry_confirm"):
+		_pop_runtime_modal(&"flag_entry_confirm")
+
+
+func _on_tutorial_flag_learning_requested() -> void:
+	z2_ui_controller.request_tutorial_flag_learning()
+
+
+func _on_tutorial_guidance_dismissed(popup_id: StringName) -> void:
+	z2_ui_controller.dismiss_tutorial_guidance(popup_id)
+
+
 func _on_tutorial_popup_confirmed() -> void:
+	if run_context == null:
+		return
+	if str(run_context.tutorial_popup.get("id", "")) == "flag_entry_confirm" and (not _runtime_modal_is_top(&"flag_entry_confirm") or str(tutorial_popup_panel.popup.get("id", "")) != "flag_entry_confirm"):
+		return
 	var before := run_context.get_current_pos()
 	var result := _dispatch_command(&"confirm_tutorial_popup")
 	if result.get("ok", false) and run_context.get_current_pos() != before:

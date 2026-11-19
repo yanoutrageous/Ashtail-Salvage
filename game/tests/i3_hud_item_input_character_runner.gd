@@ -440,36 +440,92 @@ func _check_short_left_panel(surface: RunSurface, profile: Dictionary) -> void:
 	tutorial.apply_layout_profile(profile)
 	var context := RunContext.new()
 	context.mode = &"tutorial"
-	context.profile_fields = {"z2_progression_version": 1, "flag_unlocked": false}
+	context.run_active = true
+	context.phase = &"running"
+	context.profile_fields = {"ruleset_id": "z2", "z2_progression_version": 1, "flag_unlocked": false}
 	context.tutorial_triggers = {"0,0": &"spawn_intro"}
 	preload("res://scripts/core/run/tutorial_service.gd").trigger_for(context, Vector2i.ZERO)
 	var cost_popup := context.tutorial_popup.duplicate(true)
-	var clicks: Array[int] = [0, 0]
-	tutorial.confirmed.connect(func() -> void: clicks[0] += 1)
-	tutorial.cancelled.connect(func() -> void: clicks[1] += 1)
+	var training := {"run_id": "hud-short-teaching:%s" % scale, "position": Vector2i.ZERO, "mode": &"tutorial", "run_active": true, "phase": &"running", "profile_fields": context.profile_fields.duplicate(true), "tutorial_popup": cost_popup.duplicate(true)}
+	var teaching_events: Array[Dictionary] = []
+	var on_confirm := func() -> void: teaching_events.append({"signal": &"confirmed"})
+	var on_cancel := func() -> void: teaching_events.append({"signal": &"cancelled"})
+	var on_learn := func() -> void: teaching_events.append({"signal": &"learn_flag_requested"})
+	var on_dismiss := func(id: StringName) -> void: teaching_events.append({"signal": &"guidance_dismissed", "popup_id": id})
+	tutorial.confirmed.connect(on_confirm)
+	tutorial.cancelled.connect(on_cancel)
+	tutorial.learn_flag_requested.connect(on_learn)
+	tutorial.guidance_dismissed.connect(on_dismiss)
+	var external_focus := root.gui_get_focus_owner()
+	tutorial.apply_training_state(training)
 	tutorial.apply_popup(cost_popup)
 	await _frames(5)
 	var message := tutorial.get_node("Panel/Content/Message") as RichTextLabel
 	var confirm := tutorial.get_node("Panel/Content/ConfirmButton") as Button
+	var learn := tutorial.get_node_or_null("Panel/Content/LearnFlagButton") as Button
 	var content := tutorial.get_node("Panel/Content") as Control
-	_require(message.text == cost_popup.message and message.text.contains("花费100点"), "short tutorial panel changed the actual teaching cost copy")
+	_require(root.gui_get_focus_owner() == external_focus, "teaching presentation automatically stole external keyboard focus")
+	_require(not context.has_blocking_tutorial_popup() and context.can_accept_command() and tutorial.mouse_filter == Control.MOUSE_FILTER_IGNORE, "short teaching guidance blocked runtime commands")
+	_require(not bool(tutorial.layout_snapshot().get("guidance_expanded", true)) and message.text == str(cost_popup.message).get_slice("\n", 0) and str(tutorial.popup.get("message", "")) == str(cost_popup.message), "short tutorial did not retain its full source behind the collapsed summary")
 	_require(message.get_theme_font_size("normal_font_size") >= roundi(13.0 * scale), "short tutorial panel reduced its body font")
+	_require(confirm.text == "查看教学说明" and confirm.focus_mode == Control.FOCUS_NONE, "teaching details still look or behave like a business confirmation")
+	_require(learn != null and learn.is_visible_in_tree() and not learn.disabled and learn.focus_mode == Control.FOCUS_ALL and learn.text == "100点 · 学习插旗" and learn.tooltip_text.contains("花费100点"), "independent teaching action lost its exact cost or manual keyboard access")
+	await _click_native(confirm)
+	_require(bool(tutorial.layout_snapshot().get("guidance_expanded", false)) and message.text == str(cost_popup.message) and message.text.contains("100点 · 学习插旗") and message.text.contains("收起说明不会扣点"), "expanded short tutorial changed or discarded the complete teaching cost explanation")
+	_require(teaching_events.is_empty(), "expanding teaching guidance emitted a business or dismissal signal: %s" % str(teaching_events))
 	await _wheel_bag(message)
 	var message_bar := message.get_v_scroll_bar()
-	_require(message_bar.value >= message_bar.max_value - message_bar.page - 1.0, "native wheel cannot reach the teaching cost final line")
-	_require(content.get_global_rect().grow(1.0).encloses(confirm.get_global_rect()) and confirm.get_minimum_size().y <= confirm.size.y + 1.0, "teaching action does not fit its native minimum height or safe rect")
-	_require(confirm.text.contains("100点 · 学习插旗") and confirm.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "teaching action lost its full cost text")
+	_require(message_bar.value >= message_bar.max_value - message_bar.page - 1.0 and message.get_content_height() - message_bar.value <= message.size.y + 1.0, "native wheel cannot reach the teaching cost final line")
+	for action: Button in [confirm, learn]:
+		if action == null:
+			continue
+		_require(action.is_visible_in_tree() and content.get_global_rect().grow(1.0).encloses(action.get_global_rect()) and action.get_minimum_size().y <= action.size.y + 1.0 and action.get_minimum_size().x <= action.size.x + 1.0, "teaching action does not fit its native minimum size or safe rect: %s" % action.name)
+		_require(action.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and action.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and action.get_theme_font_size("font_size") >= roundi(13.0 * scale), "teaching action clipped text or reduced its font: %s" % action.name)
+		_require(not action.get_global_rect().intersects(message.get_global_rect()), "teaching action overlaps the complete explanation: %s" % action.name)
+	_require(learn == null or not confirm.get_global_rect().intersects(learn.get_global_rect()), "details and paid learning actions overlap")
 	await _click_native(confirm)
-	_require(clicks == [1, 0], "native teaching confirm click did not emit exactly one action")
-	var entry_popup := cost_popup.duplicate(true)
-	entry_popup.merge({"id": &"flag_entry_confirm", "confirm_text": "确认进入"}, true)
+	var expected_events: Array[Dictionary] = [{"signal": &"guidance_dismissed", "popup_id": &"spawn_intro"}]
+	_require(not bool(tutorial.layout_snapshot().get("guidance_expanded", true)) and teaching_events == expected_events, "collapsing guidance did not emit only its dedicated exact dismissal: %s" % str(teaching_events))
+	if learn != null:
+		await _click_native(learn)
+	expected_events.append({"signal": &"learn_flag_requested"})
+	_require(teaching_events == expected_events and not bool(context.profile_fields.get("flag_unlocked", true)) and context.tutorial_popup == cost_popup, "native learning request crossed signal channels or mutated authority: %s" % str(teaching_events))
+
+	# Risk decisions retain real modality; they are not a renamed cost lesson.
+	var entry_popup := {"id": &"flag_entry_confirm", "title": "进入插旗房间？", "message": "这里已被你标记。继续进入会正常触发房间风险，旗帜仍会保留。", "blocking": true, "confirm_text": "确认进入", "confirm_action": &"ui_accept", "confirm_action_hint": cost_popup.get("confirm_action_hint", {})}
+	context.tutorial_popup = entry_popup.duplicate(true)
+	var risk_state := training.duplicate(true)
+	risk_state["tutorial_popup"] = entry_popup.duplicate(true)
+	tutorial.apply_training_state(risk_state)
 	tutorial.apply_popup(entry_popup)
 	await _frames(5)
 	var cancel := tutorial.get_node("Panel/Content/CancelButton") as Button
-	_require(cancel.visible and content.get_global_rect().grow(1.0).encloses(cancel.get_global_rect()) and cancel.get_minimum_size().y <= cancel.size.y + 1.0, "short confirmation panel lost its complete cancel action")
+	_require(context.has_blocking_tutorial_popup() and not context.can_accept_command() and tutorial.mouse_filter == Control.MOUSE_FILTER_STOP and bool(tutorial.layout_snapshot().get("blocking", false)), "short risk confirmation lost its genuine runtime/input modality")
+	_require(root.gui_get_focus_owner() == cancel and (learn == null or not learn.is_visible_in_tree()), "risk confirmation did not choose safe Cancel focus or exposed the learning action")
+	for action: Button in [confirm, cancel]:
+		_require(action.visible and content.get_global_rect().grow(1.0).encloses(action.get_global_rect()) and action.get_minimum_size().y <= action.size.y + 1.0 and action.get_minimum_size().x <= action.size.x + 1.0, "short confirmation panel lost a complete native action")
+		_require(action.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and action.get_theme_font_size("font_size") >= roundi(13.0 * scale) and not action.get_global_rect().intersects(message.get_global_rect()), "risk confirmation clipped/reduced an action or overlaps its message")
+	_require(not confirm.get_global_rect().intersects(cancel.get_global_rect()), "short risk confirmation actions overlap")
 	await _click_native(cancel)
+	expected_events.append({"signal": &"cancelled"})
+	_require(teaching_events == expected_events, "native risk cancel leaked or duplicated another signal: %s" % str(teaching_events))
 	await _click_native(confirm)
-	_require(clicks == [2, 1], "short confirmation panel blocked or duplicated native cancel/confirm")
+	expected_events.append({"signal": &"confirmed"})
+	_require(teaching_events == expected_events, "native risk confirm leaked or duplicated another signal: %s" % str(teaching_events))
+	root.gui_release_focus()
+	await _press_native_key(KEY_ENTER)
+	expected_events.append({"signal": &"cancelled"})
+	_require(teaching_events == expected_events, "unfocused risk accept did not take exactly the safe cancellation path: %s" % str(teaching_events))
+	confirm.grab_focus()
+	await process_frame
+	_require(root.gui_get_focus_owner() == confirm, "explicit risk confirm keyboard focus is unreachable")
+	await _press_native_key(KEY_ENTER)
+	expected_events.append({"signal": &"confirmed"})
+	_require(teaching_events == expected_events, "manually focused risk confirm Enter did not use exactly the GUI confirmation path: %s" % str(teaching_events))
+	tutorial.confirmed.disconnect(on_confirm)
+	tutorial.cancelled.disconnect(on_cancel)
+	tutorial.learn_flag_requested.disconnect(on_learn)
+	tutorial.guidance_dismissed.disconnect(on_dismiss)
 	tutorial.queue_free()
 	await _frames(3)
 
@@ -481,6 +537,17 @@ func _click_native(control: Control) -> void:
 		event.position = control.get_global_rect().get_center()
 		event.global_position = event.position
 		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		root.push_input(event, true)
+		await process_frame
+	await _frames(2)
+
+
+func _press_native_key(keycode: Key) -> void:
+	for pressed in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = keycode
+		event.physical_keycode = keycode
 		event.pressed = pressed
 		root.push_input(event, true)
 		await process_frame
@@ -650,7 +717,7 @@ func _require(condition: bool, message: String) -> void:
 
 func _finish() -> void:
 	if failures.is_empty():
-		print("I3_HUD_CLASSIFICATION columns=2 cases=empty,1+0,0+1,2+2,3+1,can_consume_changed catalog=8+8 scales=100,125,150 text=native_full wheel=last_row short_left=full_copy,cost,confirm,cancel")
+		print("I3_HUD_CLASSIFICATION columns=2 cases=empty,1+0,0+1,2+2,3+1,can_consume_changed catalog=8+8 scales=100,125,150 text=native_full wheel=last_row short_left=summary+expanded_full_copy,explicit_cost_learning,risk_confirm_cancel,safe_keyboard_focus")
 		print("%s hud=primary_action,mine_risk actions=7,context_order items=shared_descriptor,scroll replacement=two_line,no_clip,authoritative_level input=single_path,gamepad_propagated character=appearance,animation_set reduced_motion=preserved" % PASS_MARKER)
 		quit(0)
 		return

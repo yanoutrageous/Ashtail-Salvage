@@ -94,7 +94,7 @@ func _exercise_main(main: Node) -> void:
 	_require(root.gui_get_focus_owner() == base_focus, "pause close did not restore base focus")
 	_require(input_shield == null or not input_shield.visible, "runtime input shield remained after stack close")
 
-	await _assert_tutorial_map_composition(run_scene, bus, stack)
+	await _assert_tutorial_map_composition(run_scene, bus, stack, Vector2i(exploration_fixture.get("return_pos", Vector2i(-1, -1))))
 
 	var sequence_before_map := int(bus.get("command_sequence"))
 	var map_count_before := _map_open_count(run_scene)
@@ -319,7 +319,7 @@ func _exercise_main(main: Node) -> void:
 	_assert_run_hud_policy(run_scene, &"")
 
 
-func _assert_tutorial_map_composition(run_scene: Node, bus: Variant, stack: Variant) -> void:
+func _assert_tutorial_map_composition(run_scene: Node, bus: Variant, stack: Variant, explored_neighbor: Vector2i) -> void:
 	var context: Variant = run_scene.get("run_context")
 	var tutorial_panel := run_scene.get("tutorial_popup_panel") as Control
 	var map_panel := run_scene.get("map_overlay_panel") as Control
@@ -359,48 +359,96 @@ func _assert_tutorial_map_composition(run_scene: Node, bus: Variant, stack: Vari
 	_require(int(stack.call("depth")) == 0 and stack.call("top_modal_id") == &"", "tutorial-map Esc left a stale modal entry")
 	_require(tutorial_panel.is_visible_in_tree(), "closing the map did not restore the non-blocking tutorial presentation")
 	_require(_tutorial_popup_id(context) == &"map_rule", "closing the map did not restore the same tutorial identity")
-	var nonblocking_close := tutorial_panel.find_child("ConfirmButton", true, false) as Button
-	_require(
-		nonblocking_close != null
-		and nonblocking_close.visible
-		and nonblocking_close.text == "点击关闭"
-		and nonblocking_close.focus_mode == Control.FOCUS_NONE,
-		"non-blocking tutorial did not expose a pointer-only close affordance"
-	)
-	var sequence_before_tutorial_close := int(bus.get("command_sequence"))
-	if nonblocking_close != null:
-		nonblocking_close.pressed.emit()
+	var details := tutorial_panel.find_child("ConfirmButton", true, false) as Button
+	_require(details != null and details.visible and details.text == "查看教学说明" and details.focus_mode == Control.FOCUS_NONE, "non-blocking tutorial did not expose pointer-only details")
+	# Append-only mutable observations retain exact payload/order across callbacks.
+	var signal_events: Array[Dictionary] = []
+	var on_confirm := func() -> void: signal_events.append({"signal": &"confirmed"})
+	var on_cancel := func() -> void: signal_events.append({"signal": &"cancelled"})
+	var on_dismiss := func(id: StringName) -> void: signal_events.append({"signal": &"guidance_dismissed", "popup_id": id})
+	tutorial_panel.connect("confirmed", on_confirm)
+	tutorial_panel.connect("cancelled", on_cancel)
+	tutorial_panel.connect("guidance_dismissed", on_dismiss)
+	var sequence_before_details := int(bus.get("command_sequence"))
+	var domain_before_details := _run_domain_state_signature(run_scene)
+	if details != null:
+		await _click_control(details)
 	await _frames(4)
-	_require(
-		int(bus.get("command_sequence")) == sequence_before_tutorial_close + 1,
-		"non-blocking tutorial close did not dispatch exactly once"
-	)
-	_require(
-		_tutorial_popup_id(context) == &"" and not tutorial_panel.is_visible_in_tree(),
-		"non-blocking tutorial close did not clear domain and presentation state"
-	)
+	_require(bool(tutorial_panel.call("layout_snapshot").get("guidance_expanded", false)) and details != null and details.text == "收起教学说明", "first details click did not expand the lesson")
+	_require(int(bus.get("command_sequence")) == sequence_before_details and _run_domain_state_signature(run_scene) == domain_before_details and _tutorial_popup_id(context) == &"map_rule", "expanding guidance dispatched or changed domain state")
+	_require(signal_events.is_empty(), "expanding guidance emitted a business confirmation or dismissal: %s" % str(signal_events))
+	if details != null:
+		await _click_control(details)
+	await _frames(4)
+	_require(int(bus.get("command_sequence")) == sequence_before_details + 1, "collapsing guidance did not record exactly one dismissal")
+	_require(signal_events == [{"signal": &"guidance_dismissed", "popup_id": &"map_rule"}], "guidance collapse did not use only its dedicated dismissal signal: %s" % str(signal_events))
+	_require(_tutorial_popup_id(context) == &"" and not tutorial_panel.is_visible_in_tree(), "guidance collapse did not clear the standard-run lesson")
 
-	context.set("tutorial_popup", _tutorial_popup_fixture(&"spawn_intro", true))
-	run_scene.call("_refresh_view_models")
-	await _frames(4)
-	_require(context.call("has_blocking_tutorial_popup"), "blocking tutorial fixture did not retain domain modality")
-	_require(tutorial_panel.is_visible_in_tree(), "blocking tutorial presentation is not visible")
-	_require(_tutorial_tree_can_receive_pointer(tutorial_panel), "blocking tutorial presentation is not pointer-modal")
-	var confirm_button := tutorial_panel.find_child("ConfirmButton", true, false) as Button
-	_require(confirm_button != null and root.gui_get_focus_owner() == confirm_button, "blocking tutorial did not own focus")
-	var sequence_before_blocked_map := int(bus.get("command_sequence"))
-	var map_count_before_blocked_map := _map_open_count(run_scene)
-	_parse_key(KEY_M)
-	await _frames(4)
-	_require(not map_panel.is_visible_in_tree(), "blocking tutorial allowed the map shortcut to open")
-	_require(int(stack.call("depth")) == 0 and stack.call("top_modal_id") == &"", "blocking tutorial allowed a runtime modal above it")
-	_require(int(bus.get("command_sequence")) == sequence_before_blocked_map, "blocking tutorial map shortcut dispatched a command")
-	_require(_map_open_count(run_scene) == map_count_before_blocked_map, "blocking tutorial map shortcut incremented map_open_count")
-	_require(tutorial_panel.is_visible_in_tree() and context.call("has_blocking_tutorial_popup"), "blocked map shortcut dismissed the blocking tutorial")
-	_require(_send_escape(run_scene), "blocking tutorial Esc was not consumed")
-	await _frames(2)
-	_require(tutorial_panel.is_visible_in_tree() and context.call("has_blocking_tutorial_popup"), "Esc dismissed the blocking tutorial")
+	var origin := Vector2i(context.call("get_current_pos"))
+	_require(bool(context.call("is_inside", explored_neighbor)) and absi(explored_neighbor.x - origin.x) + absi(explored_neighbor.y - origin.y) == 1, "guidance/risk fixture lacks the lawfully explored adjacent room")
+	if bool(context.call("is_inside", explored_neighbor)) and absi(explored_neighbor.x - origin.x) + absi(explored_neighbor.y - origin.y) == 1:
+		for popup_id: StringName in [&"spawn_intro", &"exit_goal"]:
+			# Deliberately retain the old raw bit: known pure lessons still cannot
+			# acquire modality after restoring an original A2 checkpoint.
+			context.set("tutorial_popup", _tutorial_popup_fixture(popup_id, true))
+			run_scene.call("_refresh_view_models")
+			await _frames(4)
+			_require(not bool(context.call("has_blocking_tutorial_popup")) and not bool(tutorial_panel.call("layout_snapshot").get("blocking", true)), "pure lesson retained legacy modality:%s" % popup_id)
+			var owner := root.gui_get_focus_owner()
+			_require(owner == null or (owner != tutorial_panel and not tutorial_panel.is_ancestor_of(owner)), "pure lesson stole keyboard focus:%s" % popup_id)
+			var sequence_before_pause := int(bus.get("command_sequence"))
+			_require(_send_escape(run_scene), "pure lesson Esc did not open pause:%s" % popup_id)
+			await _frames(3)
+			_require(stack.call("top_modal_id") == &"pause" and int(stack.call("depth")) == 1 and _tutorial_popup_id(context) == popup_id, "pure lesson blocked pause or was consumed:%s" % popup_id)
+			_require(int(bus.get("command_sequence")) == sequence_before_pause, "pausing above guidance dispatched a domain command:%s" % popup_id)
+			_require(_send_escape(run_scene), "pure lesson pause did not resume:%s" % popup_id)
+			await _frames(3)
+			_require(int(stack.call("depth")) == 0 and tutorial_panel.is_visible_in_tree() and _tutorial_popup_id(context) == popup_id, "pause close did not restore pending guidance:%s" % popup_id)
+			var leave: Dictionary = bus.dispatch(&"move_by", {"delta": explored_neighbor - origin, "source": "i2_guidance_movement_contract"})
+			_require(bool(leave.get("ok", false)) and Vector2i(context.call("get_current_pos")) == explored_neighbor, "pending pure guidance blocked real room movement:%s" % popup_id)
+			if Vector2i(context.call("get_current_pos")) == explored_neighbor:
+				var back: Dictionary = bus.dispatch(&"move_by", {"delta": origin - explored_neighbor, "source": "i2_guidance_movement_contract"})
+				_require(bool(back.get("ok", false)) and Vector2i(context.call("get_current_pos")) == origin, "guidance movement fixture did not return:%s" % popup_id)
+			await _frames(3)
 
+		# Open a real decision through production commands, not a forged modal.
+		var flagged: Dictionary = bus.dispatch(&"toggle_flag_cell", {"pos": explored_neighbor})
+		_require(bool(flagged.get("ok", false)) and context.get("intel_map").is_flagged(explored_neighbor), "risk fixture could not lawfully place its flag")
+		for cancel_with_escape in [true, false]:
+			var requested: Dictionary = bus.dispatch(&"move_by", {"delta": explored_neighbor - origin})
+			_require(bool(requested.get("ok", false)) and StringName(requested.get("status", &"")) == &"flag_confirmation_required", "flagged movement did not request the actual risk decision")
+			run_scene.call("_refresh_view_models")
+			await _frames(4)
+			_require(_tutorial_popup_id(context) == &"flag_entry_confirm" and bool(context.call("has_blocking_tutorial_popup")) and Vector2i(context.call("get_current_pos")) == origin, "flag decision moved early or lost domain modality")
+			_require(tutorial_panel.is_visible_in_tree() and stack.call("top_modal_id") == &"flag_entry_confirm" and int(stack.call("depth")) == 1, "flag risk decision did not own the modal stack")
+			_assert_focus_inside(tutorial_panel, "flag risk decision")
+			_assert_shield_directly_below(run_scene.get("runtime_modal_input_shield") as Control, tutorial_panel, "flag risk decision")
+			var sequence_before_blocked_map := int(bus.get("command_sequence"))
+			var map_count_before_blocked_map := _map_open_count(run_scene)
+			_parse_key(KEY_M)
+			await _frames(3)
+			_require(not map_panel.is_visible_in_tree() and stack.call("top_modal_id") == &"flag_entry_confirm" and int(stack.call("depth")) == 1, "flag risk decision allowed a lower-layer map")
+			_require(int(bus.get("command_sequence")) == sequence_before_blocked_map and _map_open_count(run_scene) == map_count_before_blocked_map, "blocked map shortcut dispatched below the flag decision")
+			var blocked_move: Dictionary = bus.dispatch(&"move_by", {"delta": explored_neighbor - origin})
+			_require(not bool(blocked_move.get("ok", true)) and Vector2i(context.call("get_current_pos")) == origin and _tutorial_popup_id(context) == &"flag_entry_confirm", "pending flag risk allowed another movement")
+			var sequence_before_cancel := int(bus.get("command_sequence"))
+			if cancel_with_escape:
+				_require(_send_escape(run_scene), "flag risk Esc was not consumed")
+			else:
+				var cancel := tutorial_panel.find_child("CancelButton", true, false) as Button
+				_require(cancel != null and cancel.is_visible_in_tree() and not cancel.disabled, "flag risk cancel button is unreachable")
+				if cancel != null:
+					await _click_control(cancel)
+			await _frames(4)
+			_require(_tutorial_popup_id(context) == &"" and not bool(context.call("has_blocking_tutorial_popup")) and int(stack.call("depth")) == 0, "cancelling flag risk did not release its modal")
+			_require(int(bus.get("command_sequence")) == sequence_before_cancel + 1 and Vector2i(context.call("get_current_pos")) == origin and context.get("intel_map").is_flagged(explored_neighbor), "flag cancellation moved, removed its flag or dispatched more than once")
+		var unflagged: Dictionary = bus.dispatch(&"toggle_flag_cell", {"pos": explored_neighbor})
+		_require(bool(unflagged.get("ok", false)) and not context.get("intel_map").is_flagged(explored_neighbor), "risk fixture did not restore the original flag state")
+		_require(signal_events == [{"signal": &"guidance_dismissed", "popup_id": &"map_rule"}, {"signal": &"cancelled"}], "risk cancellation crossed business and guidance signal channels: %s" % str(signal_events))
+
+	tutorial_panel.disconnect("confirmed", on_confirm)
+	tutorial_panel.disconnect("cancelled", on_cancel)
+	tutorial_panel.disconnect("guidance_dismissed", on_dismiss)
 	context.set("tutorial_popup", {})
 	run_scene.call("_refresh_view_models")
 	await _frames(3)
@@ -1171,7 +1219,7 @@ func _require(condition: bool, message: String) -> void:
 
 func _finish() -> void:
 	if failures.is_empty():
-		print("%s stack=top_only nested=map_over_inventory tutorial_map=hide_refresh_restore blocking_tutorial=modal shield=immediate_top_sibling settings=shared map_open_commands=4 map_actions=toggle_flag:1,fast_return:1 lower_layers=blocked real_input=M,Q,Esc map_focus=map_pos inventory_actions=use:1,drop:1 inventory_focus=preferred abandon_commands=1 failure_focus=use,drop,flag extract_items=actual,scroll,rarity,collectible_level" % PASS_MARKER)
+		print("%s stack=top_only nested=map_over_inventory tutorial_map=hide_refresh_restore guidance=expand_collapse,pause,movement risk_confirmation=modal,Esc,button_cancel shield=immediate_top_sibling settings=shared map_open_commands=4 map_actions=toggle_flag:1,fast_return:1 lower_layers=blocked real_input=M,Q,Esc map_focus=map_pos inventory_actions=use:1,drop:1 inventory_focus=preferred abandon_commands=1 failure_focus=use,drop,flag extract_items=actual,scroll,rarity,collectible_level" % PASS_MARKER)
 		quit(0)
 		return
 	for failure in failures:

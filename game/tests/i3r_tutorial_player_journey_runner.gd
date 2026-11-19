@@ -170,21 +170,45 @@ func _play_tutorial_to_result(cycle: int) -> bool:
 	_require(str((context.get("run_start_config") as Dictionary).get("map_config_id", "")) == TutorialMapCatalogScript.MAP_ID, "production_tutorial_map_id_missing:%d" % cycle)
 	_require(int(context.get("seed_value")) == TutorialMapCatalogScript.FIXED_SEED, "production_tutorial_seed_drift:%d" % cycle)
 	_require(Vector2i(_status().get("position", Vector2i(-1, -1))) == Vector2i(0, 0), "tutorial_spawn_drift:%d" % cycle)
-	_require(await _wait_popup(&"spawn_intro", true, 2.0), "spawn_popup_missing:%d" % cycle)
-	var confirm_button := (run_scene.get("tutorial_popup_panel") as Control).find_child("ConfirmButton", true, false) as Button
-	_require(confirm_button != null and root.gui_get_focus_owner() == confirm_button, "spawn_popup_focus_missing:%d" % cycle)
-	var blocked_position := Vector2i(_status().get("position", Vector2i(-1, -1)))
-	var blocked_local := _player_local_pos()
-	await _hold_key(KEY_W, 0.25)
-	_require(Vector2i(_status().get("position", Vector2i(-1, -1))) == blocked_position, "blocking_popup_allowed_room_move:%d" % cycle)
-	_require(_player_local_pos().distance_to(blocked_local) <= 0.001, "blocking_popup_allowed_local_move:%d" % cycle)
-	await _tap_key(KEY_ENTER)
-	_require(await _wait_until(func() -> bool: return not _blocking_popup_active(), 2.0), "spawn_popup_keyboard_confirm_failed:%d" % cycle)
-	_record("spawn_confirmed_%d" % cycle)
+	_require(await _wait_popup(&"spawn_intro", false, 2.0), "spawn_guidance_missing:%d" % cycle)
+	var tutorial_panel := run_scene.get("tutorial_popup_panel") as Control
+	var focus_owner := root.gui_get_focus_owner()
+	_require(tutorial_panel != null and (focus_owner == null or (focus_owner != tutorial_panel and not tutorial_panel.is_ancestor_of(focus_owner))), "spawn_guidance_stole_keyboard_focus:%d" % cycle)
+	var before_guidance_meta: Dictionary = adapter.data.duplicate(true)
+	var before_guidance_profile: Dictionary = context.profile_fields.duplicate(true)
+	await _tap_key(KEY_ESCAPE)
+	var pause_panel := run_scene.get("pause_panel") as Control
+	_require(await _wait_until(func() -> bool: return pause_panel != null and pause_panel.visible, 2.0), "spawn_guidance_prevented_pause:%d" % cycle)
+	_require(_popup_id() == &"spawn_intro", "pausing_consumed_spawn_guidance:%d" % cycle)
+	await _tap_key(KEY_ESCAPE)
+	_require(await _wait_until(func() -> bool: return pause_panel != null and not pause_panel.visible, 2.0), "spawn_guidance_pause_did_not_resume:%d" % cycle)
+	var before_local := _player_local_pos()
+	await _hold_key(KEY_S, 0.15)
+	_require(_player_local_pos().distance_to(before_local) > 0.001, "spawn_guidance_blocked_local_movement:%d" % cycle)
+	_require(_popup_id() == &"spawn_intro" and not _blocking_popup_active(), "local_movement_consumed_or_blocked_spawn_guidance:%d" % cycle)
+	if not await _read_guidance(&"spawn_intro", cycle):
+		return false
+	_require(context.profile_fields == before_guidance_profile and adapter.data == before_guidance_meta, "reading_spawn_guidance_changed_capability_or_meta:%d" % cycle)
+	_record("spawn_guidance_read_%d" % cycle)
 
+	# Leave the spawn room before learning: dismissing a lesson is not a purchase,
+	# and the explicit paid action must remain reachable in the following room.
 	if not await _transition_room(Vector2i.DOWN, Vector2i(0, 1), &"Normal"):
 		return false
 	_require(_popup_id() == &"number_rule", "number_rule_not_reached:%d" % cycle)
+	var learn_button := tutorial_panel.find_child("LearnFlagButton", true, false) as Button
+	if cycle == 0:
+		_require(not bool(context.profile_fields.get("flag_unlocked", false)) and int(adapter.data.get("talent_points", -1)) == 100, "exploring_or_dismissing_bought_teaching_flag")
+		_require(learn_button != null and learn_button.is_visible_in_tree() and not learn_button.disabled and learn_button.text == "100点 · 学习插旗", "learning_action_lost_after_leaving_spawn")
+		if learn_button == null or not learn_button.is_visible_in_tree() or learn_button.disabled:
+			return false
+		await _click_control(learn_button)
+		_require(await _wait_until(func() -> bool: return bool(context.profile_fields.get("flag_unlocked", false)) and adapter.data.get("talent_flags", []).has("z2_talent_01"), 2.0), "explicit_learning_did_not_grant_durable_entitlement")
+		_require(int(adapter.data.get("talent_points", -1)) == 0 and int(adapter.data.get("talent_spent", -1)) == 100, "explicit_learning_did_not_charge_exactly_100")
+		_require(not learn_button.is_visible_in_tree(), "completed_learning_action_remained_visible")
+	else:
+		_require(bool(context.profile_fields.get("flag_unlocked", false)) and (learn_button == null or not learn_button.is_visible_in_tree()), "replay_requested_a_second_teaching_purchase")
+		_require(adapter.data == before_guidance_meta, "replay_guidance_or_exploration_changed_meta")
 	if not await _transition_room(Vector2i.DOWN, Vector2i(0, 2), &"Mine"):
 		return false
 	_require(_popup_id() == &"mine_rule", "mine_rule_not_reached:%d" % cycle)
@@ -227,15 +251,16 @@ func _play_tutorial_to_result(cycle: int) -> bool:
 	_require(_popup_id() == &"route_rule", "route_rule_not_reached:%d" % cycle)
 	if not await _transition_room(Vector2i.RIGHT, Vector2i(4, 4), &"Exit"):
 		return false
-	_require(await _wait_popup(&"exit_goal", true, 2.0), "exit_goal_popup_missing:%d" % cycle)
-	await _tap_key(KEY_ENTER)
-	_require(await _wait_until(func() -> bool: return not _blocking_popup_active(), 2.0), "exit_goal_keyboard_confirm_failed:%d" % cycle)
+	_require(await _wait_popup(&"exit_goal", false, 2.0), "exit_goal_guidance_missing:%d" % cycle)
 	var exit_target := _first_interactable_position(&"exit")
 	if exit_target.x < 0.0:
 		exit_target = Vector2(0.68, 0.50)
 	await _move_axis(&"y", exit_target.y)
 	await _move_axis(&"x", exit_target.x)
 	_require(await _wait_until(func() -> bool: return _context_kind() == &"exit", 2.0), "tutorial_exit_context_missing:%d" % cycle)
+	_require(_popup_id() == &"exit_goal" and not _blocking_popup_active(), "walking_to_exit_consumed_or_blocked_guidance:%d" % cycle)
+	if not await _read_guidance(&"exit_goal", cycle):
+		return false
 	await _tap_key(KEY_T)
 	_require(await _wait_until(func() -> bool: return extract_panel != null and extract_panel.visible, 2.0), "tutorial_extract_preview_missing:%d" % cycle)
 	extract_confirm = run_scene.get("extract_confirm_button") as Button
@@ -429,6 +454,38 @@ func _click_control(control: Control) -> void:
 		Input.parse_input_event(event)
 		await process_frame
 	await _frames(3)
+
+
+func _read_guidance(popup_id: StringName, cycle: int) -> bool:
+	var panel := run_scene.get("tutorial_popup_panel") as Control
+	var details := panel.find_child("ConfirmButton", true, false) as Button if panel != null else null
+	_require(panel != null and details != null and details.is_visible_in_tree(), "guidance_details_unreachable:%s:%d" % [popup_id, cycle])
+	if panel == null or details == null or not details.is_visible_in_tree():
+		return false
+	var context = run_scene.get("run_context")
+	var source := str(context.tutorial_popup.get("message", ""))
+	var bus = run_scene.get("command_bus")
+	var sequence_before := int(bus.command_sequence)
+	var signals_seen := {"confirmed": 0, "dismissed": []}
+	var on_confirm := func() -> void: signals_seen.confirmed += 1
+	var on_dismiss := func(id: StringName) -> void: signals_seen.dismissed.append(id)
+	panel.connect("confirmed", on_confirm)
+	panel.connect("guidance_dismissed", on_dismiss)
+	_require(not bool(panel.call("layout_snapshot").get("guidance_expanded", true)) and details.text == "查看教学说明", "guidance_not_initially_collapsed:%s:%d" % [popup_id, cycle])
+	# Enter is not an acknowledgement of a pointer-only, non-modal lesson.
+	await _tap_key(KEY_ENTER)
+	_require(_popup_id() == popup_id and int(bus.command_sequence) == sequence_before and not bool(panel.call("layout_snapshot").get("guidance_expanded", true)), "enter_consumed_guidance:%s:%d" % [popup_id, cycle])
+	await _click_control(details)
+	var message := panel.find_child("Message", true, false) as RichTextLabel
+	_require(bool(panel.call("layout_snapshot").get("guidance_expanded", false)) and details.text == "收起教学说明" and message != null and message.text == source, "guidance_first_click_did_not_expand_full_text:%s:%d" % [popup_id, cycle])
+	_require(_popup_id() == popup_id and int(bus.command_sequence) == sequence_before and signals_seen.confirmed == 0 and signals_seen.dismissed.is_empty(), "guidance_expand_dispatched_business_action:%s:%d" % [popup_id, cycle])
+	await _click_control(details)
+	var dismissed := await _wait_until(func() -> bool: return _popup_id() != popup_id, 2.0)
+	_require(dismissed and not bool(panel.call("layout_snapshot").get("guidance_expanded", true)), "guidance_second_click_did_not_collapse:%s:%d" % [popup_id, cycle])
+	_require(signals_seen.confirmed == 0 and signals_seen.dismissed == [popup_id] and int(bus.command_sequence) == sequence_before + 1, "guidance_collapse_did_not_use_exactly_one_dismiss_signal:%s:%d" % [popup_id, cycle])
+	panel.disconnect("confirmed", on_confirm)
+	panel.disconnect("guidance_dismissed", on_dismiss)
+	return dismissed
 
 
 func _wait_popup(expected_id: StringName, blocking: bool, timeout_seconds: float) -> bool:

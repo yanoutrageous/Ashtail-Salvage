@@ -131,6 +131,8 @@ func dispatch(command_name: StringName, payload: Dictionary = {}) -> Dictionary:
 			action_result = debug_restart_run()
 		&"confirm_tutorial_popup":
 			action_result = confirm_tutorial_popup()
+		&"learn_tutorial_flag":
+			action_result = learn_tutorial_flag()
 		&"cancel_flag_entry":
 			action_result = cancel_flag_entry()
 		&"open_map":
@@ -253,6 +255,10 @@ func move_by(delta: Vector2i, entry_position: Vector2 = Vector2(-1, -1), confirm
 	context.current_pos = target
 	RunInventory.record_move(context)
 	var room_entry: Dictionary = room_resolver.enter_room(context)
+	if not bool(room_entry.get("ok", false)):
+		# The outer action owns rollback of the pre-move coordinates and assets.
+		# Never sync or publish a successful transition from a rejected entry.
+		return room_entry
 	if runtime_controller != null and runtime_controller.has_method("sync_room_transition"):
 		runtime_controller.sync_room_transition(delta, entry_position)
 	_emit_state()
@@ -515,7 +521,9 @@ func teleport_to_explored(pos: Vector2i) -> Dictionary:
 	context.blocked_reason = ""
 	context.player_pos = pos
 	context.current_pos = pos
-	room_resolver.enter_room(context)
+	var room_entry: Dictionary = room_resolver.enter_room(context)
+	if not bool(room_entry.get("ok", false)):
+		return room_entry
 	context.last_message = "Teleported to explored room (%d,%d)." % [pos.x, pos.y]
 	_emit_state()
 	return {"ok": true, "status": &"teleported", "position": pos, "actor_id": DEFAULT_ACTOR_ID, "return_eligibility": eligibility}
@@ -603,7 +611,9 @@ func debug_teleport_to(pos: Vector2i, enter_room: bool = true) -> Dictionary:
 	context.last_message = "Debug teleport to %s (%s)." % [_format_pos(pos), String(debug_mode)]
 	context.record_event(RunEventLog.EVENT_ROOM_ENTERED, _active_command_id(), DEFAULT_ACTOR_ID, "debug_command", {"position": pos, "mode": debug_mode})
 	if enter_room:
-		room_resolver.enter_room(context)
+		var room_entry: Dictionary = room_resolver.enter_room(context)
+		if not bool(room_entry.get("ok", false)):
+			return room_entry
 	else:
 		context.intel_map.reveal_cell(pos, context.truth_map)
 		context.current_room_type = context.truth_map.get_room_type(pos)
@@ -697,11 +707,27 @@ func confirm_tutorial_popup() -> Dictionary:
 			return _blocked(&"stale_flag_confirmation", "stale_flag_confirmation")
 		context.tutorial_popup = {}
 		return move_by(target - context.get_current_pos(), pending.get("entry_position", Vector2(-1, -1)), true)
-	if context.mode == &"tutorial" and str(context.tutorial_popup.get("id", "")) == "spawn_intro" and context.profile_fields.get("z2_progression_version") == 1:
-		context.profile_fields["flag_unlocked"] = true
+	# Reading/dismissing guidance is presentation bookkeeping, never a purchase.
 	TutorialService.confirm_popup(context)
 	_emit_state()
 	return {"ok": true, "status": &"tutorial_popup_confirmed", "actor_id": DEFAULT_ACTOR_ID}
+
+
+func learn_tutorial_flag() -> Dictionary:
+	if context == null or context.mode != &"tutorial" or context.profile_fields.get("z2_progression_version") != 1 or not _can_accept_command() or context.phase != &"running":
+		return _blocked(&"teaching_action_unavailable", "teaching_action_unavailable")
+	if runtime_controller == null or runtime_controller.meta_progress_adapter == null:
+		return _blocked(&"not_ready", "meta_progress_adapter_missing")
+	# Only a verified, durable meta entitlement grants the runtime capability.
+	# The outer controller owns payment and checkpoint retry idempotence.
+	if not runtime_controller.meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01"):
+		return _blocked(&"teaching_purchase_required", "teaching_purchase_required")
+	context.profile_fields["flag_unlocked"] = true
+	if str(context.tutorial_popup.get("id", "")) == "spawn_intro":
+		TutorialService.confirm_popup(context)
+	context.last_message = "已学习插旗。可在区域图上标记风险房间；进入插旗房间前仍需确认。"
+	_emit_state()
+	return {"ok": true, "status": &"tutorial_flag_learned", "actor_id": DEFAULT_ACTOR_ID}
 
 
 func cancel_flag_entry() -> Dictionary:

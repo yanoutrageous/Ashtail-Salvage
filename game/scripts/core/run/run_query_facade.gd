@@ -235,7 +235,7 @@ func build_status_snapshot(context: RunContext) -> Dictionary:
 		"failed": context.failed,
 		"abandoned": context.abandoned,
 		"exit_id": context.exit_id,
-		"tutorial_popup": context.tutorial_popup.duplicate(true),
+		"tutorial_popup": TutorialService.normalized_popup(context.tutorial_popup),
 		"result_snapshot": context.result_snapshot.duplicate(true),
 		"failure_salvage": context.failure_salvage.duplicate(true),
 		"stats": context.run_stats.duplicate(true),

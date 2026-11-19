@@ -303,7 +303,28 @@ func _test_production_wiring() -> void:
 			var authority: Dictionary = authority_variant as Dictionary if authority_variant is Dictionary else {}
 			_require(bool(authority.get("views_bound", false)), "production modal controller views were not bound")
 			var registered_modal_ids: Array = authority.get("registered_modal_ids", [])
-			_require(registered_modal_ids.size() == 10, "production modal registry is incomplete")
+			# The authorized flag-entry risk decision is a real modal, not pure
+			# teaching guidance. Preserve all ten historical IDs and add only its
+			# dedicated ID; the frozen 2980-line RunScene budget remains unchanged.
+			var expected_modal_ids: Array[StringName] = [
+				&"abandon_confirm",
+				&"combat_flee_confirm",
+				&"event",
+				&"extract_confirm",
+				&"flag_entry_confirm",
+				&"inventory",
+				&"loot_result",
+				&"map",
+				&"pause",
+				&"result",
+				&"settings",
+			]
+			# StringName sort order is not a lexical contract. Eleven unique
+			# expected IDs plus exact cardinality enforce set equality, not order.
+			var exact_registry := registered_modal_ids.size() == 11
+			for expected_id: StringName in expected_modal_ids:
+				exact_registry = exact_registry and registered_modal_ids.has(expected_id)
+			_require(exact_registry, "production modal registry must retain the exact historical ten IDs plus flag_entry_confirm: %s" % str(registered_modal_ids))
 			_require(not bool(authority.get("mutates_game_state", true)), "modal controller claims game-state authority")
 			_require(not bool(authority.get("persists_state", true)), "modal controller claims persistence authority")
 		var shell_snapshot_variant: Variant = run_scene.call("_shell_snapshot")

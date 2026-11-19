@@ -7,6 +7,7 @@ const BAG_FAIL_MARKER := "I3_PRODUCTION_FULL_BAG_REPLACEMENT=FAIL"
 
 var replacement_completed := false
 var searched_room_count := 0
+var forced_priority_clearance_completed := false
 
 
 func _run() -> void:
@@ -51,6 +52,7 @@ func _run() -> void:
 		_require(await _transition_room(Vector2i.LEFT, Vector2i(1, 6), &"Normal"), "bag journey could not enter overflow normal (1,6)")
 		await _search_and_collect_normal("bag_10_overflow_normal")
 
+	_require(forced_priority_clearance_completed, "first Normal (4,6) search did not dynamically exercise priority-ground-loot WASD clearance and unchanged ledger")
 	_require(replacement_completed, "audited production route did not reach a full-bag replacement decision")
 	await _checkpoint("bag_11_complete", "full-bag replacement settled through player input")
 	await _finish_bag()
@@ -140,8 +142,25 @@ func _search_and_collect_normal(checkpoint_id: String) -> void:
 	searched_room_count += 1
 	var search_state: Dictionary = _status().get("search_state_data", {})
 	if bool(search_state.get("can_search", false)):
+		if not await _prepare_normal_search(checkpoint_id):
+			return
+		_record_input(checkpoint_id + ".search_before_e", _normal_search_observation())
+		var submitted: Array[String] = []
+		var on_command := func(command_name: StringName, _payload: Dictionary) -> void: submitted.append(str(command_name))
+		run_scene.command_bus.command_requested.connect(on_command)
 		await _tap_key(KEY_E, "%s.search" % checkpoint_id)
-		_require(await _wait_until(func() -> bool: return bool((_status().get("search_state_data", {}) as Dictionary).get("searched", false)), 3.0), "normal room did not search through real E")
+		var after_e := _normal_search_observation()
+		after_e["submitted_commands"] = submitted.duplicate()
+		_record_input(checkpoint_id + ".search_after_e", after_e)
+		# UI input is queued: immediate `accepted` is not an executed command.
+		# Observe real published commands through the original completion budget.
+		var searched := await _wait_until(func() -> bool: return bool((_status().get("search_state_data", {}) as Dictionary).get("searched", false)), 3.0)
+		run_scene.command_bus.command_requested.disconnect(on_command)
+		var after_search := _normal_search_observation()
+		after_search["submitted_commands"] = submitted.duplicate()
+		_record_input(checkpoint_id + ".search_after_wait", after_search)
+		_require(submitted.count("search_current_room") == 1 and not submitted.has("pickup_ground_item"), "normal-room real E selected another/duplicate command: " + JSON.stringify(after_search))
+		_require(searched, "normal room did not search through real E: " + JSON.stringify(after_search))
 		await _close_optional_runtime_modal("%s.reward_close" % checkpoint_id)
 	await _checkpoint(checkpoint_id, "normal search settled; floor overflow remains in world")
 	for _pass in range(8):
@@ -177,6 +196,106 @@ func _search_and_collect_normal(checkpoint_id: String) -> void:
 		await _tap_key(KEY_G, "%s.pickup_ground" % checkpoint_id)
 		if not await _wait_until(func() -> bool: return _inventory_has(before_id), 3.0):
 			break
+
+
+func _prepare_normal_search(checkpoint_id: String) -> bool:
+	# E correctly prioritizes in-range ground loot. The explicit six-item floor
+	# fixture can reach the west entrance, so walk to a clear same-room search
+	# position instead of picking up a fixture item and calling that "search".
+	# Deliberately reproduce the original priority-loot landing on the first
+	# Normal room; do not let harmless entrance jitter silently skip this branch.
+	var forced_priority_case := checkpoint_id == "bag_04_normal_a"
+	if forced_priority_case and not await _approach_priority_search_loot(checkpoint_id):
+		return false
+	_record_input(checkpoint_id + ".search_position_before", _normal_search_observation())
+	if not _nearby_search_pickups().is_empty():
+		var before_pos: Vector2i = _status().get("position", Vector2i(-1, -1))
+		var before_state: Dictionary = run_scene.runtime_controller.capture_authoritative_state()
+		if not await _move_axis(&"x", 0.24) or not await _move_axis(&"y", 0.32) or not await _move_axis(&"x", 0.50):
+			_require(false, "real WASD could not reach normal-room search clearance: " + JSON.stringify(_normal_search_observation()))
+			return false
+		var clear := await _wait_until(func() -> bool: return _nearby_search_pickups().is_empty() and _context_kind() != &"ground_loot", 2.0)
+		var after_state: Dictionary = run_scene.runtime_controller.capture_authoritative_state()
+		var same_room_and_ledger: bool = _status().get("position") == before_pos and after_state.context.components.asset_ledger == before_state.context.components.asset_ledger
+		var after_position := _normal_search_observation()
+		after_position["priority_branch_exercised"] = true
+		after_position["clear"] = clear
+		after_position["same_room_and_ledger"] = same_room_and_ledger
+		after_position["ledger_before_sha256"] = JSON.stringify(before_state.context.components.asset_ledger).sha256_text()
+		after_position["ledger_after_sha256"] = JSON.stringify(after_state.context.components.asset_ledger).sha256_text()
+		_record_input(checkpoint_id + ".search_position_after", after_position)
+		_require(clear and same_room_and_ledger, "normal search positioning left the room, changed ledger or retained priority loot: " + JSON.stringify(after_position))
+		if not clear or not same_room_and_ledger:
+			return false
+		if forced_priority_case:
+			forced_priority_clearance_completed = true
+	return true
+
+
+func _approach_priority_search_loot(checkpoint_id: String) -> bool:
+	var before_state: Dictionary = run_scene.runtime_controller.capture_authoritative_state()
+	var before_room: Vector2i = _status().get("position", Vector2i(-1, -1))
+	if before_room != Vector2i(4, 6) or StringName(_status().get("current_room", &"")) != &"Normal":
+		_require(false, "priority-loot regression must begin in the original Normal (4,6)")
+		return false
+	_record_input(checkpoint_id + ".search_priority_approach_before", _normal_search_observation())
+	# Return to the safe west aisle before the forward walk, even if a slower
+	# entry frame already landed near x=0.278. All positioning is genuine WASD.
+	if not await _move_axis(&"y", 0.50) or not await _move_axis(&"x", 0.20):
+		_require(false, "real WASD could not reach the west aisle before priority-loot approach: " + JSON.stringify(_normal_search_observation()))
+		return false
+	# One-way approach: the general axis helper may reverse after braking and
+	# stop within its 0.035 tolerance but outside strict pickup range. Do not
+	# rely only on the visible-focus grace margin to reproduce this regression.
+	if not await _hold_until(KEY_D, func() -> bool: return _player_local_pos().x >= 0.278, 1.9, checkpoint_id + ".approach_priority_pickup"):
+		_require(false, "real D could not reproduce the original priority-loot search landing: " + JSON.stringify(_normal_search_observation()))
+		return false
+	await _seconds(0.10)
+	var priority_present := await _wait_until(func() -> bool:
+		var observation := _normal_search_observation()
+		return not _nearby_search_pickups().is_empty() and str(observation.get("e_candidate_kind", "")) == "ground_loot" and bool(observation.get("e_candidate_strict_range", false)) and _context_kind() == &"ground_loot"
+	, 2.0)
+	var after_state: Dictionary = run_scene.runtime_controller.capture_authoritative_state()
+	var unchanged: bool = _status().get("position") == before_room and after_state.context.components.asset_ledger == before_state.context.components.asset_ledger
+	var observation := _normal_search_observation()
+	observation["target_local_position"] = {"x": 0.278, "y": 0.50}
+	observation["same_room_and_ledger"] = unchanged
+	observation["priority_present"] = priority_present
+	_record_input(checkpoint_id + ".search_priority_approach_after", observation)
+	_require(priority_present and unchanged, "original Normal-room landing did not expose genuine priority ground loot without modifying assets: " + JSON.stringify(observation))
+	return priority_present and unchanged
+
+
+func _nearby_search_pickups() -> Array[Dictionary]:
+	var nearby: Array[Dictionary] = []
+	var room: Dictionary = run_scene.room_runtime_view.build_read_only_snapshot()
+	for raw: Dictionary in room.get("interactables", []):
+		if StringName(raw.get("interaction_kind", &"")) != &"ground_loot" or not raw.get("enabled", false):
+			continue
+		var point: Vector2 = raw.get("local_pos", Vector2(-1, -1))
+		var distance := _player_local_pos().distance_to(point)
+		var radius := float(raw.get("interaction_radius", 0.0))
+		# Conservative clearance also excludes the visible-focus grace margin.
+		if distance <= radius + 0.03:
+			nearby.append({"id": str(raw.get("interaction_id", "")), "distance": distance, "radius": radius, "local_pos": {"x": point.x, "y": point.y}})
+	return nearby
+
+
+func _normal_search_observation() -> Dictionary:
+	var command: Dictionary = run_scene.last_command_result
+	var active: Dictionary = run_scene.run_context.active_command
+	# Read the same resolver E uses, including its visible-focus grace; this is
+	# observation only and does not build/execute a pickup or search command.
+	var candidate = run_scene.room_runtime_view._nearest_actionable_interactable(_player_local_pos(), true)
+	return {
+		"search": (_status().get("search_state_data", {}) as Dictionary).duplicate(true),
+		"nearby_pickups": _nearby_search_pickups(),
+		"e_candidate_kind": str(candidate.get("interaction_kind")) if candidate != null else "none",
+		"e_candidate_id": str(candidate.get("interaction_id")) if candidate != null else "",
+		"e_candidate_strict_range": bool(candidate.can_interact_from(_player_local_pos())) if candidate != null else false,
+		"last_command_result": {"ok": bool(command.get("ok", false)), "status": str(command.get("status", "")), "reason": str(command.get("reason", command.get("reason_code", "")))},
+		"active_command_name": str(active.get("command_name", "")),
+	}
 
 
 func _first_ground_descriptor() -> Dictionary:

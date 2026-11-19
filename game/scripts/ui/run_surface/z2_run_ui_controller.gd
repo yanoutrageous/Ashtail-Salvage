@@ -4,14 +4,34 @@ extends RefCounted
 const Z2EventAdapterScript = preload("res://scripts/ui/event/event_interaction_model.gd")
 const Z2NotificationScene = preload("res://scenes/components/z2_overlays/z2_notification_queue.tscn")
 const Z2OpeningRuntimeScript = preload("res://scripts/core/run/z2_opening_runtime.gd")
+const Z2EventRuntimeScript = preload("res://scripts/core/run/z2_event_runtime.gd")
 const EventChoicePanelScript = preload("res://scripts/ui/run_surface/z1_event_choice_panel.gd")
 const UILayerContractScript = preload("res://scripts/ui/shell/ui_layer_contract.gd")
 
 var _scene: Node
+var _closing_event_modal := false
 
 
 func _init(scene: Node) -> void:
 	_scene = scene
+
+
+func request_tutorial_flag_learning() -> void:
+	if _scene._is_runtime_modal_open() or _scene.run_context == null:
+		return
+	_scene._dispatch_command(&"learn_tutorial_flag")
+	# A rejected/meta-save-failed request does not publish speculative changes.
+	# Refresh only presentation; runtime still owns payment and retry semantics.
+	var snapshot: Dictionary = _scene.run_context.get_status_snapshot()
+	_scene.tutorial_popup_panel.apply_training_state(snapshot, _scene.runtime_controller.is_tutorial_learning_required())
+	_scene.tutorial_popup_panel.apply_popup(snapshot.get("tutorial_popup", {}))
+
+
+func dismiss_tutorial_guidance(popup_id: StringName) -> void:
+	if _scene.run_context == null or not TutorialService.is_guidance_popup(_scene.run_context.tutorial_popup):
+		return
+	if StringName(_scene.run_context.tutorial_popup.get("id", &"")) == popup_id:
+		_scene._dispatch_command(&"confirm_tutorial_popup")
 
 
 # Completed events retain their source revisit text. Only the nearby displayed
@@ -67,11 +87,18 @@ func _show_event_panel(event_state: Dictionary, presentation: Dictionary = {}) -
 	if not _scene._require_world_interaction(&"event"):
 		return
 	var display: Dictionary = _scene.runtime_controller.guarded_event_display(event_state)
+	# A failed Z2 projection has no ruleset_id. It is not permission to open a
+	# legacy decision surface in an ordinary Z2 run. Tutorials/diagnostic legacy
+	# contexts deliberately keep their existing fallback and close behavior.
+	if Z2EventRuntimeScript.applies_to(_scene.run_context) and (str(display.get("ruleset_id", "")) != "z2" or display.get("ok") == false):
+		_scene._show_command_feedback({"ok": false, "reason": display.get("reason", &"event_state_unavailable"),
+			"message": display.get("message", "事件状态暂不可用，请重新靠近事件后重试。")})
+		return
 	if str(display.get("ruleset_id", "")) == "z2":
 		_scene.event_panel.hide()
 		_scene.z2_event_adapter.apply_event(display, _scene._z2_event_presentation())
 		if not _scene._push_runtime_modal(&"event", _scene.event_modal_root, null, Callable(_scene, "_cancel_event_modal")):
-			_scene.z2_event_adapter.dismiss()
+			_cancel_event_modal(&"push_rejected")
 		return
 	_scene.z2_event_adapter.hide()
 	_scene.event_panel.show()
@@ -90,15 +117,32 @@ func _show_event_panel(event_state: Dictionary, presentation: Dictionary = {}) -
 		Callable(_scene, "_cancel_event_modal")
 	)
 	if not pushed:
-		_scene.event_panel.hide()
+		_cancel_event_modal(&"push_rejected")
 
 
 func _cancel_event_modal(_reason: StringName = &"cancel") -> void:
+	if _closing_event_modal:
+		return
+	_closing_event_modal = true
+	# The stack owns EventModalRoot, not the old panel. Hide both presentations
+	# BEFORE popping so stack_changed cannot resync input against stale visible.
+	if _scene.event_panel != null:
+		_scene.event_panel.hide()
+	if _scene.z2_event_adapter != null:
+		# dismiss() retains outstanding requests: the deferred committed result
+		# must still release the dialogue lock even after leave/travel/combat.
+		_scene.z2_event_adapter.dismiss()
 	if _scene._runtime_modal_is_top(&"event"):
 		_scene._pop_runtime_modal(&"event")
-	if _scene.z2_event_adapter != null and _scene.z2_event_adapter.visible:
-		_scene.z2_event_adapter.hide()
-		_scene.z2_event_adapter.dialogue.dismiss()
+	_closing_event_modal = false
+	_scene._sync_player_input_enabled()
+
+
+func _on_event_dialogue_dismissed() -> void:
+	# An explicit close also emits dismissed synchronously. Do not enter the
+	# cancellation path again, or pop a different modal opened by a command.
+	if not _closing_event_modal:
+		_cancel_event_modal(&"dialogue_dismissed")
 
 
 func _z2_event_presentation() -> Dictionary:
@@ -196,7 +240,7 @@ func build_event_panel() -> void:
 	_scene.z2_event_adapter.name = "Z2EventAdapter"
 	_scene.event_modal_root.add_child(_scene.z2_event_adapter)
 	_scene.z2_event_adapter.choice_requested.connect(_scene._on_z2_event_choice_requested)
-	_scene.z2_event_adapter.dismissed.connect(_scene._cancel_event_modal)
+	_scene.z2_event_adapter.dismissed.connect(_on_event_dialogue_dismissed)
 	_scene.event_modal_root.hide()
 	_scene.call_deferred("_ensure_z2_notification_queue")
 	if _scene.run_surface != null:
@@ -218,7 +262,7 @@ func _select_event_option(option_id: StringName, option_payload: Dictionary = {}
 	if not _scene._require_world_interaction(&"event"):
 		return
 	var submitted_room_key = _scene.run_context.cell_key(_scene.run_context.get_current_pos())
-	_scene._pop_runtime_modal(&"event")
+	_cancel_event_modal(&"legacy_option")
 	var command_payload = option_payload.duplicate(true)
 	command_payload["option_id"] = option_id
 	command_payload["source"] = "ui"

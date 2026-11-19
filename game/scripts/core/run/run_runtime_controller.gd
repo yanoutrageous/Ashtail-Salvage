@@ -25,6 +25,8 @@ const Z2_COMPATIBLE_CHECKPOINT_HASHES := [
 	"cccf3429daad2f9790292b136b7423e4c09c06091dee8389e6d3b4bd731371e7", # Combat impact and lobby door polish
 	"57a9a08ee1e2bc704a73d7a27098c8d79ccb374cd6aa5bc751c3415dca636c01", # Background hit checkpoints
 	"776a7d6badc69d0955e88d0c3e1fe8e688458e81bc5ffc5f6d864ebebc21617d", # Boss and weapon playtest
+	"27d51a3cd84fd84c3f412d299ac99dcb68a5f2b6cb535cb41a466b90e2bcc6f6", # M1 (05cc370)
+	"0ca4ce2a700db0f94082fc0b00445d242c34afbbd69a0e9555cddb2234238446", # A2 input hotfix (2026-11-17)
 ]
 const StateSnapshotScript := preload("res://scripts/core/run/run_state_snapshot.gd")
 const ActionTransactionScript := preload("res://scripts/core/run/run_action_transaction.gd")
@@ -32,6 +34,8 @@ const Z2Hooks := preload("res://scripts/core/run/z2_run_hooks.gd")
 const Z2Search := preload("res://scripts/core/run/z2_search_runtime.gd")
 const Z2Opening := preload("res://scripts/core/run/z2_opening_runtime.gd")
 const Z2_SEARCH_BASE_SECONDS := {"Normal": 2.0, "Chest": 3.0}
+const TutorialServiceScript := preload("res://scripts/core/run/tutorial_service.gd")
+const TutorialTalentCatalog := preload("res://scripts/core/progression/m7_talent_catalog.gd")
 
 const META_ACTION_PURCHASE := &"purchase"
 const META_ACTION_SELL := &"sell_collectible"
@@ -163,7 +167,7 @@ func _resolve_z2_opening_tool(candidate: RunContext, request: Dictionary) -> Dic
 	if result.get("ok", false):
 		result["applied"] = true
 		result["threshold"] = request.threshold
-		command_bus.room_resolver._finish_event_result(candidate, candidate.get_current_pos(), result)
+		result = command_bus.room_resolver._finish_event_result(candidate, candidate.get_current_pos(), result)
 	return result
 
 
@@ -200,12 +204,26 @@ func start_standard_run(room_resolver: RoomResolver, run_start_config: Dictionar
 	return _with_actor(result)
 
 
+func is_tutorial_learning_required() -> bool:
+	if context == null or context.mode != &"tutorial" or context.profile_fields.get("z2_progression_version") != 1:
+		return false
+	return not bool(context.profile_fields.get("flag_unlocked", false)) or meta_progress_adapter == null or not meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01")
+
+
+func _tutorial_learning_rejection() -> Dictionary:
+	return _with_actor({"ok": false, "status": &"teaching_purchase_required", "reason": "teaching_purchase_required", "reason_code": "teaching_purchase_required", "message": "请先通过教学目标中的“100点 · 学习插旗”完成学习，再完成训练。收起说明不会扣点，你仍可继续探索或暂停。"})
+
+
 func request_extract(room_resolver: RoomResolver, command_id: String, actor_id: StringName) -> Dictionary:
+	if room_resolver != null and room_resolver.can_extract(context) and is_tutorial_learning_required():
+		return _tutorial_learning_rejection()
 	var result: Dictionary = state_machine.request_extract(context, room_resolver != null and room_resolver.can_extract(context), command_id, actor_id)
 	return _with_actor(result)
 
 
 func confirm_extract(room_resolver: RoomResolver) -> Dictionary:
+	if is_tutorial_learning_required():
+		return _tutorial_learning_rejection()
 	var result: Dictionary = state_machine.confirm_extract(context, room_resolver != null and room_resolver.can_extract(context))
 	if bool(result.get("ok", false)) and context != null and not context.run_active:
 		in_run_runtime.reset()
@@ -1059,13 +1077,27 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 		stale["message"] = "选项条件已变化，请重新确认。"
 		stale["action_result"] = stale.duplicate(true)
 		return stale
-	if kind == &"confirm_tutorial_popup" and context.mode == &"tutorial" and str(context.tutorial_popup.get("id", "")) == "spawn_intro" and context.profile_fields.get("z2_progression_version") == 1 and not bool(payload.get("preview", false)):
-		# Validate request identity and conditions before the durable purchase.
-		# A later checkpoint failure keeps the lesson pending and reuses this
-		# idempotent payment when the player retries.
+	if kind == &"learn_tutorial_flag":
+		# This explicit business action remains reachable in every tutorial room.
+		# Validate before the durable purchase; closing a lesson never gets here.
+		if context == null or context.mode != &"tutorial" or context.profile_fields.get("z2_progression_version") != 1 or not context.can_accept_command() or context.phase != &"running":
+			return _atomic_error("teaching_action_unavailable")
 		if meta_progress_adapter == null:
 			return _atomic_error("meta_progress_adapter_missing")
-		if not meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01"):
+		var already_learned: bool = meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01")
+		if not already_learned:
+			# purchase_tutorial_flag opens the teaching-only entitlement itself.
+			# Mirror that precondition in a disposable preview, not in live meta.
+			var eligibility_candidate: Dictionary = meta_progress_adapter.data.duplicate(true)
+			eligibility_candidate["tutorial_purchase_available"] = true
+			var eligibility: Dictionary = TutorialTalentCatalog.unlock_evaluation(eligibility_candidate, "z2_talent_01")
+			if not eligibility.get("ok", false):
+				return eligibility
+		if bool(payload.get("preview", false)):
+			return {"ok": true, "preview": true, "condition_fingerprint": conditions, "cost": 0 if already_learned else 100, "already_learned": already_learned}
+		if not already_learned:
+			# If the subsequent checkpoint fails, retries reuse the durable talent
+			# entitlement instead of spending the 100 points for a second time.
 			var learned: Dictionary = meta_progress_adapter.purchase_tutorial_flag()
 			if not learned.get("ok", false):
 				return learned
@@ -1087,10 +1119,17 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 		var triggered := Z2Hooks.after_action(context, before["context"], action_id)
 		if not triggered.get("ok", false):
 			result = triggered
-	if not bool(result.get("ok", false)) and context.last_message != str(before["context"]["data"].get("last_message", "")):
-		result["message"] = context.last_message
-		if result.get("action_result") is Dictionary:
-			result["action_result"]["message"] = context.last_message
+	if not bool(result.get("ok", false)):
+		var nested_message := str(result.get("action_result", {}).get("message", "")) if result.get("action_result") is Dictionary else ""
+		var rejection_message := str(result.get("message", nested_message))
+		if rejection_message.is_empty() and context.last_message != str(before["context"]["data"].get("last_message", "")):
+			rejection_message = context.last_message
+		if not rejection_message.is_empty():
+			# A room resolver's explicit failure must not be replaced by an earlier
+			# speculative "teleported"/"shortcut used" message from the candidate.
+			result["message"] = rejection_message
+			if result.get("action_result") is Dictionary:
+				result["action_result"]["message"] = rejection_message
 	if bool(result.get("ok", false)) and context.run_active and (context.hp <= 0 or not _pending_terminal_reason.is_empty()):
 		state_machine.fail_run(context, _pending_terminal_reason if not _pending_terminal_reason.is_empty() else "hp_depleted")
 		# Preserve the complete combat step in the candidate; presentation stops after commit.
@@ -1368,7 +1407,10 @@ func _restore_durable_checkpoint(force_install: bool) -> Dictionary:
 		return loaded
 	var checkpoint: Dictionary = loaded["snapshot"]
 	var checkpoint_hash := str(checkpoint.get("content_hash", ""))
-	if checkpoint_hash != _content_hash and checkpoint_hash not in Z2_COMPATIBLE_CHECKPOINT_HASHES:
+	if checkpoint_hash != _content_hash and (
+		str(checkpoint.get("content_version", "")) != Z2_CONTENT_VERSION
+		or checkpoint_hash not in Z2_COMPATIBLE_CHECKPOINT_HASHES
+	):
 		return _storage_error(_atomic_error("checkpoint_content_mismatch"))
 	# Validate even at the same revision. Retain unsaved motion when the primary
 	# is valid and current; a recovered backup must install before repair.
@@ -1376,6 +1418,11 @@ func _restore_durable_checkpoint(force_install: bool) -> Dictionary:
 	var restored := restore_checkpoint_state(checkpoint["state"], checkpoint, install)
 	if not bool(restored.get("ok", false)):
 		return _storage_error(restored)
+	if install:
+		# Only presentation metadata is normalized after full original validation.
+		# Keep all receipts/resources/history and write the current identity on
+		# the next ordinary durable action; never rewrite the old admission.
+		context.tutorial_popup = TutorialServiceScript.normalized_popup(context.tutorial_popup)
 	if str(loaded.get("status", "")) == "recovered_backup":
 		var recovered: Dictionary = checkpoint_service.confirm_checkpoint_recovery(int(loaded["generation"]), str(loaded["snapshot_hash"]))
 		if not bool(recovered.get("ok", false)):

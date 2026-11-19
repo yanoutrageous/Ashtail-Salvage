@@ -26,6 +26,7 @@ const REDUNDANT_ENCOUNTER_OPTION_IDS := [&"search", &"open_chest", &"attack_basi
 const EVENT_MODAL_ENCOUNTER_TYPES := [&"trader", &"dice", &"altar", &"trap"]
 const FOCUSED_MODAL_IDS := [
 	&"event",
+	&"flag_entry_confirm",
 	&"loot_result",
 	&"extract_confirm",
 	&"combat_flee_confirm",

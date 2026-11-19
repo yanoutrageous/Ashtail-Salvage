@@ -36,13 +36,19 @@ func _run() -> void:
 	_check(runtime.context.profile_fields.get("ruleset_id", "") == "z2", "authoritative ruleset reaches run")
 	_check(not runtime.command_bus.dispatch(&"toggle_flag_cell", {"pos": Vector2i(1, 0)}).get("ok", true), "flag locked before learning")
 	var before: Dictionary = meta.data.duplicate(true)
-	runtime.command_bus.dispatch(&"confirm_tutorial_popup", {"preview": true})
-	_check(meta.data == before, "preview cannot spend teaching points")
-	var confirmed: Dictionary = runtime.command_bus.dispatch(&"confirm_tutorial_popup", {"action_id": "learn-flag"})
-	_check(confirmed.get("ok", false), "learning confirms")
+	_check(not runtime.context.has_blocking_tutorial_popup(), "opening guidance does not lock the run")
+	runtime.command_bus.dispatch(&"learn_tutorial_flag", {"preview": true})
+	_check(meta.data == before and not runtime.context.profile_fields.get("flag_unlocked", false), "learning preview neither spends nor grants")
+	_check(runtime.command_bus.dispatch(&"confirm_tutorial_popup", {"action_id": "dismiss-opening"}).get("ok", false), "guidance can be dismissed independently")
+	_check(meta.data == before and not runtime.context.profile_fields.get("flag_unlocked", false), "closing opening text is not a purchase")
+	_check(runtime.command_bus.dispatch(&"attempt_room_transition", {"direction": Vector2i.DOWN}).get("ok", false), "unlearned player may leave spawn")
+	_check(runtime.context.get_current_pos() == Vector2i(0, 1), "learning is requested in a different room")
+	var confirmed: Dictionary = runtime.command_bus.dispatch(&"learn_tutorial_flag", {"action_id": "learn-flag"})
+	_check(confirmed.get("ok", false), "explicit remote learning confirms")
 	_check(meta.data.talent_flags.has("z2_talent_01") and meta.data.talent_spent == 100 and meta.data.talent_points == 0, "learning spends exactly 100")
-	runtime.command_bus.dispatch(&"confirm_tutorial_popup", {"action_id": "learn-flag"})
+	runtime.command_bus.dispatch(&"learn_tutorial_flag", {"action_id": "learn-flag"})
 	_check(meta.data.talent_spent == 100, "learning retry does not spend again")
+	_check(runtime.command_bus.dispatch(&"attempt_room_transition", {"direction": Vector2i.UP}).get("ok", false) and runtime.context.get_current_pos() == Vector2i.ZERO, "learned player returns without a guidance gate")
 	_check(runtime.context.active_talent_effects.is_empty() and runtime.context.max_hp == 100, "tutorial excludes ordinary bonuses")
 	if runtime.context.intel_map.is_flagged(Vector2i(1, 0)):
 		runtime.command_bus.dispatch(&"toggle_flag_cell", {"pos": Vector2i(1, 0)})
@@ -94,7 +100,7 @@ func _check_purchase_failures() -> void:
 			meta.save_adapter = cutter
 		else:
 			runtime.checkpoint_writer = func(_state: Dictionary) -> Dictionary: return {"ok": false, "error": "test_cut"}
-		var rejected: Dictionary = runtime.command_bus.dispatch(&"confirm_tutorial_popup", payload)
+		var rejected: Dictionary = runtime.command_bus.dispatch(&"learn_tutorial_flag", payload)
 		_check(not rejected.get("ok", true), scenario + " rejects action")
 		_check(str(runtime.context.tutorial_popup.get("id", "")) == "spawn_intro", scenario + " retains pending prompt")
 		if scenario != "checkpoint_failure":
@@ -103,7 +109,7 @@ func _check_purchase_failures() -> void:
 			_check(meta.data.talent_spent == 100 and meta.data.talent_flags.has("z2_talent_01"), "durable purchase survives checkpoint failure")
 			runtime.checkpoint_writer = func(_state: Dictionary) -> Dictionary: return {"ok": true}
 			_check(runtime.retry_persistence().get("ok", false), "checkpoint retry available")
-			_check(runtime.command_bus.dispatch(&"confirm_tutorial_popup", payload).get("ok", false), "checkpoint retry confirms pending lesson")
+			_check(runtime.command_bus.dispatch(&"learn_tutorial_flag", payload).get("ok", false), "checkpoint retry grants the already paid learning action")
 			meta.load_or_create_default()
 			_check(meta.data.talent_spent == 100 and meta.data.talent_points == 0, "retry and reload preserve one teaching payment")
 		_release(runtime)

@@ -113,10 +113,15 @@ func _tutorial_journey() -> bool:
 	_check(not _data().get("admission", {}).is_empty(), "teaching admission is durably reserved")
 	if not _confirm_popup("spawn_intro"):
 		return false
-	_check(_data().talent_flags == ["z2_talent_01"] and _data().talent_points == 0 and _data().talent_spent == 100, "actual learning button purchases the flag node once")
+	_check(_data().talent_flags.is_empty() and _data().talent_points == 100 and _data().talent_spent == 0, "closing opening guidance does not purchase the flag node")
 	if not _walk(Vector2i(0, 1)):
 		return false
-	_check(str(scene.run_context.tutorial_popup.get("id", "")) == "number_rule", "tutorial number lesson reached by real movement")
+	_check(str(scene.run_context.tutorial_popup.get("id", "")) == "number_rule", "tutorial number lesson reached by real movement without learning")
+	var learn := scene.tutorial_popup_panel.get_node_or_null("Panel/Content/LearnFlagButton") as Button
+	if not _check(learn != null and learn.is_visible_in_tree() and not learn.disabled, "independent learning action remains available outside spawn"):
+		return false
+	learn.pressed.emit()
+	_check(_data().talent_flags == ["z2_talent_01"] and _data().talent_points == 0 and _data().talent_spent == 100, "explicit remote learning purchases the flag node once")
 	_check(_cmd(&"toggle_flag_cell", {"pos": Vector2i(1, 1)}).get("ok", false), "learned flag uses the real player command")
 	if not _walk(Vector2i(0, 2)) or not _walk(Vector2i(0, 3)):
 		return false
@@ -310,8 +315,12 @@ func _confirm_popup(id: String) -> bool:
 	var button := scene.tutorial_popup_panel.find_child("ConfirmButton", true, false) as Button
 	if not _check(str(scene.run_context.tutorial_popup.get("id", "")) == id and button != null and button.is_visible_in_tree(), "real tutorial confirmation visible: " + id):
 		return false
+	var meta_before: Dictionary = _data().duplicate(true)
+	if not scene.tutorial_popup_panel.layout_snapshot().get("guidance_expanded", false):
+		button.pressed.emit()
+	_check(scene.tutorial_popup_panel.layout_snapshot().get("guidance_expanded", false), "details button expands complete teaching text: " + id)
 	button.pressed.emit()
-	return _check(not scene.run_context.tutorial_popup.get("blocking", false), "real tutorial button confirms: " + id)
+	return _check(str(scene.run_context.tutorial_popup.get("id", "")) != id and not scene.run_context.has_blocking_tutorial_popup() and _data() == meta_before, "separate guidance dismissal never purchases: " + id)
 
 
 func _extract() -> bool:

@@ -591,14 +591,67 @@ func _check_main_tutorial_mapping() -> void:
 	var transform: Transform2D = scene.get_node("RoomLayer").transform
 	var logical := [player.room_rect, player.logical_obstacles.duplicate(true), player.get_door_projections().duplicate(true), player.get_local_position()]
 	_check_world_mapping(scene)
-	var button := scene.tutorial_popup_panel.get_node("Panel/Content/ConfirmButton") as Button
-	_check(button.text.contains("100点"), "Main tutorial primary action lost its actual purchase cost")
-	_pointer(button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
-	await _wait_until(func() -> bool: return scene.run_context.tutorial_popup.is_empty(), "native Main tutorial purchase confirmation")
+	var details := scene.tutorial_popup_panel.get_node("Panel/Content/ConfirmButton") as Button
+	var learn := scene.tutorial_popup_panel.get_node("Panel/Content/LearnFlagButton") as Button
+	var meta = scene.meta_progress_adapter
+	var before_learning: Dictionary = meta.data.duplicate(true)
+	var meta_hash := FileAccess.get_sha256(meta.active_meta_progress_path)
+	_check(before_learning.get("talent_points") == 100 and before_learning.get("talent_spent") == 0 and before_learning.get("talent_earned") == 100 and before_learning.get("talent_flags", []).is_empty(), "Actual Main tutorial must begin with its untouched100-point learning budget")
+	_check(not details.text.contains("100点") and learn.text.contains("100点"), "Main tutorial separates read-only details from the actual100-point Learn action")
+	await _click_tutorial_button(details, "native Main guidance expand")
+	await _wait_until(func() -> bool: return scene.tutorial_popup_panel.layout_snapshot().get("guidance_expanded", false), "native Main guidance expanded")
+	await _click_tutorial_button(details, "native Main guidance close")
+	await _wait_until(func() -> bool: return scene.run_context.tutorial_popup.is_empty() and not scene.tutorial_popup_panel.layout_snapshot().get("guidance_expanded", true), "native Main guidance dismissed without learning")
+	_check(meta.data.get("talent_points") == before_learning.talent_points and meta.data.get("talent_spent") == before_learning.talent_spent and meta.data.get("talent_earned") == before_learning.talent_earned and meta.data.get("talent_flags") == before_learning.talent_flags and FileAccess.get_sha256(meta.active_meta_progress_path) == meta_hash, "Reading/closing pure Main guidance purchased or rewrote teaching entitlement")
+	_check(not scene.run_context.profile_fields.get("flag_unlocked", false), "Closing pure Main guidance granted flag capability")
 	_check(scene.get_node("RoomLayer").transform.is_equal_approx(transform), "Tutorial dismissal changed the room mapping")
 	_check([player.room_rect, player.logical_obstacles, player.get_door_projections(), player.get_local_position()] == logical, "Tutorial dismissal changed logical position, walls or door bodies")
 	_check_world_mapping(scene)
+	await _click_tutorial_button(learn, "native Main explicit Learn purchase")
+	await _wait_until(func() -> bool: return scene.run_context.profile_fields.get("flag_unlocked", false) and meta.data.get("talent_points") == 0 and meta.data.get("talent_spent") == 100, "native Main independent Learn pays exactly100 and grants flag capability")
+	var disk: Variant = JSON.parse_string(FileAccess.get_file_as_string(meta.active_meta_progress_path))
+	_check(disk is Dictionary, "Actual Main learning Meta bytes no longer decode")
+	if disk is Dictionary:
+		for source: Dictionary in [meta.data, disk]:
+			_check(source.get("talent_points") == 0 and source.get("talent_spent") == 100 and source.get("talent_earned") == 100 and source.get("talent_flags", []).count("z2_talent_01") == 1 and source.get("profile_level") == 0 and not source.get("tutorial_completed", false), "Explicit Main Learn must durably cost100 exactly once without completing teaching")
+	_check(scene.get_node("RoomLayer").transform.is_equal_approx(transform), "Explicit learning changed the room mapping")
+	_check([player.room_rect, player.logical_obstacles, player.get_door_projections(), player.get_local_position()] == logical, "Explicit learning changed logical position, walls or door bodies")
+	_check_world_mapping(scene)
 	await _dispose_isolated_main(main)
+
+
+func _click_tutorial_button(button: Button, label: String) -> void:
+	_check(button != null, label + " exists")
+	if button == null:
+		return
+	var ref: WeakRef = weakref(button)
+	if not await _wait_until(func() -> bool: return _tutorial_button_hit_testable(ref), label + " is natively hit-testable"):
+		return
+	var observed := {"pressed": false}
+	var on_pressed := func() -> void: observed.pressed = true
+	button.pressed.connect(on_pressed, CONNECT_ONE_SHOT)
+	_pointer(button.get_global_transform_with_canvas() * (button.size * 0.5), MOUSE_BUTTON_LEFT)
+	if is_instance_valid(button) and button.pressed.is_connected(on_pressed):
+		button.pressed.disconnect(on_pressed)
+	_check(observed.pressed, label + " did not receive actual native Button.pressed")
+
+
+func _tutorial_button_hit_testable(ref: WeakRef) -> bool:
+	var button := ref.get_ref() as Button
+	if button == null or not button.is_visible_in_tree() or button.disabled or button.size.x <= 1.0 or button.size.y <= 1.0:
+		return false
+	var motion := InputEventMouseMotion.new()
+	motion.position = button.get_global_transform_with_canvas() * (button.size * 0.5)
+	motion.global_position = motion.position
+	root.push_input(motion, true)
+	var hovered := root.gui_get_hovered_control()
+	while hovered != null:
+		if hovered == button:
+			return true
+		if hovered.mouse_filter == Control.MOUSE_FILTER_STOP:
+			return false
+		hovered = hovered.get_parent_control()
+	return false
 
 
 func _check_main_inventory_details() -> void:

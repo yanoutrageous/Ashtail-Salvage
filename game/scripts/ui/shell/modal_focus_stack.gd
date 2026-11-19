@@ -17,6 +17,7 @@ const MODAL_POLICIES := {
 	&"loot_result": {"priority": PRIORITY_BLOCKING, "kind": &"acknowledgement", "blocks_gameplay_input": true},
 	&"pause": {"priority": PRIORITY_BLOCKING, "kind": &"pause", "blocks_gameplay_input": true},
 	&"settings": {"priority": PRIORITY_NESTED_SETTINGS, "kind": &"settings", "blocks_gameplay_input": true},
+	&"flag_entry_confirm": {"priority": PRIORITY_IRREVERSIBLE_CONFIRM, "kind": &"risk_confirmation", "blocks_gameplay_input": true, "requires_confirmation": true},
 	&"extract_confirm": {"priority": PRIORITY_IRREVERSIBLE_CONFIRM, "kind": &"irreversible_confirm", "blocks_gameplay_input": true, "requires_confirmation": true},
 	&"combat_flee_confirm": {"priority": PRIORITY_IRREVERSIBLE_CONFIRM, "kind": &"destructive_confirm", "blocks_gameplay_input": true, "requires_confirmation": true},
 	&"abandon_confirm": {"priority": PRIORITY_IRREVERSIBLE_CONFIRM, "kind": &"destructive_confirm", "blocks_gameplay_input": true, "requires_confirmation": true},

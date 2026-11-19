@@ -16,7 +16,7 @@ const MECHANISM_VARIANT_POOL := [
 	{"variant": "mechanical", "legacy_event_id": "trap", "legacy_slot": 28, "roll_weight": 1},
 ]
 const EVENT_LEVELS := {"information": 1, "relief": 1, "first_aid": 1, "altar": 1,
-	"shop": 2, "recycle": 2, "demine": 3, "clock_in": 3, "mechanism": 4, "coil": 4,
+	"shop": 3, "recycle": 2, "demine": 3, "clock_in": 3, "mechanism": 4, "coil": 4,
 	"compress": 5, "rps": 5, "shortcut": 6, "consign": 8, "trader": 10, "expand": 12,
 	"savings": 15, "recon": 18, "cage": 21, "seal": 22, "pawn": 23, "dice": 26}
 const EVENT_WEIGHT_TOTAL := 29.0
@@ -161,7 +161,9 @@ static func canonical(event_id: String) -> String:
 	return str(ALIASES.get(event_id, event_id))
 
 static func applies_to(context: RunContext) -> bool:
-	if context == null:
+	# Tutorials retain Z2 profile identity, but their fixed four-event lesson
+	# follows the same legacy boundary as Z2RunHooks.applies_to.
+	if context == null or context.mode == &"tutorial":
 		return false
 	var profile: Dictionary = context.run_start_config.get("profile_fields", context.profile_fields)
 	return str(profile.get("ruleset_id", "")) == "z2" and int(profile.get("z2_progression_version", 0)) == 1

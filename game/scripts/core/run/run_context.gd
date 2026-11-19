@@ -332,7 +332,9 @@ func can_accept_command() -> bool:
 
 
 func has_blocking_tutorial_popup() -> bool:
-	return not tutorial_popup.is_empty() and bool(tutorial_popup.get("blocking", false))
+	# Old checkpoints may still contain blocking=true on pure guidance. Only
+	# actual decisions (not reading a lesson) may own the command context.
+	return TutorialService.is_blocking_popup(tutorial_popup)
 
 
 func fail_run(reason: String) -> void:

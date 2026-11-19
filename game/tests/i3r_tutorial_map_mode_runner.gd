@@ -177,8 +177,9 @@ func _test_deploy_map_route() -> void:
 func _test_production_tutorial_event_diversity(runtime_controller) -> void:
 	var command_bus = runtime_controller.command_bus
 	var context = runtime_controller.context
-	var confirm_result: Dictionary = command_bus.dispatch(&"confirm_tutorial_popup")
-	_check(bool(confirm_result.get("ok", false)), "tutorial_spawn_confirmation_failed_before_event_route")
+	# Pure guidance must not require acknowledgement before the real move route.
+	_check(StringName(context.tutorial_popup.get("id", &"")) == &"spawn_intro", "tutorial_spawn_guidance_missing_before_event_route")
+	_check(not context.has_blocking_tutorial_popup() and context.can_accept_command(), "tutorial_spawn_guidance_blocked_production_event_route")
 
 	var expected_events := {
 		Vector2i(0, 3): {"event_type": &"trap", "popup_id": &"trap_rule"},
@@ -646,7 +647,7 @@ func _test_tutorial_content_and_semantic_actions() -> void:
 	var expected_contracts: Dictionary = {
 		&"spawn_intro": _tutorial_popup_contract(
 			"新员工说明",
-			true,
+			false,
 			true,
 			false,
 			false,
@@ -667,7 +668,7 @@ func _test_tutorial_content_and_semantic_actions() -> void:
 		&"route_rule": _tutorial_popup_contract("路线规划", false, false, true, false, [&"open_map"]),
 		&"exit_goal": _tutorial_popup_contract(
 			"撤离信标",
-			true,
+			false,
 			true,
 			false,
 			false,
@@ -697,7 +698,13 @@ func _test_tutorial_content_and_semantic_actions() -> void:
 	var route_rule_template := str((definitions.get(&"route_rule", {}) as Dictionary).get("message_template", ""))
 	_check(mine_review_template.contains("已探索且可回传的安全格"), "tutorial_mine_review_overstates_fast_return_eligibility")
 	_check(route_rule_template.contains("已探索且可回传的安全格"), "tutorial_route_rule_overstates_fast_return_eligibility")
-	var definitions_fingerprint := JSON.stringify(definitions).sha256_text().to_upper()
+	# This hotfix authorizes exactly two modality changes, not a copy/catalog rewrite.
+	# Keep the historical 13-definition copy hash by reversing only those two bits
+	# in a detached comparison; the exact semantic contract above checks both false.
+	var historical_copy_contract := definitions.duplicate(true)
+	for popup_id: StringName in [&"spawn_intro", &"exit_goal"]:
+		historical_copy_contract[popup_id]["blocking"] = true
+	var definitions_fingerprint := JSON.stringify(historical_copy_contract).sha256_text().to_upper()
 	_check(
 		definitions_fingerprint == "3D4B5AF22BF82AD72813CE61BA2CEF1155647B368620C14B36B34E6AEEDC3067",
 		"tutorial_popup_copy_fingerprint_drift:%s" % definitions_fingerprint
@@ -708,18 +715,21 @@ func _test_tutorial_content_and_semantic_actions() -> void:
 		var definition := definitions[raw_id] as Dictionary
 		if bool(definition.get("blocking", false)):
 			blocking_ids.append(popup_id)
-		else:
+		elif popup_id not in [&"spawn_intro", &"exit_goal"]:
+			# The two once-only lessons retain their original non-room-scoped lifetime.
 			_check(bool(definition.get("room_scoped", false)), "nonblocking_not_room_scoped:%s" % String(popup_id))
 		var template := str(definition.get("message_template", ""))
 		for forbidden in ["按 F", "按 E", "按 M", "WASD", "Space/J"]:
 			_check(template.find(forbidden) < 0, "hardcoded_key_copy:%s:%s" % [String(popup_id), forbidden])
 	blocking_ids.sort()
-	_check(blocking_ids.size() == 2 and blocking_ids.has(&"exit_goal") and blocking_ids.has(&"spawn_intro"), "blocking_contract_not_spawn_exit")
+	_check(blocking_ids.is_empty(), "pure_guidance_definitions_must_not_block:%s" % [blocking_ids])
 	_check(bool((definitions.get(&"mine_rule", {}) as Dictionary).get("show_after_room_effect", false)), "mine_hint_not_after_effect")
 	_check(bool((definitions.get(&"mine_review", {}) as Dictionary).get("show_after_room_effect", false)), "mine_review_not_after_effect")
 
 	var context := RunContextScript.new()
 	context.mode = &"tutorial"
+	context.run_active = true
+	context.phase = &"running"
 	context.tutorial_triggers = {"0,0": &"event_rule", "1,0": &"spawn_intro", "2,0": &"exit_goal"}
 	context.event_state = {"event_type": &"dice"}
 	var event_id := TutorialServiceScript.trigger_for(context, Vector2i(0, 0))
@@ -731,11 +741,19 @@ func _test_tutorial_content_and_semantic_actions() -> void:
 	_check(str((hints[0] as Dictionary).get("display_label", "")).find(SemanticActionHintScript.display_label(&"interact")) >= 0, "semantic_action_label_not_input_map")
 
 	TutorialServiceScript.trigger_for(context, Vector2i(1, 0))
-	_check(bool(context.tutorial_popup.get("blocking", false)), "spawn_not_blocking")
+	_check(not bool(context.tutorial_popup.get("blocking", true)) and context.can_accept_command(), "spawn_guidance_blocked_commands")
 	TutorialServiceScript.confirm_popup(context)
 	_check(context.tutorial_shown.has("spawn_intro"), "spawn_once_not_recorded")
+	_check(TutorialServiceScript.trigger_for(context, Vector2i(1, 0)) == &"" and context.tutorial_popup.is_empty(), "spawn_once_reopened_after_dismissal")
 	TutorialServiceScript.trigger_for(context, Vector2i(2, 0))
-	_check(bool(context.tutorial_popup.get("blocking", false)), "exit_not_blocking")
+	_check(not bool(context.tutorial_popup.get("blocking", true)) and context.can_accept_command(), "exit_guidance_blocked_commands")
+	TutorialServiceScript.confirm_popup(context)
+	_check(context.tutorial_shown.has("exit_goal"), "exit_once_not_recorded")
+	_check(TutorialServiceScript.trigger_for(context, Vector2i(2, 0)) == &"" and context.tutorial_popup.is_empty(), "exit_once_reopened_after_dismissal")
+	# A risk decision is not one of the 13 lessons, even if an old raw bit says false.
+	context.tutorial_popup = {"id": &"flag_entry_confirm", "blocking": false}
+	_check(context.has_blocking_tutorial_popup() and not context.can_accept_command(), "flag_entry_risk_lost_domain_modality")
+	_check(bool(TutorialServiceScript.normalized_popup(context.tutorial_popup).get("blocking", false)), "flag_entry_risk_not_normalized_as_blocking")
 
 
 func _tutorial_popup_contract(
