@@ -1,7 +1,7 @@
 extends Control
 class_name MiniMapPanel
 
-const ContentDBAccessScript := preload("res://scripts/core/content/content_db_access.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 const RuntimeInputProfileScript := preload("res://scripts/core/input/runtime_input_profile.gd")
 const SemanticActionHintScript := preload("res://scripts/core/input/semantic_action_hint.gd")
 const MapCellLayerLayoutScript := preload("res://scripts/ui/map_shared/map_cell_layer_layout.gd")
@@ -19,15 +19,15 @@ var visible_map_rect: Rect2i = Rect2i()
 const LEGACY_MINIMAP_VALIDATION_MARKER := "MiniMap: icons fallback to text"
 const G10_MINIMAP_CLICK_VALIDATION_MARKER := "MiniMapPanel click opens MapOverlay"
 const UNKNOWN_CELL_ASSET_ID := &"ui.art21.map.cell.unknown"
-const EXPLORED_CELL_ASSET_ID := &"ui.art21r2.minimap.hud.explored"
-const SCANNED_CELL_ASSET_ID := &"ui.art21r2.minimap.hud.scanned"
-const FLAGGED_CELL_ASSET_ID := &"icon.minimap.flag"
-const PLAYER_MARKER_ASSET_ID := &"ui.art21r2.minimap.hud.player"
-const EXIT_MARKER_ASSET_ID := &"ui.art21r2.minimap.hud.exit"
-const MINE_MARKER_ASSET_ID := &"ui.art21r2.minimap.hud.mine"
-const MONSTER_MARKER_ASSET_ID := &"icon.room.monster"
-const CHEST_MARKER_ASSET_ID := &"ui.art21r2.minimap.hud.chest"
-const EVENT_MARKER_ASSET_ID := &"ui.art21.map.marker.event"
+
+
+
+
+
+
+
+
+
 
 
 func apply_view_model(next_view_model: MiniMapViewModel) -> void:
@@ -171,11 +171,9 @@ func _apply_marker_scale_for_view_model(grid_size: Vector2i) -> void:
 
 
 func _add_marker_node(grid: GridContainer, marker: Dictionary, size: Vector2) -> void:
-	var asset_id := _base_asset_id_for_marker(marker)
-	var asset_ref: Resource = null
+	var state := PresentationMapping.map_marker_state(marker)
+	var asset_ref := RunVectorSkin.map_tile(state)
 	var theme_key := StringName(marker.get("theme_key", &"mini.normal"))
-	if asset_id != &"":
-		asset_ref = ContentDBAccessScript.get_asset_ref(asset_id)
 	var pos: Vector2i = marker.get("pos", Vector2i.ZERO)
 	var cell := Control.new()
 	cell.name = "MiniMapCell_%d_%d" % [pos.x, pos.y]
@@ -203,18 +201,19 @@ func _add_marker_node(grid: GridContainer, marker: Dictionary, size: Vector2) ->
 		var base_icon := TextureRect.new()
 		base_icon.name = "CellBase"
 		base_icon.texture = asset_ref
+		base_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		base_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		base_icon.stretch_mode = TextureRect.STRETCH_SCALE
 		MapCellLayerLayoutScript.apply_rect(base_icon, Rect2(layer_layout.get("base_rect", Rect2())))
 		base_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		base_icon.z_index = int(layer_layout.get("base_z", 0))
 		cell.add_child(base_icon)
-	var overlay_id := _overlay_asset_id_for_marker(marker)
-	var overlay_ref := ContentDBAccessScript.get_asset_ref(overlay_id) if overlay_id != &"" else null
+	var overlay_ref := RunVectorSkin.map_symbol(state)
 	if overlay_ref is Texture2D:
 		var overlay_icon := TextureRect.new()
 		overlay_icon.name = "SemanticMarker"
 		overlay_icon.texture = overlay_ref
+		overlay_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		overlay_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		overlay_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		MapCellLayerLayoutScript.apply_rect(overlay_icon, Rect2(layer_layout.get("semantic_rect", Rect2())))
@@ -315,36 +314,6 @@ func _public_marker_or_unknown(markers_by_pos: Dictionary, pos: Vector2i) -> Dic
 		"read_only": true,
 		"preview": true,
 	}
-
-
-func _base_asset_id_for_marker(marker: Dictionary) -> StringName:
-	match PresentationMapping.map_marker_state(marker):
-		&"unknown":
-			return UNKNOWN_CELL_ASSET_ID
-		&"scanned":
-			return SCANNED_CELL_ASSET_ID
-		_:
-			return EXPLORED_CELL_ASSET_ID
-
-
-func _overlay_asset_id_for_marker(marker: Dictionary) -> StringName:
-	match PresentationMapping.map_marker_state(marker):
-		&"player":
-			return PLAYER_MARKER_ASSET_ID
-		&"flagged":
-			return FLAGGED_CELL_ASSET_ID
-		&"exit":
-			return EXIT_MARKER_ASSET_ID
-		&"mine":
-			return MINE_MARKER_ASSET_ID
-		&"monster":
-			return MONSTER_MARKER_ASSET_ID
-		&"chest":
-			return CHEST_MARKER_ASSET_ID
-		&"event":
-			return EVENT_MARKER_ASSET_ID
-		_:
-			return &""
 
 
 func _pos_key(pos: Vector2i) -> String:

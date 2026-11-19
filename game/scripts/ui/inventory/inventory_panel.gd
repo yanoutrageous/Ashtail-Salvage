@@ -5,7 +5,7 @@ const RunUIViewModel := preload("res://scripts/ui/shell/run_ui_view_model.gd")
 const PresentationMappingScript := preload("res://scripts/presentation/presentation_mapping.gd")
 const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
-const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 const Art24ItemVisualCatalogScript := preload("res://scripts/presentation/art24/art24_item_visual_catalog.gd")
 const ItemRarityDescriptorScript := preload("res://scripts/presentation/item_rarity_descriptor.gd")
 const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
@@ -86,8 +86,9 @@ func build() -> void:
 	close_button.name = "InventoryCloseButton"
 	close_button.focus_mode = Control.FOCUS_ALL
 	close_button.text = "关闭"
-	close_button.custom_minimum_size = Vector2(76, 34)
+	close_button.custom_minimum_size = Vector2(112, 34)
 	_apply_art21r2_modal_button(close_button, &"art21r2.modal.button.secondary", &"secondary", 15)
+	RunVectorSkin.set_icon(close_button, RunVectorSkin.CLOSE)
 	close_button.pressed.connect(func() -> void: close_requested.emit())
 	header.add_child(close_button)
 
@@ -112,7 +113,7 @@ func build() -> void:
 	root.add_child(item_list_panel)
 	item_backdrop = TextureRect.new()
 	item_backdrop.name = "InventoryBackpackWatermark"
-	item_backdrop.texture = load("res://assets/art24/ui/ue/ui_icon_backpack.png") as Texture2D
+	item_backdrop.texture = RunVectorSkin.BAG
 	item_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	item_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	item_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -444,17 +445,7 @@ func _main_game_modal_rect(profile: Dictionary, y_shift: float = 0.0) -> Rect2:
 
 
 func _apply_art21_panel_frame() -> void:
-	var texture := load("res://assets/art24/ui/modal_frame.png") as Texture2D
-	if texture == null:
-		texture = Art21UIPlacementContractScript.texture_for_slot(&"inventory", &"inventory_panel_frame", &"ui.art19.panel.terminal_main")
-	if texture == null:
-		Art10UISkinKitScript.apply_panel(self, &"modal")
-		return
-	var style := Art10UISkinKitScript.style_box_from_texture_with_insets(
-		texture,
-		Vector4(18.0, 18.0, 18.0, 18.0),
-		Vector4(46.0, 46.0, 46.0, 46.0)
-	)
+	var style := RunVectorSkin.frame(RunVectorSkin.RAIL, Vector4.ONE * 18.0)
 	add_theme_stylebox_override("panel", style)
 
 
@@ -471,7 +462,7 @@ func _add_item_row(item: Dictionary, can_drop: bool) -> void:
 	item_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	item_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_apply_art09_item_icon(item_button, item)
-	_apply_art21r2_modal_button(item_button, &"art21r2.modal.item_row.normal", &"secondary", 15, 10, 18)
+	_apply_art21r2_modal_button(item_button, &"art21r2.modal.item_row.normal", &"secondary", 15, 10)
 	item_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_button.clip_text = false
 	item_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
@@ -649,11 +640,11 @@ func _apply_art21r2_modal_panel(panel: PanelContainer, visual_key: StringName, p
 	# The admitted outer modal frame carries the material. Inner sections use
 	# one divider, leaving the full content width available to text and actions.
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.070, 0.075, 0.060, 0.98)
-	style.border_color = Color(0.46, 0.40, 0.27, 0.90)
+	style.bg_color = Color("#111e2b")
+	style.border_color = Color("#456778")
 	style.border_width_bottom = 1
 	if String(visual_key).contains("title"):
-		style.bg_color = Color(0.105, 0.105, 0.080, 0.98)
+		style.bg_color = Color("#20333f")
 	style.content_margin_left = padding + 2
 	style.content_margin_right = padding + 2
 	style.content_margin_top = padding
@@ -661,7 +652,7 @@ func _apply_art21r2_modal_panel(panel: PanelContainer, visual_key: StringName, p
 	panel.add_theme_stylebox_override("panel", style)
 
 
-func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: StringName, font_size_value: int, padding: int = 8, texture_margin: int = 18) -> void:
+func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: StringName, font_size_value: int, padding: int = 8) -> void:
 	var font_role := &"readable" if visual_key == &"art21r2.modal.item_row.normal" else &"display"
 	Art10UISkinKitScript.apply_button(
 		button,
@@ -677,15 +668,10 @@ func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: S
 	if visual_key == &"art21r2.modal.item_row.normal":
 		content_insets.y = 14.0
 		content_insets.w = 14.0
-	var texture := Art21UIPlacementContractScript.texture_for_visual_key(visual_key, &"ui.art19.button.dark")
-	var style := Art10UISkinKitScript.style_box_from_texture_with_insets(
-		texture,
-		content_insets,
-		inset_profile.get("slice", Vector4(texture_margin, texture_margin, texture_margin, texture_margin))
-	)
-	if style != null:
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			button.add_theme_stylebox_override(state, style.duplicate() as StyleBoxTexture)
+	var normal := tone if tone in [&"primary", &"danger"] else &"normal"
+	if visual_key == &"art21r2.modal.item_row.normal":
+		normal = &"slot"
+	RunVectorSkin.apply_button(button, content_insets, normal)
 	button.set_meta("ui_control_size_class", size_class)
 	button.add_theme_color_override("font_color", Color(0.92, 0.95, 0.88, 1.0))
 	button.add_theme_color_override("font_disabled_color", Color(0.48, 0.54, 0.51, 1.0))
@@ -720,7 +706,7 @@ func _refresh_ui_scale_metrics(node: Node = self) -> void:
 			_set_scaled_font(title_label, 20)
 		if close_button != null:
 			_set_scaled_font(close_button, 15)
-			_set_scaled_minimum(close_button, Vector2(76, 34))
+			_set_scaled_minimum(close_button, Vector2(112, 34))
 		if summary_label != null:
 			_set_scaled_font(summary_label, 15)
 		if tooltip_label != null:

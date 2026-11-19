@@ -29,6 +29,14 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	if "--async-hit-disk-only" in OS.get_cmdline_user_args():
+		await _test_axe_hit_disk_rollback(true)
+		_finish()
+		return
+	if "--hit-disk-only" in OS.get_cmdline_user_args():
+		await _test_axe_hit_disk_rollback()
+		_finish()
+		return
 	if "--flee-position-only" in OS.get_cmdline_user_args():
 		root.size = Vector2i(1280, 720)
 		await _test_flee_position_handoff()
@@ -89,6 +97,80 @@ func _test_transition_disk_boundaries() -> void:
 	await _test_shortcut_transition_checkpoint(&"select_event_option", true, &"Normal")
 	await _test_shortcut_transition_checkpoint(&"select_event_option", true, &"Monster")
 	await _test_flee_position_handoff()
+	await _test_axe_hit_disk_rollback()
+
+
+func _test_axe_hit_disk_rollback(background := false) -> void:
+	_new_transition_profile("axe_hit_rollback")
+	var main := await _open_transition_scene()
+	var scene = main.get_node("RunScene")
+	_prepare_transition_scene(scene, &"Monster", &"Normal", Vector2i.RIGHT)
+	var runtime = scene.runtime_controller
+	if background:
+		_check("background_axe_checkpoints" in runtime, "disk axe: production can queue an asynchronous checkpoint")
+		if not "background_axe_checkpoints" in runtime:
+			_discard_transition_scene(main)
+			return
+		runtime.background_axe_checkpoints = true
+	var bridge = runtime.in_run_runtime
+	var sim: G41CombatSimulation = bridge.simulation
+	sim.player["pos"] = Vector2(0.35, 0.77)
+	sim.player["invulnerability"] = 3.0
+	sim.previous_player_pos = sim.player["pos"]
+	sim.enemies[0]["pos"] = Vector2(0.50, 0.77)
+	sim.enemies[0]["entry_grace_remaining"] = 3.0
+	sim.enemies[0]["hp"] = 900
+	sim.enemies[0]["max_hp"] = 900
+	_check(bool(bridge.request_attack(Vector2.RIGHT).get("ok", false)), "disk axe: windup accepted")
+	for attempt in 20:
+		if sim.player.get("state") == &"attack_active":
+			var elapsed_next := (sim.tick_index - int(sim.active_player_attack.get("active_started_tick", sim.tick_index)) + 2) * CombatSimulation.FIXED_STEP
+			if elapsed_next + CombatSimulation.EPSILON >= sim._attack_seconds(CombatSimulation.PLAYER_ATTACK_IMPACT_SECONDS):
+				break
+		bridge.advance_frame(CombatSimulation.FIXED_STEP, Vector2.ZERO, Vector2.RIGHT)
+	_check(sim.player.get("state") == &"attack_active" and not sim.active_player_attack.get("resolved", false), "disk axe: positioned before first contact")
+	sim.accumulator = CombatSimulation.FIXED_STEP
+	var before: Dictionary = runtime.capture_authoritative_state()
+	var checkpoint: String = runtime.checkpoint_service.checkpoint_path
+	var previous_bytes := FileAccess.get_file_as_bytes(checkpoint)
+	var blocker := ProjectSettings.globalize_path(checkpoint + ".tmp")
+	_check(DirAccess.make_dir_absolute(blocker) == OK, "disk axe: real temporary-write failure armed")
+	state_signals = 0
+	runtime.command_bus.state_changed.connect(func(_snapshot): state_signals += 1)
+	var failed: Dictionary = bridge._commit_fixed_step(sim)
+	if background:
+		_check(failed.get("status") == &"checkpoint_pending" and runtime.has_pending_combat_save(),
+			"disk axe: hit yields to the caller while the worker writes")
+		_check(runtime.capture_authoritative_state() == before and state_signals == 0,
+			"disk axe: pending hit does not publish or mutate authority")
+		var competing: Dictionary = runtime.execute_atomic_operation(&"other", {}, func(): return {"ok": true})
+		_check(competing.get("status") == &"checkpoint_pending", "disk axe: concurrent command cannot overwrite the pending revision")
+		failed = runtime.finish_pending_combat_save(true)
+	_check(failed.get("status") == &"save_failed" and not runtime.persistence_error.is_empty(), "disk axe: real writer rejects the hit")
+	_check(runtime.capture_authoritative_state() == before and state_signals == 0, "disk axe: failed hit rolls back with no published frame")
+	_check(FileAccess.get_file_as_bytes(checkpoint) == previous_bytes, "disk axe: previous checkpoint is byte-identical after failed hit")
+	_check(DirAccess.remove_absolute(blocker) == OK, "disk axe: clear temporary-write failure")
+	var retried: Dictionary = runtime.retry_persistence()
+	_check(bool(retried.get("ok", false)), "disk axe: recovery allows retry")
+	var old_revision: int = runtime.transaction_revision
+	state_signals = 0
+	var committed: Dictionary = bridge._commit_fixed_step(sim)
+	if background:
+		_check(committed.get("status") == &"checkpoint_pending", "disk axe: retry uses the background writer")
+		committed = runtime.save_current_checkpoint()
+	_check(bool(committed.get("ok", false)) and runtime.transaction_revision == old_revision + 1 and state_signals == 1,
+		"disk axe: retry commits exactly one revision and publishes once")
+	var hp := int(sim.enemies[0]["hp"])
+	_check(hp < 900 and _count_events(bridge.recent_domain_events, &"enemy_damaged") == 1, "disk axe: damage applied exactly once")
+	var completed: Dictionary = runtime.capture_authoritative_state()
+	_discard_transition_scene(main)
+	main = await _open_transition_scene()
+	var restored = main.get_node("RunScene").runtime_controller
+	_check(restored.persistence_error.is_empty() and restored.in_run_runtime.has_active_combat(), "disk axe: committed checkpoint reloads")
+	if restored.in_run_runtime.has_active_combat():
+		_check(int(restored.in_run_runtime.simulation.enemies[0]["hp"]) == hp, "disk axe: reload preserves the exact damaged HP")
+		_check(restored.capture_authoritative_state() == completed, "disk axe: every authoritative field matches disk after live commit")
+	_discard_transition_scene(main)
 
 
 func _test_limited_transition_runtime() -> void:
@@ -654,6 +736,15 @@ func _test_empty_step_does_not_save() -> void:
 	_check(runtime.in_run_runtime.simulation.tick_index == 15, "motion-only frame still installs each 60Hz step")
 	_check(write_attempts.is_empty(), "empty 60Hz steps must not call checkpoint persistence")
 	_check(runtime.action_receipts.is_empty(), "empty steps must not accumulate durable receipts")
+	var bridge = runtime.in_run_runtime
+	_check(bool(bridge.request_attack(Vector2.RIGHT).get("ok", false)), "later windup accepts attack input")
+	bridge.advance_frame(CombatSimulation.FIXED_STEP, Vector2.ZERO, Vector2.RIGHT)
+	_check(not _find_event(bridge.recent_domain_events, &"player_attack_started").is_empty(),
+		"later windup immediately publishes its presentation fact")
+	_check(write_attempts.is_empty(), "windup without a supply or status change does not save twice")
+	bridge.advance_frame(0.25, Vector2.ZERO, Vector2.RIGHT)
+	_check(_count_events(bridge.recent_domain_events, &"player_attack_resolved") == 1 and not write_attempts.is_empty(),
+		"the resolved attack still writes a checkpoint")
 	_release(runtime)
 
 

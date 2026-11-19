@@ -1,14 +1,16 @@
 # 灰尾回收 · Ashtail Salvage
 
-当前版本为 **A2 Windows 试玩版**，完成 Z2 接入计划 T00—T16。此前通过检查的基础进度保留在 [A1](https://github.com/yanoutrageous/Ashtail-Salvage/tree/A1)，A2 在其上完成系统、内容与界面接入，游戏内部沿用 Z2 规则。
+**M1** 是主线首个体素联调里程碑。在 A2 的 Z2 玩法基础上，接入 [B 组的 22 间体素事件房](https://github.com/yanoutrageous/Ashtail-Salvage/pull/2)、[C 组的人物、怪物、武器和战斗特效](https://github.com/yanoutrageous/Ashtail-Salvage/pull/1)及组内 UI 联调版本。M1 包含移动、交互、存档和宝箱房摆设的修复，默认启用主音量和音效。
 
 ## 开始试玩
 
-在 [A2 发布页](https://github.com/yanoutrageous/Ashtail-Salvage/releases/tag/A2) 下载 Windows 压缩包，解压到 D 盘，双击 `开始游戏.cmd`。无需另装 Godot。请完整解压，保留 `bin` 和 `.pck` 文件。
+使用 Godot **4.6.3** 打开本仓库的 `game/project.godot`，在编辑器中按 F5 运行。使用组内 M1 Windows 完整包时，完整解压后双击 `Start_Game.cmd`，等待首次资源导入完成。
 
-存档与临时文件写入解压目录下的 `player-data`；正常退出保存，异常终止恢复最后检查点，离线不扣生命或药效时间。更新试玩包时保留 `player-data`。此版本使用 Z2 新档规则。
+Windows 完整包将存档与临时文件写入解压目录下的 `player-data`。正常退出时保存，异常终止后可恢复最后的检查点。离线不扣生命或药效时间。更新试玩包时保留 `player-data`。游戏使用 Z2 新档规则。
 
-## 本次内容
+## A2 玩法基础
+
+[A2 Windows 历史发布包](https://github.com/yanoutrageous/Ashtail-Salvage/releases/tag/A2)完成 Z2 接入计划 T00—T16。此前通过检查的基础进度保留在 [A1](https://github.com/yanoutrageous/Ashtail-Salvage/tree/A1)。
 
 - 新档 Lv0 教学、Lv1 首包、角色成长与 39 个天赋；角色上限 50，Demo 内容投放至 30。
 - 42 件藏品、30 件装备与消耗品、三项可重复研究合成；研究成品只通过研究获得。

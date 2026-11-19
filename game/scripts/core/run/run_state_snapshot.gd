@@ -102,10 +102,11 @@ static func capture_context(context: RunContext) -> Dictionary:
 		components[name] = null if component == null else capture_data(component)
 	return {"data": capture_data(context, CONTEXT_BINDINGS), "components": components}
 
-static func install_context(context: RunContext, snapshot: Dictionary) -> Dictionary:
+static func install_context(context: RunContext, snapshot: Dictionary, installed_snapshot: Dictionary = {}) -> Dictionary:
 	if not snapshot.get("data") is Dictionary or not snapshot.get("components") is Dictionary:
 		return {"ok": false, "reason": "invalid_context_snapshot"}
 	var components: Dictionary = snapshot["components"]
+	var installed_components: Dictionary = installed_snapshot.get("components", {})
 	for name in COMPONENTS:
 		if not components.has(name):
 			return {"ok": false, "reason": "missing_snapshot_component"}
@@ -123,6 +124,10 @@ static func install_context(context: RunContext, snapshot: Dictionary) -> Dictio
 			registry.setup_defaults()
 	for name in COMPONENTS:
 		var component_data: Variant = components[name]
+		# Both snapshots come from this live context. Keep unchanged components
+		# in place, including the truth map's derived room previews.
+		if installed_components.has(name) and component_data == installed_components[name]:
+			continue
 		if component_data == null:
 			context.set(name, null)
 			continue

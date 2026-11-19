@@ -1,0 +1,98 @@
+{
+  "code": "B41",
+  "event_id": "cage",
+  "title": "围笼",
+  "render": "renders/B41_cage.png",
+  "blend": "blend/B41_cage_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B41_cage__main_station_CageCorner_iron",
+        "B41_cage__main_station_CageFoot_stone",
+        "B41_cage__main_station_CageSideTop_iron",
+        "B41_cage__main_station_CageSideBase_iron",
+        "B41_cage__main_station_CageSideBars_edge",
+        "B41_cage__main_station_CageTopBeam_iron",
+        "B41_cage__main_station_CageFrontRail_iron",
+        "B41_cage__main_station_CageFrontBars_edge",
+        "B41_cage__main_station_GateTrack_iron",
+        "B41_cage__main_station_RaisedGateBars_edge",
+        "B41_cage__main_station_RaisedGateRail_iron",
+        "B41_cage__main_station_CageBackBars_edge",
+        "B41_cage__main_station_CageBackBase_iron",
+        "B41_cage__main_station_CandleBase_iron",
+        "B41_cage__main_station_Wax_bone",
+        "B41_cage__main_station_Flame_amber"
+      ],
+      "bounds": [
+        [
+          -3.7100000381469727,
+          -2.109999895095825,
+          0.05999999865889549
+        ],
+        [
+          3.7100000381469727,
+          2.9100000858306885,
+          3.700000047683716
+        ]
+      ]
+    },
+    {
+      "id": "broadcast",
+      "kind": "floor",
+      "objects": [
+        "B41_cage__broadcast_SpeakerStand_iron",
+        "B41_cage__broadcast_SpeakerBase_stone",
+        "B41_cage__broadcast_SpeakerHousing_wooddark",
+        "B41_cage__broadcast_Ring_copper"
+      ],
+      "bounds": [
+        [
+          -6.029999732971191,
+          3.7899997234344482,
+          0.05999999865889549
+        ],
+        [
+          -5.170000076293945,
+          4.549999713897705,
+          2.9600000381469727
+        ]
+      ]
+    },
+    {
+      "id": "equipment",
+      "kind": "floor",
+      "objects": [
+        "B41_cage__equipment_ToolStand_wood",
+        "B41_cage__equipment_ToolFoot_wooddark",
+        "B41_cage__equipment_ToolBoard_wooddark",
+        "B41_cage__equipment_ToolShaft_edge",
+        "B41_cage__equipment_ToolHead_iron",
+        "B41_cage__equipment_ToolHead_copper"
+      ],
+      "bounds": [
+        [
+          4.724999904632568,
+          4.0,
+          0.05999999865889549
+        ],
+        [
+          6.674999713897705,
+          4.600000381469727,
+          2.075000047683716
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

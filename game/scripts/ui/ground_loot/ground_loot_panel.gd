@@ -9,6 +9,7 @@ const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
 const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
 const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 
 signal pickup_item_requested(instance_id: String)
 signal replace_item_requested(instance_id: String)
@@ -298,17 +299,7 @@ func _main_game_modal_rect(profile: Dictionary, y_shift: float = 0.0) -> Rect2:
 
 
 func _apply_art21_panel_frame() -> void:
-	var texture := load("res://assets/art24/ui/modal_frame.png") as Texture2D
-	if texture == null:
-		texture = Art21UIPlacementContractScript.texture_for_slot(&"ground_loot", &"ground_loot_panel_frame", &"ui.art19.panel.terminal_main")
-	if texture == null:
-		Art10UISkinKitScript.apply_panel(self, &"modal")
-		return
-	var style := Art10UISkinKitScript.style_box_from_texture_with_insets(
-		texture,
-		Vector4(18.0, 18.0, 18.0, 18.0),
-		Vector4(46.0, 46.0, 46.0, 46.0)
-	)
+	var style := RunVectorSkin.frame(RunVectorSkin.RAIL, Vector4.ONE * 18.0)
 	add_theme_stylebox_override("panel", style)
 
 
@@ -326,7 +317,7 @@ func _add_item_row(item: Dictionary) -> void:
 	item_button.clip_text = true
 	item_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_apply_art09_item_icon(item_button, item)
-	_apply_art21r2_modal_button(item_button, &"art21r2.modal.item_row.normal", &"secondary", 15, 10, 18)
+	_apply_art21r2_modal_button(item_button, &"art21r2.modal.item_row.normal", &"secondary", 15, 10)
 	item_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	item_button.clip_text = false
 	item_button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
@@ -461,7 +452,7 @@ func _apply_art21r2_modal_panel(panel: PanelContainer, visual_key: StringName, p
 	Art10UISkinKitScript.apply_panel(panel, &"notice" if is_title else &"deep")
 
 
-func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: StringName, font_size_value: int, padding: int = 8, texture_margin: int = 18) -> void:
+func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: StringName, font_size_value: int, padding: int = 8) -> void:
 	var font_role := &"readable" if visual_key == &"art21r2.modal.item_row.normal" else &"display"
 	Art10UISkinKitScript.apply_button(
 		button,
@@ -477,15 +468,10 @@ func _apply_art21r2_modal_button(button: Button, visual_key: StringName, tone: S
 	if visual_key == &"art21r2.modal.item_row.normal":
 		content_insets.y = 14.0
 		content_insets.w = 14.0
-	var texture := Art21UIPlacementContractScript.texture_for_visual_key(visual_key, &"ui.art19.button.dark")
-	var style := Art10UISkinKitScript.style_box_from_texture_with_insets(
-		texture,
-		content_insets,
-		inset_profile.get("slice", Vector4(texture_margin, texture_margin, texture_margin, texture_margin))
-	)
-	if style != null:
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			button.add_theme_stylebox_override(state, style.duplicate() as StyleBoxTexture)
+	var normal := tone if tone in [&"primary", &"danger"] else &"normal"
+	if visual_key == &"art21r2.modal.item_row.normal":
+		normal = &"slot"
+	RunVectorSkin.apply_button(button, content_insets, normal)
 	button.set_meta("ui_control_size_class", size_class)
 	button.add_theme_color_override("font_color", Color(0.92, 0.95, 0.88, 1.0))
 	button.add_theme_color_override("font_disabled_color", Color(0.48, 0.54, 0.51, 1.0))

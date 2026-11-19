@@ -1,6 +1,8 @@
 extends Control
 class_name DeployPrepCardView
 
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
+
 const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
 const Art24ItemVisualCatalogScript := preload("res://scripts/presentation/art24/art24_item_visual_catalog.gd")
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
@@ -331,11 +333,8 @@ func _card_surface_state(state: StringName) -> StringName:
 
 
 func _style(state: StringName) -> StyleBox:
-	return Art10UISkinKitScript.style_box_from_asset_ref(
-		Art22DeployPrepAssetContractScript.control_ref(&"card", state),
-		10,
-		24
-	)
+	var selected_or_focused := state in [&"selected", &"focused", &"pressed"]
+	return StationSkin.panel(Color("#1b313a") if selected_or_focused else StationSkin.DEEP, StationSkin.JADE if selected_or_focused else StationSkin.EDGE)
 
 
 func _add_label(node_name: String, rect: Rect2, text: String, font_size: int, color: Color, alignment: HorizontalAlignment) -> Label:
@@ -473,11 +472,7 @@ func _add_asset_panel(node_name: String, rect: Rect2, control_id: StringName, st
 	var panel := Panel.new()
 	panel.name = node_name
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", Art10UISkinKitScript.style_box_from_asset_ref(
-		Art22DeployPrepAssetContractScript.control_ref(control_id, state),
-		5,
-		12
-	))
+	panel.add_theme_stylebox_override("panel", StationSkin.panel())
 	_set_rect(panel, rect)
 	add_child(panel)
 	return panel

@@ -1,0 +1,410 @@
+extends Node2D
+## Actual GLB-backed presentation, sharing A2's normalized movement coordinates.
+## The renderer consumes public snapshots only and never settles event rewards.
+const Layout = preload("res://scripts/gameplay/runtime/g41_runtime_layout.gd")
+const VoxelArt = preload("res://scripts/presentation/voxel_dungeon/voxel_room_art.gd")
+const X_SPAN := 19.3
+const Y_SPAN := 14.77
+const ELEVATION := 55.0
+const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
+const WALL_LIGHT_LAYER := 4
+const IMPACT_SECONDS := 0.24
+var entry: Dictionary = {}
+var viewport: SubViewport
+var front_viewport: SubViewport
+var room_world: Node3D
+var camera: Camera3D
+var front_camera: Camera3D
+var back_sprite: Sprite2D
+var front_sprite: Sprite2D
+var model: Node3D
+var gates: Dictionary = {}
+var gate_targets: Dictionary = {}
+var candle_lights: Array[OmniLight3D] = []
+var assemblies: Dictionary = {}
+var status_lamp: MeshInstance3D
+var _ready_model := false
+var _last_depth := -1
+var _geometry_key := ""
+var _generated_meshes: Dictionary = {}
+var _prop_impacts: Dictionary = {}
+
+func configure(next_entry: Dictionary) -> void:
+	var next_key := String(next_entry.get("geometry_key", next_entry.get("model_path", "")))
+	if not (next_entry.get("breakables", []) as Array).is_empty():
+		next_key += "/with_furniture"
+	if _geometry_key == next_key and _ready_model:
+		show()
+		set_process(true)
+		return
+	_clear()
+	entry = next_entry.duplicate(true)
+	_geometry_key = next_key
+	if entry.is_empty():
+		hide()
+		return
+	_build()
+
+func _clear() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	assemblies.clear()
+	gates.clear()
+	gate_targets.clear()
+	candle_lights.clear()
+	_prop_impacts.clear()
+	status_lamp = null
+	_ready_model = false
+	_last_depth = -1
+	set_process(false)
+
+func deactivate() -> void:
+	_clear()
+	entry.clear()
+	hide()
+
+func _build() -> void:
+	viewport = SubViewport.new()
+	viewport.name = "ModelViewport"
+	viewport.transparent_bg = true
+	viewport.world_3d = World3D.new()
+	viewport.size = Vector2i(1080, 820)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(viewport)
+	room_world = Node3D.new()
+	viewport.add_child(room_world)
+	var environment := WorldEnvironment.new()
+	var settings := Environment.new()
+	settings.background_mode = Environment.BG_CLEAR_COLOR
+	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	settings.ambient_light_color = Color("#aeb9b0")
+	settings.ambient_light_energy = 0.36 if entry.get("polished", false) else 0.24
+	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.environment = settings
+	room_world.add_child(environment)
+	if not String(entry.get("shell_path", "")).is_empty():
+		var shell := (load(String(entry.shell_path)) as PackedScene).instantiate() as Node3D
+		room_world.add_child(shell)
+		_finish_authored_walls(shell)
+	model = _build_generated() if entry.get("generated", false) else (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
+	room_world.add_child(model)
+	if String(entry.get("code", "")) == "B26":
+		_replace_offering_altar()
+	if entry.get("polished", false) and not entry.get("generated", false):
+		room_world.add_child(VoxelArt.new().dress_existing(_geometry_key))
+	var props: Array = entry.get("breakables", [])
+	if not props.is_empty():
+		room_world.add_child(VoxelArt.new().build_breakables(props))
+	_ready_model = model != null
+	_index_meshes(room_world)
+	for prop: Dictionary in props:
+		entry.units.append({"id": prop.id, "ground_y": Rect2(prop.rect).end.y})
+		_set_assembly_visible(String(prop.id) + "_debris", false)
+		_set_assembly_visible(String(prop.id) + "_burst", false)
+	camera = _camera(viewport, 1)
+	front_viewport = SubViewport.new()
+	front_viewport.name = "ForegroundViewport"
+	front_viewport.size = viewport.size
+	front_viewport.transparent_bg = true
+	front_viewport.world_3d = viewport.world_3d
+	front_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(front_viewport)
+	front_camera = _camera(front_viewport, 2)
+	back_sprite = _sprite(viewport, -100)
+	front_sprite = _sprite(front_viewport, 650)
+	_build_lights()
+	_build_gates()
+	status_lamp = _box(room_world, Vector3.ZERO, Vector3(0.12, 0.12, 0.12), Color("86b7a2"))
+	var anchor: Vector2 = entry.interaction_pos
+	status_lamp.position = local_to_model(anchor) + Vector3(0.0, 0.30, 0.0)
+	status_lamp.visible = false
+	set_meta("B_code", entry.code)
+	set_meta("B_model_path", entry.get("model_path", ""))
+	set_process(true)
+	show()
+
+
+func _finish_authored_walls(shell: Node3D) -> void:
+	var material := ShaderMaterial.new()
+	material.shader = VoxelArt.STONE_SHADER
+	material.set_shader_parameter("authored_wall", true)
+	for mesh: MeshInstance3D in shell.find_children("*", "MeshInstance3D", true, false):
+		var label := String(mesh.name)
+		var is_portal := label.begins_with("Portal_") and not label.ends_with("FlushThreshold")
+		if label.begins_with("Wall_") or label.begins_with("Corner_") or is_portal:
+			mesh.set_meta("B_wall_stone", true)
+			for surface in mesh.mesh.get_surface_count():
+				mesh.set_surface_override_material(surface, material)
+
+
+func _replace_offering_altar() -> void:
+	for old_piece: MeshInstance3D in model.find_children("*__main_station_*", "MeshInstance3D", true, false):
+		old_piece.hide()
+		old_piece.set_meta("B_assembly", &"former_altar")
+	room_world.add_child(VoxelArt.new().build_offering_altar(Rect2(entry.body_rect)))
+
+
+func _build_generated() -> Node3D:
+	var key := var_to_str([
+		_geometry_key, entry.get("room_type"), entry.get("event_type"), entry.get("wall_rects"),
+		entry.get("props"), entry.get("object_rect"), entry.get("interaction_pos")
+	])
+	if not _generated_meshes.has(key):
+		var fresh := VoxelArt.new().build(entry)
+		var meshes: Array[Dictionary] = []
+		for part: MeshInstance3D in fresh.get_children():
+			meshes.append({"name": part.name, "mesh": part.mesh, "assembly": part.get_meta("B_assembly", &"")})
+		# Re-entering a room gets fresh transforms and depth masks. The static
+		# vertex and material resources are identical for the same layout.
+		if _generated_meshes.size() >= 12:
+			_generated_meshes.erase(_generated_meshes.keys().front())
+		_generated_meshes[key] = meshes
+		return fresh
+	var reused := Node3D.new()
+	for record: Dictionary in _generated_meshes[key]:
+		var part := MeshInstance3D.new()
+		part.name = record.name
+		part.mesh = record.mesh
+		if record.assembly != &"":
+			part.set_meta("B_assembly", record.assembly)
+		reused.add_child(part)
+	return reused
+
+func _camera(parent: SubViewport, mask: int) -> Camera3D:
+	var c := Camera3D.new()
+	c.projection = Camera3D.PROJECTION_ORTHOGONAL
+	c.keep_aspect = Camera3D.KEEP_HEIGHT
+	var height := Y_SPAN * sin(deg_to_rad(ELEVATION)) * FRAME.size.y
+	c.size = height
+	# Match projection width to the source room coordinate span before the 2D
+	# viewport is fitted to the same room rectangle as actors and hit tests.
+	parent.size = Vector2i(roundi(820 * X_SPAN * FRAME.size.x / height), 820)
+	var center := local_to_model(FRAME.get_center())
+	c.position = center + Vector3(0, sin(deg_to_rad(ELEVATION)), cos(deg_to_rad(ELEVATION))) * 30.0
+	parent.add_child(c)
+	c.look_at(center, Vector3.UP)
+	c.cull_mask = mask
+	c.current = true
+	return c
+
+func _sprite(source: SubViewport, depth: int) -> Sprite2D:
+	var sprite := Sprite2D.new()
+	sprite.texture = source.get_texture()
+	sprite.centered = false
+	sprite.position = Layout.local_to_world(FRAME.position)
+	sprite.scale = Layout.local_size_to_world(FRAME.size) / Vector2(source.size)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	sprite.z_index = depth
+	add_child(sprite)
+	return sprite
+
+func _index_meshes(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh := node as MeshInstance3D
+		var id := String(mesh.get_meta("B_assembly", ""))
+		mesh.layers = (1 | WALL_LIGHT_LAYER) if mesh.has_meta("B_wall_stone") or id == "ArchitectureWalls" else 1
+		if id.is_empty():
+			for unit: Dictionary in entry.units:
+				if String(mesh.name).contains("__" + String(unit.id) + "_"):
+					id = String(unit.id)
+					break
+		if not id.is_empty():
+			if not assemblies.has(id):
+				assemblies[id] = []
+			assemblies[id].append(mesh)
+	for child in node.get_children():
+		_index_meshes(child)
+
+func _build_lights() -> void:
+	for p: Vector3 in [Vector3(-2.0, 1.65, -6), Vector3(2.0, 1.65, -6), Vector3(-7.8, 1.45, -1.7), Vector3(-7.8, 1.45, 1.7), Vector3(7.8, 1.45, -1.7), Vector3(7.8, 1.45, 1.7), Vector3(-2.0, 0.8, 5.8), Vector3(2.0, 0.8, 5.8)]:
+		var light := OmniLight3D.new()
+		light.position = p
+		light.light_color = Color(1.0, 0.56, 0.24)
+		light.light_energy = 3.4
+		light.omni_range = 6.0
+		light.omni_attenuation = 1.4
+		room_world.add_child(light)
+		candle_lights.append(light)
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-65, -25, 0)
+	fill.light_color = Color(0.36, 0.57, 0.60)
+	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
+	room_world.add_child(fill)
+	var masonry := DirectionalLight3D.new()
+	masonry.name = "MasonryFill"
+	masonry.rotation_degrees = Vector3(-49.0, -37.0, 0.0)
+	masonry.light_color = Color("#b9cbd1")
+	masonry.light_energy = 0.49 if entry.get("generated", false) else 0.82
+	masonry.light_cull_mask = WALL_LIGHT_LAYER
+	room_world.add_child(masonry)
+	var work := OmniLight3D.new()
+	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
+	work.light_color = Color(1.0, 0.76, 0.44)
+	work.light_energy = 2.0
+	work.omni_range = 6.0
+	work.shadow_enabled = true
+	room_world.add_child(work)
+
+func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
+	var obj := MeshInstance3D.new()
+	var shape := BoxMesh.new()
+	shape.size = size
+	obj.mesh = shape
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.88
+	obj.material_override = material
+	obj.position = pos
+	obj.layers = 1
+	parent.add_child(obj)
+	return obj
+
+func _build_gates() -> void:
+	for side in ["north", "east", "south", "west"]:
+		var gate := VoxelArt.new().build_gate()
+		gate.name = "B_Gate_" + side
+		room_world.add_child(gate)
+		gate.position = {"north": Vector3(0, 0, -6.45), "south": Vector3(0, 0, 6.45), "east": Vector3(8.4, 0, 0), "west": Vector3(-8.4, 0, 0)}[side]
+		if side in ["east", "west"]:
+			gate.rotation.y = PI / 2
+		gate.position.y = -1.9
+		gate.hide()
+		gates[side] = gate
+		gate_targets[side] = -1.9
+
+func apply_snapshot(snapshot: Dictionary, doors: Array[Dictionary]) -> void:
+	if not _ready_model:
+		return
+	var state: Dictionary = snapshot.get("event_state", {})
+	var lamp_on := StringName(snapshot.get("current_room", &"")) == &"Event" and bool(state.get("completed", false))
+	var changed := status_lamp.visible != lamp_on
+	status_lamp.visible = lamp_on
+	if entry.get("generated", false) and _apply_voxel_prop_state(snapshot):
+		changed = true
+	for d in doors:
+		var side := String(d.get("orientation", ""))
+		if gates.has(side):
+			gate_targets[side] = -1.9 if StringName(d.get("visual_state", &"")) == &"available" else 0.0
+	if changed:
+		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		front_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _apply_voxel_prop_state(snapshot: Dictionary) -> bool:
+	var changed := false
+	if entry.get("room_type") == &"Chest":
+		var opened := bool(snapshot.get("search_state_data", {}).get("searched", false))
+		var rect := Rect2(entry.get("object_rect", Rect2()))
+		var hinge := local_to_model(Vector2(rect.get_center().x, rect.position.y)) + Vector3.UP * 0.72
+		var turn := Basis(Vector3.RIGHT, -0.92 if opened else 0.0)
+		var pose := Transform3D(turn, hinge - turn * hinge)
+		for lid: MeshInstance3D in assemblies.get("chest_lid", []):
+			if not lid.transform.is_equal_approx(pose):
+				lid.transform = pose
+				changed = true
+	elif entry.get("room_type") == &"Mine":
+		var armed := not bool(snapshot.get("current_room_detail", {}).get("triggered", false))
+		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_teeth", []):
+			if part.visible != armed:
+				part.visible = armed
+				changed = true
+	return changed
+
+func update_player_depth(player: Vector2) -> void:
+	if not _ready_model:
+		return
+	var bucket := roundi(player.y * 1000)
+	if bucket == _last_depth:
+		return
+	_last_depth = bucket
+	var changed := false
+	for unit: Dictionary in entry.units:
+		var mask := 3 if player.y < float(unit.ground_y) - 0.01 else 1
+		for mesh: MeshInstance3D in assemblies.get(String(unit.id), []):
+			changed = changed or mesh.layers != mask
+			mesh.layers = mask
+	if changed:
+		front_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+func _process(delta: float) -> void:
+	for side in gates:
+		var gate: Node3D = gates[side]
+		var target := float(gate_targets[side])
+		if is_equal_approx(gate.position.y, target):
+			continue
+		gate.position.y = move_toward(gate.position.y, target, delta * 4.0)
+		gate.visible = gate.position.y > -1.64
+		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if not _prop_impacts.is_empty():
+		_advance_prop_impacts(delta)
+
+
+func sync_breakable_props(hp_by_id: Dictionary, impacted_ids: Array = []) -> void:
+	if not _ready_model:
+		return
+	var changed := false
+	for prop: Dictionary in entry.get("breakables", []):
+		var id: String = prop.id
+		var broken := int(hp_by_id.get(id, prop.max_hp)) <= 0
+		changed = _set_assembly_visible(id, not broken) or changed
+		changed = _set_assembly_visible(id + "_debris", broken) or changed
+		if id in impacted_ids:
+			_prop_impacts[id] = {"elapsed": 0.0, "broken": broken, "center": local_to_model(Rect2(prop.rect).get_center())}
+			_set_prop_transform(id + "_burst", Transform3D.IDENTITY)
+			_set_assembly_visible(id + "_burst", true)
+			changed = true
+		elif _prop_impacts.has(id) and bool(_prop_impacts[id].broken) != broken:
+			_prop_impacts.erase(id)
+			_set_prop_transform(id, Transform3D.IDENTITY)
+			_set_assembly_visible(id + "_burst", false)
+			changed = true
+	if changed:
+		_request_model_redraw()
+
+
+func _set_assembly_visible(id: String, value: bool) -> bool:
+	var changed := false
+	for mesh: MeshInstance3D in assemblies.get(id, []):
+		if mesh.visible != value:
+			mesh.visible = value
+			changed = true
+	return changed
+
+
+func _set_prop_transform(id: String, value: Transform3D) -> void:
+	for mesh: MeshInstance3D in assemblies.get(id, []):
+		mesh.transform = value
+
+
+func _advance_prop_impacts(delta: float) -> void:
+	for id: String in _prop_impacts.keys():
+		var impact: Dictionary = _prop_impacts[id]
+		impact.elapsed = float(impact.elapsed) + delta
+		var progress := minf(float(impact.elapsed) / IMPACT_SECONDS, 1.0)
+		if progress >= 1.0:
+			_prop_impacts.erase(id)
+			_set_prop_transform(id, Transform3D.IDENTITY)
+			_set_assembly_visible(id + "_burst", false)
+			continue
+		var center: Vector3 = impact.center
+		var arc := sin(progress * PI)
+		var scale_up := (1.9 if impact.broken else 0.65) * progress
+		var spread := Basis.from_scale(Vector3(1.0 + scale_up, 1.0 - progress * 0.63, 1.0 + scale_up))
+		var lift := Vector3.UP * (0.61 if impact.broken else 0.51) * arc
+		_set_prop_transform(id + "_burst", Transform3D(spread, center - spread * center + lift))
+		if not impact.broken:
+			var tilt := Basis(Vector3.BACK, sin(progress * TAU) * (1.0 - progress) * 0.19)
+			_set_prop_transform(id, Transform3D(tilt, center - tilt * center))
+	_request_model_redraw()
+
+
+func _request_model_redraw() -> void:
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	front_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+static func local_to_model(pos: Vector2) -> Vector3:
+	return Vector3((pos.x - 0.5) * X_SPAN, 0.06, (pos.y - 0.5) * Y_SPAN)
+
+func debug_snapshot() -> Dictionary:
+	return {"model_loaded": _ready_model, "code": entry.get("code", ""), "model_path": entry.get("model_path", ""), "assemblies": assemblies.keys(), "gate_targets": gate_targets.duplicate(), "lights": candle_lights.size()}

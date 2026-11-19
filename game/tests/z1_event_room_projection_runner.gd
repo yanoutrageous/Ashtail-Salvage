@@ -24,13 +24,13 @@ func _run() -> void:
 		event_types.append(StringName("z1_event_e%02d" % number))
 	for event_type in event_types:
 		_check_room(view, player, event_type)
-	_check(art_hashes.size() == 87, "29 event rooms must load 87 distinct layer textures")
+	_check(art_hashes.size() == 78, "26 retained raster rooms must load 78 distinct textures; the three shared canonical event ids now use B GLB")
 	_check_same_room_update(view)
 	_check_unresolved_event(view)
 	player.free()
 	view.free()
 	if failures.is_empty():
-		print("Z1_EVENT_ROOM_PROJECTION=PASS rooms=29 textures=87 placement,collision,proximity,doors,loot,reprojection,legacy")
+		print("Z1_EVENT_ROOM_PROJECTION=PASS rooms=29 raster_textures=78 glb_rooms=3 placement,collision,proximity,doors,loot,reprojection,legacy")
 		quit(0)
 	else:
 		for failure in failures:
@@ -44,6 +44,17 @@ func _check_room(view: G41RoomRuntimeView, player: PlayerController, event_type:
 	var original := snapshot.duplicate(true)
 	var projected := WorldProjection.build(snapshot)
 	var room: Dictionary = projected.get("event_room", {})
+	if room.has("model_path"):
+		# These three canonical ids are no longer raster-backed. Exercise the
+		# production path rather than asserting the retired PNG layers exist.
+		_check(event_type in [&"trader", &"dice", &"altar"], "unexpected legacy id switched renderer")
+		view.configure_room(snapshot)
+		var renderer := view.get_node_or_null("BModelRoom")
+		_check(renderer != null and bool(renderer.call("debug_snapshot").get("model_loaded", false)), "%s GLB failed to load" % id)
+		_check(view.get_logical_obstacles() == WorldProjection.room_solid_rects(&"Event", event_type), "%s GLB solids disagree" % id)
+		_check(bool(view.request_nearest_interaction(room.interaction_pos).get("accepted", false)), "%s GLB service is inaccessible" % id)
+		_check(snapshot == original, "%s GLB mutated its input snapshot" % id)
+		return
 	_check(String(room.get("id", "")) == id, "%s lacks its public event room projection" % id)
 	if room.is_empty():
 		return

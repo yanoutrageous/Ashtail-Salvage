@@ -8,6 +8,7 @@ const DebugSandboxSessionScript := preload("res://scripts/core/debug/debug_sandb
 const NavigationIntentScript := preload("res://scripts/ui/app_shell/navigation_intent.gd")
 const RunSceneRouteControllerScript := preload("res://scripts/core/run/run_scene_route_controller.gd")
 const RunUIViewModelScript := preload("res://scripts/ui/shell/run_ui_view_model.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 
 var _enabled := false
 var _run_context: Variant
@@ -693,15 +694,7 @@ static func build_panel_view(parent: Control, close_callback: Callable) -> Dicti
 	panel.position = Vector2(980, 270)
 	panel.size = Vector2(240, 420)
 	panel.visible = false
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.012, 0.032, 0.038, 0.97)
-	panel_style.border_color = Color(0.28, 0.82, 0.76, 0.92)
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(4)
-	panel_style.content_margin_left = 10.0
-	panel_style.content_margin_right = 10.0
-	panel_style.content_margin_top = 8.0
-	panel_style.content_margin_bottom = 8.0
+	var panel_style := RunVectorSkin.frame(RunVectorSkin.PANEL, Vector4(10, 8, 10, 8))
 	panel.add_theme_stylebox_override("panel", panel_style)
 	parent.add_child(panel)
 	var outer := VBoxContainer.new()

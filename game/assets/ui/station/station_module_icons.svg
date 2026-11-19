@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="48" viewBox="0 0 288 48">
+  <g transform="translate(0 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M18 10h12v6h6v23H12V16h6zM18 16h12M18 23h12m-12 6h12m-12 5h8"/></g>
+  </g>
+  <g transform="translate(48 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M7 12h14l3 3 3-3h14v24H27l-3 3-3-3H7zm17 3v24M12 20h7m10 0h7M12 25h7m10 0h7"/></g>
+  </g>
+  <g transform="translate(96 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M18 9h12m-8 0v12l-9 13v5h22v-5l-9-13V9M16 32h16"/><circle cx="24" cy="27" r="2"/></g>
+  </g>
+  <g transform="translate(144 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M24 22v7M12 34v-5h24v5"/><rect x="20" y="12" width="8" height="8"/><rect x="8" y="34" width="8" height="6"/><rect x="20" y="34" width="8" height="6"/><rect x="32" y="34" width="8" height="6"/></g>
+  </g>
+  <g transform="translate(192 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="M13 17h22l-3 9-8 4-8-4zm-2 18 7-4m12 0 7 4m-20-16h5m4 0h5M12 16v-6h24v6"/></g>
+  </g>
+  <g transform="translate(240 0)">
+    <path d="M24 2l20 11v22L24 46 4 35V13z" fill="#122330" stroke="#658b90"/>
+    <g fill="none" stroke="#e3ba79" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path d="m24 10 14 8v16l-14 8-14-8V18zm0 0v16m-14-8 14 8 14-8M24 26v16"/></g>
+  </g>
+</svg>

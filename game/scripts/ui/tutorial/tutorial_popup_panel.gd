@@ -293,12 +293,11 @@ func _single_line_button_width(button: Button) -> float:
 
 
 func _reserve_button_focus_inset(button: Button) -> void:
-	# The existing focus texture draws arrows inside both edges. Keep wrapped
-	# action text out of that artwork without reducing its font size.
+	# Leave room for the corner marks without consuming a line of action text.
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var style := button.get_theme_stylebox(state).duplicate() as StyleBox
-		style.content_margin_left = maxf(28.0, style.content_margin_left)
-		style.content_margin_right = maxf(28.0, style.content_margin_right)
+		style.content_margin_left = 12.0
+		style.content_margin_right = 12.0
 		button.add_theme_stylebox_override(state, style)
 
 
@@ -316,8 +315,10 @@ func _resolved_layout_profile() -> Dictionary:
 
 func _tutorial_geometry(profile: Dictionary) -> Dictionary:
 	var layout := RunSurfaceModelScript.layout_geometry(profile)
+	var panel_rect: Rect2 = layout.description_rect
+	panel_rect.size.y = minf(panel_rect.size.y + 34.0, layout.viewport_size.y - panel_rect.position.y - 12.0)
 	return {
-		"panel_rect": layout.description_rect,
+		"panel_rect": panel_rect,
 		"left_hud_rect": layout.protocol_rect,
 		"right_status_rect": layout.scanner_rail_rect,
 		"room_stage_rect": layout.room_stage_rect,

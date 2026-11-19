@@ -125,7 +125,7 @@ Use `新手教程` to verify the fixed tutorial route and tutorial popup.
 - Move inside the current room with W/A/S/D or arrow keys.
 - Walk through a centered door or boundary to change rooms.
 - Use E to search, interact, request extraction, or confirm extraction.
-- Use Space/J to fight when the current room is Monster.
+- Use J or the left mouse button to attack. Press Space to jump or hold Shift while moving to sprint.
 - Use F to flag the current cell.
 - Use M/Tab to toggle MapOverlay.
 - Use R to restart.

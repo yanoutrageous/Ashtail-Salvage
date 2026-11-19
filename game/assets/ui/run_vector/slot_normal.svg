@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="32" viewBox="0 0 48 32">
+  <defs><linearGradient id="metal" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#142631"/><stop offset="1" stop-color="#0e1a25"/></linearGradient></defs>
+  <path id="face" d="M5 1h38l4 4v22l-4 4H5l-4-4V5z" fill="url(#metal)" stroke="#4c6979" stroke-width="1.15"/>
+  <path id="inset" d="M7 4h34l3 3M4 25l3 3h34" fill="none" stroke="#4c6979" stroke-opacity=".74"/>
+  <path id="corner-lights" d="M1 8V5l4-4h4m30 30h4l4-4v-3" fill="none" stroke="#789aa0" stroke-opacity=".83"/>
+  <circle id="rivet" cx="43" cy="7" r="1" fill="#789aa0" opacity=".65"/>
+</svg>

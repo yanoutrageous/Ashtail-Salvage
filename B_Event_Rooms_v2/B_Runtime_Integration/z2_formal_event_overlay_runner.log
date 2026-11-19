@@ -1,0 +1,7 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Z2_FORMAL_EVENT_OVERLAY_CASE=relief
+Z2_FORMAL_EVENT_OVERLAY_ENTERED room=4,4 event=relief
+Z2_FORMAL_EVENT_OVERLAY_REJECTED reason=stale_preview checkpoint_unchanged=true
+Z2_FORMAL_EVENT_OVERLAY_COMMITTED black=9->4 pressure=40->35
+Z2_FORMAL_EVENT_OVERLAY=PASS checks=39 failures=0

@@ -10,7 +10,7 @@ const LongTermShellScript := preload("res://scripts/ui/long_term/long_term_shell
 const RunStartRouteAdapterScript := preload("res://scripts/core/run/run_start_route_adapter.gd")
 const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
-const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
 const SettingsManagerScript := preload("res://scripts/core/settings/settings_manager.gd")
 const SettingsPanelScript := preload("res://scripts/ui/settings/settings_panel.gd")
 const ModalFocusStackScript := preload("res://scripts/ui/shell/modal_focus_stack.gd")
@@ -32,7 +32,8 @@ var long_term_page: Control:
 	get: return _pages.get(PageRouterScript.PAGE_LONG_TERM) as Control
 var settings_page: Control
 var settings_panel: PanelContainer
-var settings_modal_art: TextureRect
+var settings_modal_art: NinePatchRect
+var settings_close_reserve: Control
 var settings_close_button: Button
 var exit_confirm_panel: Control
 var exit_confirm_body: Label
@@ -592,11 +593,10 @@ func _build_settings_overlay() -> void:
 	add_child(settings_page)
 	var dim := _add_color_rect(settings_page, "SettingsOverlayDim", Rect2(0, 0, 1280, 720), Color(0.015, 0.025, 0.03, 0.72))
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	settings_modal_art = _add_art21_texture(
+	settings_modal_art = StationSkin.add_plate(
 		settings_page,
 		"SettingsModalPanel",
-		Rect2(232, 58, 816, 604),
-		&"main_menu.scene.menu.modal.panel"
+		Rect2(232, 58, 816, 604)
 	)
 	settings_panel = SettingsPanelScript.new() as PanelContainer
 	settings_panel.name = "SettingsPanel"
@@ -610,15 +610,19 @@ func _build_settings_overlay() -> void:
 		settings_panel.connect("test_room_requested", _on_test_room_requested)
 	settings_close_button = settings_panel.get("close_button") as Button
 	if settings_close_button != null:
-		var action_row := settings_close_button.get_parent()
+		var action_row := settings_close_button.get_parent() as Control
 		action_row.remove_child(settings_close_button)
-		var close_reserve := Control.new()
-		close_reserve.name = "SettingsExternalCloseReserve"
-		close_reserve.custom_minimum_size = Vector2(98.0, 32.0)
-		action_row.add_child(close_reserve)
+		settings_close_reserve = Control.new()
+		settings_close_reserve.name = "SettingsExternalCloseReserve"
+		settings_close_reserve.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		action_row.add_child(settings_close_reserve)
 		settings_page.add_child(settings_close_button)
 		settings_close_button.name = "SettingsCloseButton"
 		settings_page.move_child(settings_close_button, settings_page.get_child_count() - 1)
+		settings_close_reserve.item_rect_changed.connect(_align_settings_close, CONNECT_DEFERRED)
+		action_row.item_rect_changed.connect(_align_settings_close, CONNECT_DEFERRED)
+		settings_panel.visibility_changed.connect(_align_settings_close, CONNECT_DEFERRED)
+		settings_close_button.minimum_size_changed.connect(_align_settings_close, CONNECT_DEFERRED)
 	_layout_settings_overlay()
 	var viewport := get_viewport()
 	if viewport != null:
@@ -643,19 +647,24 @@ func _layout_settings_overlay() -> void:
 	var modal_rect := Rect2((viewport_size - modal_size) * 0.5, modal_size)
 	Art10UISkinKitScript.set_rect(settings_modal_art, modal_rect)
 	var inner_rect := Rect2(
-		modal_rect.position + Vector2(48.0, 50.0),
-		modal_rect.size - Vector2(96.0, 122.0)
+		modal_rect.position + Vector2(48.0, 38.0),
+		modal_rect.size - Vector2(96.0, 84.0)
 	)
 	Art10UISkinKitScript.set_rect(settings_panel, inner_rect)
-	if settings_close_button != null:
-		var close_size := Art10UISkinKitScript.scaled_control_minimum(
-			Vector2(90.0, 32.0),
-			minf(_ui_scale_factor, 1.25)
-		)
-		Art10UISkinKitScript.set_rect(
-			settings_close_button,
-			Rect2(inner_rect.end - Vector2(close_size.x, close_size.y + 2.0), close_size)
-		)
+	_align_settings_close()
+
+
+func _align_settings_close() -> void:
+	if settings_page == null or settings_close_reserve == null or settings_close_button == null:
+		return
+	var minimum := settings_close_button.get_combined_minimum_size().max(Vector2(90.0, 32.0))
+	if settings_close_reserve.custom_minimum_size != minimum:
+		settings_close_reserve.custom_minimum_size = minimum
+	var rect := settings_close_reserve.get_global_rect()
+	var page_position := settings_page.get_global_transform_with_canvas().affine_inverse() * (
+		settings_close_reserve.get_global_transform_with_canvas().origin
+	)
+	Art10UISkinKitScript.set_rect(settings_close_button, Rect2(page_position, rect.size.max(minimum)))
 
 
 func _build_exit_confirm_layer() -> void:
@@ -667,7 +676,8 @@ func _build_exit_confirm_layer() -> void:
 	add_child(exit_confirm_panel)
 	var dim := _add_color_rect(exit_confirm_panel, "ExitConfirmDim", Rect2(0, 0, 1280, 720), Color(0.015, 0.02, 0.025, 0.76))
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	_add_art21_texture(exit_confirm_panel, "ExitConfirmModalPanel", Rect2(232, 142, 816, 436), &"main_menu.scene.menu.modal.panel")
+	StationSkin.add_plate(exit_confirm_panel, "ExitConfirmModalPanel", Rect2(232, 142, 816, 436), StationSkin.ALERT)
+	StationSkin.add_trim(exit_confirm_panel, &"fascia", StationSkin.BRASS, Rect2(267, 151, 746, 14))
 	_add_overlay_label(exit_confirm_panel, "ExitConfirmTitle", Rect2(350, 190, 580, 50), "退出游戏", 32, Color(0.97, 0.70, 0.35))
 	exit_confirm_body = _add_overlay_label(exit_confirm_panel, "ExitConfirmBody", Rect2(350, 266, 580, 126), "", 17, Color(0.94, 0.90, 0.80))
 	exit_confirm_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1094,23 +1104,6 @@ func _refresh_exit_confirm_text() -> void:
 		exit_confirm_body.text = "确认退出游戏？本操作只关闭程序，不执行探索放弃、结算或资源变动。"
 
 
-func _add_art21_texture(parent: Control, node_name: String, rect: Rect2, visual_key: StringName) -> TextureRect:
-	var texture := Art21UIPlacementContractScript.main_menu_scene_texture(visual_key)
-	if texture == null:
-		return null
-	var texture_rect := TextureRect.new()
-	texture_rect.name = node_name
-	texture_rect.texture = texture
-	texture_rect.position = rect.position.round()
-	texture_rect.size = rect.size.round()
-	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	texture_rect.stretch_mode = TextureRect.STRETCH_SCALE
-	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(texture_rect)
-	return texture_rect
-
-
 func _add_overlay_label(parent: Control, node_name: String, rect: Rect2, text: String, font_size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.name = node_name
@@ -1130,7 +1123,6 @@ func _add_overlay_label(parent: Control, node_name: String, rect: Rect2, text: S
 
 
 func _add_art21_modal_button(parent: Control, node_name: String, rect: Rect2, text: String, callback: Callable) -> Button:
-	_add_art21_texture(parent, "%sTexture" % node_name, rect, &"main_menu.scene.menu.modal.button")
 	var button := Button.new()
 	button.name = node_name
 	button.text = text
@@ -1145,16 +1137,8 @@ func _style_art21_modal_button(button: Button, rect: Rect2) -> void:
 	button.size = rect.size.round()
 	button.focus_mode = Control.FOCUS_ALL
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var empty := StyleBoxEmpty.new()
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		button.add_theme_stylebox_override(state, empty)
-	var font := Art10UISkinKitScript.pixel_font()
-	if font is Font:
-		button.add_theme_font_override("font", font as Font)
+	StationSkin.style_button(button, &"danger" if button.name == &"ExitConfirmAccept" else &"normal")
 	button.add_theme_font_size_override("font_size", 21)
-	button.add_theme_color_override("font_color", Color(0.96, 0.81, 0.48))
-	button.add_theme_color_override("font_hover_color", Color(1.0, 0.93, 0.68))
-	button.add_theme_color_override("font_pressed_color", Color(0.82, 0.64, 0.35))
 
 
 func _add_color_rect(parent: Control, node_name: String, rect: Rect2, color: Color) -> ColorRect:

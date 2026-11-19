@@ -7,6 +7,7 @@ const ACTION_NONE := &"none"
 const ACTION_CANCEL := &"cancel"
 const ACTION_INTERACT := &"interact"
 const ACTION_FIGHT := &"fight"
+const ACTION_JUMP := &"jump"
 const ACTION_FLAG_CURRENT := &"flag_current_cell"
 const ACTION_OPEN_MAP := &"open_map"
 const ACTION_OPEN_INVENTORY := &"open_inventory"
@@ -38,6 +39,13 @@ static func cancel_action(event: InputEvent) -> StringName:
 static func run_action(event: InputEvent) -> StringName:
 	if event == null:
 		return ACTION_NONE
+	# Shift is a held sprint modifier, so Shift+Space must still jump.
+	if (
+		event is InputEventKey
+		and not (event.ctrl_pressed or event.alt_pressed or event.meta_pressed)
+		and event.is_action_pressed(RuntimeInputProfileScript.ACTION_JUMP, false)
+	):
+		return ACTION_JUMP
 	for binding: Dictionary in RUN_ACTION_BINDINGS:
 		if RuntimeInputProfileScript.event_pressed(event, StringName(binding["input_action"])):
 			return StringName(binding["route_action"])
@@ -46,3 +54,7 @@ static func run_action(event: InputEvent) -> StringName:
 
 static func movement_direction(event: InputEvent) -> Vector2:
 	return RuntimeInputProfileScript.movement_direction(event)
+
+
+static func is_weapon_skill(event: InputEvent) -> bool:
+	return RuntimeInputProfileScript.event_pressed(event, RuntimeInputProfileScript.ACTION_WEAPON_SKILL)

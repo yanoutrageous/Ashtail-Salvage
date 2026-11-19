@@ -1,0 +1,121 @@
+{
+  "code": "B38",
+  "event_id": "expand",
+  "title": "扩容",
+  "render": "renders/B38_expand.png",
+  "blend": "blend/B38_expand_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B38_expand__main_station_TableTop_woodlight",
+        "B38_expand__main_station_TableTop_wood",
+        "B38_expand__main_station_TableBands_iron",
+        "B38_expand__main_station_TableRivets_copper",
+        "B38_expand__main_station_TableLegs_wooddark",
+        "B38_expand__main_station_TableRail_wood",
+        "B38_expand__main_station_RepairFrame_wooddark",
+        "B38_expand__main_station_RepairCrossbar_woodlight",
+        "B38_expand__main_station_PackBody_cloth",
+        "B38_expand__main_station_PackFlap_woodlight",
+        "B38_expand__main_station_PackStrap_wooddark",
+        "B38_expand__main_station_PackBuckle_copper",
+        "B38_expand__main_station_FrontPocket_woodlight",
+        "B38_expand__main_station_PackSidePocket_cloth",
+        "B38_expand__main_station_Cylinder_bone",
+        "B38_expand__main_station_LooseStrap_woodlight"
+      ],
+      "bounds": [
+        [
+          -4.199999809265137,
+          1.0750000476837158,
+          0.05999999865889549
+        ],
+        [
+          -1.2000000476837158,
+          2.424999952316284,
+          2.799999952316284
+        ]
+      ]
+    },
+    {
+      "id": "straps",
+      "kind": "floor",
+      "objects": [
+        "B38_expand__straps_RackPost_wood",
+        "B38_expand__straps_RackFoot_wooddark",
+        "B38_expand__straps_RackRail_woodlight",
+        "B38_expand__straps_HangingStrap_woodlight",
+        "B38_expand__straps_StrapBuckle_copper",
+        "B38_expand__straps_HangingStrap_cloth"
+      ],
+      "bounds": [
+        [
+          -6.625,
+          1.875,
+          0.05999999865889549
+        ],
+        [
+          -4.574999809265137,
+          2.5250000953674316,
+          2.0799999237060547
+        ]
+      ]
+    },
+    {
+      "id": "fabric",
+      "kind": "floor",
+      "objects": [
+        "B38_expand__fabric_ShelfUpright_wood",
+        "B38_expand__fabric_ShelfBack_wooddark",
+        "B38_expand__fabric_ShelfBoard_woodlight",
+        "B38_expand__fabric_FoldedCloth_bone",
+        "B38_expand__fabric_FoldedCloth_cloth"
+      ],
+      "bounds": [
+        [
+          -6.525000095367432,
+          4.109999656677246,
+          0.05999999865889549
+        ],
+        [
+          -4.275000095367432,
+          4.789999961853027,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "seat",
+      "kind": "floor",
+      "objects": [
+        "B38_expand__seat_Seat_woodlight",
+        "B38_expand__seat_SeatLegs_wooddark",
+        "B38_expand__seat_ChairBack_wood",
+        "B38_expand__seat_ChairBack_woodlight"
+      ],
+      "bounds": [
+        [
+          -3.0,
+          -0.3499999940395355,
+          0.05999999865889549
+        ],
+        [
+          -2.4000000953674316,
+          0.25,
+          1.4600000381469727
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

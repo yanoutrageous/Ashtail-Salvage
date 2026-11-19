@@ -102,11 +102,15 @@ static func result_text(event_type: StringName, result: Dictionary) -> String:
 	var player_copy := String(result.get("player_result_text", "")).strip_edges()
 	if not player_copy.is_empty():
 		return UISkin.sanitize_player_copy(player_copy)
+	var message := String(result.get("message", "")).strip_edges()
+	# The saved Z2 event record carries its response and player copy rather
+	# than the transient command's success flag.
+	if not result.has("ok") and result_succeeded(result):
+		return UISkin.sanitize_player_copy(message)
 	var number := Catalog.number(event_type)
 	if number == 0:
 		return SurfaceModel.event_result_feedback_text(result)
 
-	var message := String(result.get("message", "")).strip_edges()
 	var generic := message.is_empty() or message == "处理完成。"
 	if not bool(result.get("ok", false)):
 		return SurfaceModel.event_result_feedback_text(result) if generic else UISkin.sanitize_player_copy(message)
@@ -151,6 +155,12 @@ static func result_text(event_type: StringName, result: Dictionary) -> String:
 		20:
 			return "签退完成，收到%d黑币。" % int(result.get("black_coin_delta", 0))
 	return SurfaceModel.event_result_feedback_text(result)
+
+
+static func result_succeeded(result: Dictionary) -> bool:
+	if result.has("ok"):
+		return bool(result["ok"])
+	return result.has("response_lines") and not str(result.get("message", "")).strip_edges().is_empty()
 
 
 static func _applied_delta(result: Dictionary, effect_type: StringName, key: String) -> int:

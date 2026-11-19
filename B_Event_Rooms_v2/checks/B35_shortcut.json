@@ -1,0 +1,91 @@
+{
+  "code": "B35",
+  "event_id": "shortcut",
+  "title": "捷径",
+  "render": "renders/B35_shortcut.png",
+  "blend": "blend/B35_shortcut_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B35_shortcut__main_station_HatchKerb_stone",
+        "B35_shortcut__main_station_DescendingStep_stonelight",
+        "B35_shortcut__main_station_ShaftSide_stone",
+        "B35_shortcut__main_station_OpenHatch_wooddark",
+        "B35_shortcut__main_station_HatchBands_iron",
+        "B35_shortcut__main_station_HatchMarker_stone",
+        "B35_shortcut__main_station_CandleBase_iron",
+        "B35_shortcut__main_station_Wax_bone",
+        "B35_shortcut__main_station_Flame_amber"
+      ],
+      "bounds": [
+        [
+          1.5800000429153442,
+          0.2500000596046448,
+          -1.5
+        ],
+        [
+          4.820000171661377,
+          3.255000114440918,
+          2.1549999713897705
+        ]
+      ]
+    },
+    {
+      "id": "repair_tools",
+      "kind": "floor",
+      "objects": [
+        "B35_shortcut__repair_tools_ToolStand_wood",
+        "B35_shortcut__repair_tools_ToolFoot_wooddark",
+        "B35_shortcut__repair_tools_ToolBoard_wooddark",
+        "B35_shortcut__repair_tools_ToolShaft_edge",
+        "B35_shortcut__repair_tools_ToolHead_iron",
+        "B35_shortcut__repair_tools_ToolHead_copper"
+      ],
+      "bounds": [
+        [
+          4.825000286102295,
+          3.8999998569488525,
+          0.05999999865889549
+        ],
+        [
+          6.775000095367432,
+          4.5,
+          2.075000047683716
+        ]
+      ]
+    },
+    {
+      "id": "marker",
+      "kind": "floor",
+      "objects": [
+        "B35_shortcut__marker_CandleStone_stone",
+        "B35_shortcut__marker_CandleBase_iron",
+        "B35_shortcut__marker_Wax_bone",
+        "B35_shortcut__marker_Flame_amber"
+      ],
+      "bounds": [
+        [
+          5.350000381469727,
+          1.4499999284744263,
+          0.05999999865889549
+        ],
+        [
+          6.25,
+          2.1499998569488525,
+          0.8999999761581421
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

@@ -971,16 +971,16 @@ func _check_protocol_and_left_density() -> void:
 	_check(surface.backpack_capacity_label.text == "共享 2/11\n战利品 9/17", "Bag recalculated authoritative capacity counters from visible category or stack counts")
 	_check_readable_label(surface.backpack_capacity_label, 13, 1.0, "Independent snapshot capacity")
 	var safe_rect := Rect2(surface.status_card_art.get_meta("protocol_safe_rect", Rect2()))
-	for control in [surface.right_title_label, surface.right_body_label, surface.vitals_label, surface.protocol_pressure_track]:
+	for control in [surface.right_title_label, surface.right_body_label, surface.player_health_hud, surface.protocol_pressure_track]:
 		var control_rect := (control as Control).get_global_rect()
 		_check(
 			_rect_encloses_with_tolerance(safe_rect, control_rect),
 			"Protocol content escaped the measured safe rectangle: %s safe=%s actual=%s"
 			% [(control as Control).name, safe_rect, control_rect]
 		)
-	var title_body_gap := _vertical_gap(surface.right_title_label.get_global_rect(), surface.right_body_label.get_global_rect())
+	var title_body_gap: float = surface.right_body_label.get_global_rect().position.x - surface.right_title_label.get_global_rect().end.x
 	var body_track_gap := _vertical_gap(surface.right_body_label.get_global_rect(), surface.protocol_pressure_track.get_global_rect())
-	_check(title_body_gap >= 3.5, "Protocol title/body gap is below 4 px (measured %.2f)" % title_body_gap)
+	_check(title_body_gap >= 0.0, "Protocol title overlaps pressure (measured %.2f)" % title_body_gap)
 	_check(
 		body_track_gap >= 5.5,
 		"Protocol body/track gap is below 6 px (measured %.2f, body=%s, track=%s)"
@@ -991,9 +991,10 @@ func _check_protocol_and_left_density() -> void:
 		]
 	)
 	_check_readable_label(surface.right_body_label, 13, 1.0, "Protocol body")
-	_check_readable_label(surface.vitals_label, 13, 1.0, "Protocol vitals")
-	_check(surface.right_body_label.text == "正常作业 · 压力 100%" and surface.vitals_label.text == "生命 10/10\n强度 3", "Protocol projection lost complete pressure/HP/power facts")
-	_check(_vertical_gap(surface.vitals_label.get_global_rect(), surface.protocol_pressure_track.get_global_rect()) >= 5.5, "Protocol vitals last line is less than 6px above the pressure track")
+	var health_value := surface.player_health_hud.get_node("HealthValue") as Label
+	var power_value := surface.player_health_hud.get_node("PowerValue") as Label
+	_check(surface.right_body_label.text == "压力 100%" and health_value.text == "10 / 10" and power_value.text == "强度 3", "Protocol projection lost complete pressure/HP/power facts")
+	_check(_vertical_gap(surface.player_health_hud.get_global_rect(), surface.right_body_label.get_global_rect()) >= 3.5, "Health widget overlaps the pressure text")
 	canvas.queue_free()
 	await canvas.tree_exited
 
@@ -1243,7 +1244,7 @@ func _surface_model(
 		"backpack_capacity": 12,
 		"equipment_used": 7,
 		"equipment_capacity": 100,
-		"vitals_text": "生命 10/10\n强度 3",
+		"hp": 10, "max_hp": 10, "power": 3,
 		"resource_summary": "生命 10/10 | 作业强度 3 | 待结算黑币 0 | 安全金币 0",
 		"mine_risk": {"count": 0},
 		"protocol_level": protocol_level,

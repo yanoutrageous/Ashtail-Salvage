@@ -1,0 +1,96 @@
+{
+  "code": "B31",
+  "event_id": "mechanism",
+  "title": "机关",
+  "render": "renders/B31_mechanism.png",
+  "blend": "blend/B31_mechanism_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B31_mechanism__main_station_CabinetBody_wooddark",
+        "B31_mechanism__main_station_CabinetEdge_iron",
+        "B31_mechanism__main_station_Rivets_copper",
+        "B31_mechanism__main_station_ScreenFrame_iron",
+        "B31_mechanism__main_station_Screen_black",
+        "B31_mechanism__main_station_ScreenPixels_mint",
+        "B31_mechanism__main_station_SwitchPanel_iron",
+        "B31_mechanism__main_station_LeverBase_iron",
+        "B31_mechanism__main_station_Lever_edge",
+        "B31_mechanism__main_station_LeverGrip_woodlight",
+        "B31_mechanism__main_station_Lamp_copper",
+        "B31_mechanism__main_station_Pipe_copper",
+        "B31_mechanism__main_station_PipeFlange_iron"
+      ],
+      "bounds": [
+        [
+          -1.1649999618530273,
+          -0.3700000047683716,
+          0.009999998845160007
+        ],
+        [
+          1.1649999618530273,
+          1.2300000190734863,
+          2.990000009536743
+        ]
+      ]
+    },
+    {
+      "id": "maintenance",
+      "kind": "floor",
+      "objects": [
+        "B31_mechanism__maintenance_ToolStand_wood",
+        "B31_mechanism__maintenance_ToolFoot_wooddark",
+        "B31_mechanism__maintenance_ToolBoard_wooddark",
+        "B31_mechanism__maintenance_ToolShaft_edge",
+        "B31_mechanism__maintenance_ToolHead_iron",
+        "B31_mechanism__maintenance_ToolHead_copper"
+      ],
+      "bounds": [
+        [
+          -3.9749999046325684,
+          0.5,
+          0.05999999865889549
+        ],
+        [
+          -2.0250000953674316,
+          1.100000023841858,
+          2.075000047683716
+        ]
+      ]
+    },
+    {
+      "id": "parts",
+      "kind": "floor",
+      "objects": [
+        "B31_mechanism__parts_BinBase_wooddark",
+        "B31_mechanism__parts_BinSide_wood",
+        "B31_mechanism__parts_BinSide_woodlight",
+        "B31_mechanism__parts_SortedScrap_copper",
+        "B31_mechanism__parts_SortedScrap_iron"
+      ],
+      "bounds": [
+        [
+          2.3000001907348633,
+          0.33000001311302185,
+          0.05999999865889549
+        ],
+        [
+          3.5,
+          1.2699999809265137,
+          0.7149999737739563
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

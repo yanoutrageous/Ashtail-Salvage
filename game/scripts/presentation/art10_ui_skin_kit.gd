@@ -12,6 +12,7 @@ const Art21UIPlacementContractScript := preload("res://scripts/presentation/art2
 
 const DISPLAY_FONT_ASSET_ID := &"ui.font.fusion_pixel"
 const READABLE_FONT_ASSET_ID := &"ui.art23.long_term.font.body"
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
 const CANVAS_SIZE := Vector2(1280, 720)
 const MIN_RUNTIME_UI_SCALE := 1.0
 const MAX_RUNTIME_UI_SCALE := 1.5
@@ -141,16 +142,16 @@ const ICON_SIZES := {
 }
 
 const COLORS := {
-	&"text": Color(0.89, 0.94, 0.88, 1.0),
-	&"muted": Color(0.56, 0.67, 0.62, 1.0),
+	&"text": Color("#e6eeeb"),
+	&"muted": Color("#a9bfc3"),
 	&"caption": Color(0.68, 0.76, 0.70, 1.0),
 	&"panel": Color(0.020, 0.041, 0.046, 0.48),
 	&"panel_deep": Color(0.010, 0.022, 0.028, 0.58),
 	&"panel_soft": Color(0.050, 0.078, 0.074, 0.32),
 	&"slot": Color(0.038, 0.064, 0.064, 0.58),
-	&"gold": Color(0.94, 0.70, 0.28, 1.0),
+	&"gold": Color("#e9bd76"),
 	&"gold_dark": Color(0.28, 0.18, 0.06, 0.96),
-	&"accent": Color(0.58, 0.93, 0.76, 1.0),
+	&"accent": Color("#86cbc7"),
 	&"warning": Color(0.95, 0.72, 0.30, 1.0),
 	&"danger": Color(0.94, 0.34, 0.28, 1.0),
 	&"shadow": Color(0.0, 0.0, 0.0, 0.42),
@@ -244,23 +245,12 @@ static func pixel_font() -> Resource:
 static func readable_font() -> Resource:
 	if _readable_font_cache != null:
 		return _readable_font_cache
-	var readable_base := _font_asset(DISPLAY_FONT_ASSET_ID)
-	if readable_base == null:
-		return pixel_font()
-	_apply_player_font_runtime_policy(readable_base, true)
-	var glyph_fallback := _font_asset(READABLE_FONT_ASSET_ID)
-	_apply_player_font_runtime_policy(glyph_fallback, false)
-	var font_stack := FontVariation.new()
-	font_stack.resource_name = "FusionPixelReadableWithNotoGlyphFallback"
-	font_stack.base_font = readable_base
-	if glyph_fallback != null:
-		font_stack.fallbacks = [glyph_fallback]
-	_readable_font_cache = font_stack
+	_readable_font_cache = StationSkin.FONT
 	return _readable_font_cache
 
 
-static func font_for_role(role: StringName) -> Resource:
-	return pixel_font() if role == &"display" else readable_font()
+static func font_for_role(_role: StringName) -> Resource:
+	return readable_font()
 
 
 static func set_runtime_ui_scale_factor(value: float) -> float:
@@ -484,9 +474,10 @@ static func _configure_shared_control_theme(shared_theme: Theme) -> void:
 	shared_theme.set_constant(&"center_grabber", &"HSlider", 1)
 	shared_theme.set_constant(&"grabber_offset", &"HSlider", 0)
 
-	var off_icon := _shared_arrow_icon(false, false)
-	var on_icon := _shared_arrow_icon(true, true)
-	var hover_icon := _shared_arrow_icon(true, false)
+	var off_icon := preload("res://assets/ui/station/station_toggle_off.svg")
+	var on_icon := preload("res://assets/ui/station/station_toggle_on.svg")
+	var chevron := preload("res://assets/ui/station/station_chevron.svg")
+	var thumb := preload("res://assets/ui/station/station_slider_thumb.svg")
 	if off_icon != null and on_icon != null:
 		for icon_name in [&"unchecked", &"unchecked_disabled", &"unchecked_hover", &"unchecked_pressed", &"unchecked_hover_pressed"]:
 			shared_theme.set_icon(icon_name, &"CheckButton", off_icon)
@@ -494,17 +485,15 @@ static func _configure_shared_control_theme(shared_theme: Theme) -> void:
 		for icon_name in [&"checked", &"checked_disabled", &"checked_hover", &"checked_pressed", &"checked_hover_pressed"]:
 			shared_theme.set_icon(icon_name, &"CheckButton", on_icon)
 			shared_theme.set_icon(icon_name, &"CheckBox", on_icon)
-		shared_theme.set_icon(&"arrow", &"OptionButton", hover_icon if hover_icon != null else on_icon)
-		shared_theme.set_icon(&"arrow_mirrored", &"OptionButton", off_icon)
+		shared_theme.set_icon(&"arrow", &"OptionButton", chevron)
+		shared_theme.set_icon(&"arrow_mirrored", &"OptionButton", chevron)
 		shared_theme.set_icon(&"checked", &"PopupMenu", on_icon)
 		shared_theme.set_icon(&"unchecked", &"PopupMenu", off_icon)
 		shared_theme.set_icon(&"radio_checked", &"PopupMenu", on_icon)
 		shared_theme.set_icon(&"radio_unchecked", &"PopupMenu", off_icon)
-		shared_theme.set_icon(&"submenu", &"PopupMenu", hover_icon if hover_icon != null else on_icon)
-		shared_theme.set_icon(&"submenu_mirrored", &"PopupMenu", off_icon)
-		shared_theme.set_icon(&"grabber", &"HSlider", hover_icon if hover_icon != null else on_icon)
-		shared_theme.set_icon(&"grabber_highlight", &"HSlider", on_icon)
-		shared_theme.set_icon(&"grabber_disabled", &"HSlider", off_icon)
+		shared_theme.set_icon(&"grabber", &"HSlider", thumb)
+		shared_theme.set_icon(&"grabber_highlight", &"HSlider", thumb)
+		shared_theme.set_icon(&"grabber_disabled", &"HSlider", thumb)
 
 
 static func control_inset_profile(size_class: StringName = &"regular") -> Dictionary:
@@ -513,93 +502,26 @@ static func control_inset_profile(size_class: StringName = &"regular") -> Dictio
 
 
 static func registered_control_style(state: StringName = &"secondary", size_class: StringName = &"regular") -> StyleBox:
-	var visual_key := &"art21r2.modal.button.secondary"
+	var visual := state
 	match state:
-		&"primary", &"selected":
-			visual_key = &"art21r2.modal.button.primary"
-		&"danger":
-			visual_key = &"art21r2.modal.button.danger"
+		&"secondary":
+			visual = &"normal"
 		&"row":
-			visual_key = &"art21r2.modal.item_row.normal"
-	var inset_profile := control_inset_profile(size_class)
-	var slice_insets: Vector4 = inset_profile.get("slice", CONTROL_SLICE_INSETS)
-	var content_insets: Vector4 = inset_profile.get("content", CONTROL_CONTENT_INSETS)
-	var style := _registered_texture_style(
-		visual_key,
-		&"ui.art19.button.dark",
-		slice_insets,
-		content_insets
-	)
-	if style == null:
-		return button_style(&"primary" if state == &"primary" else &"secondary")
-	if state == &"focus" and style is StyleBoxTexture:
-		(style as StyleBoxTexture).draw_center = false
-	if style != null:
-		style.set_meta("ui_control_size_class", size_class)
+			visual = &"slot"
+	var texture: Texture2D = StationSkin.BUTTONS.get(visual, StationSkin.BUTTONS[&"normal"])
+	var insets: Vector4 = control_inset_profile(size_class).get("content", CONTROL_CONTENT_INSETS)
+	var style := style_box_from_texture_with_insets(texture, insets, Vector4.ONE * 9.0)
+	style.set_meta("ui_control_size_class", size_class)
 	return style
 
 
 static func registered_popup_style() -> StyleBox:
-	var style := _registered_texture_style(
-		&"art21r2.modal.section.panel",
-		&"ui.art19.panel.terminal_main",
-		POPUP_SLICE_INSETS,
-		POPUP_CONTENT_INSETS
-	)
-	return style if style != null else panel_style(&"deep")
+	return style_box_from_texture_with_insets(StationSkin.PLATE, POPUP_CONTENT_INSETS, Vector4.ONE * 12.0)
 
 
 static func registered_slider_style(state: StringName = &"secondary") -> StyleBox:
-	var visual_key := &"art21r2.modal.button.primary" if state == &"primary" else &"art21r2.modal.button.secondary"
-	var style := _registered_texture_style(
-		visual_key,
-		&"ui.art19.button.dark",
-		Vector4(18.0, 7.0, 18.0, 7.0),
-		Vector4(2.0, 6.0, 2.0, 6.0)
-	)
-	return style if style != null else transparent_style_box(2)
-
-
-static func _registered_texture_style(
-	visual_key: StringName,
-	fallback_asset_id: StringName,
-	slice_insets: Vector4,
-	content_insets: Vector4
-) -> StyleBoxTexture:
-	var texture := Art21UIPlacementContractScript.texture_for_visual_key(visual_key, fallback_asset_id)
-	if texture == null:
-		return null
-	var style := StyleBoxTexture.new()
-	style.texture = texture
-	style.texture_margin_left = slice_insets.x
-	style.texture_margin_top = slice_insets.y
-	style.texture_margin_right = slice_insets.z
-	style.texture_margin_bottom = slice_insets.w
-	style.content_margin_left = content_insets.x
-	style.content_margin_top = content_insets.y
-	style.content_margin_right = content_insets.z
-	style.content_margin_bottom = content_insets.w
-	style.draw_center = true
-	return style
-
-
-static func _shared_arrow_icon(selected: bool, point_right: bool) -> Texture2D:
-	var visual_key := &"shared.button.secondary.selected" if selected else &"shared.button.secondary.normal"
-	var fallback_asset_id := &"ui.art19.button.selected_tab" if selected else &"ui.art19.button.dark"
-	var texture := Art21UIPlacementContractScript.texture_for_visual_key(visual_key, fallback_asset_id)
-	if texture == null:
-		return null
-	var width := float(texture.get_width())
-	var height := float(texture.get_height())
-	if width < 52.0 or height < 24.0:
-		return texture
-	var icon := AtlasTexture.new()
-	icon.atlas = texture
-	var icon_width := 28.0
-	var icon_height := minf(28.0, height)
-	var x := width - icon_width - 6.0 if point_right else 6.0
-	icon.region = Rect2(x, (height - icon_height) * 0.5, icon_width, icon_height)
-	return icon
+	var tone := &"selected" if state == &"primary" else &"slot"
+	return style_box_from_texture_with_insets(StationSkin.BUTTONS[tone], Vector4(2, 6, 2, 6), Vector4.ONE * 6.0)
 
 
 static func _font_asset(asset_id: StringName) -> Font:
@@ -915,7 +837,7 @@ static func apply_button(button: Button, tone: StringName = &"secondary", font_s
 	button.add_theme_stylebox_override("normal", button_style(tone, false, false))
 	button.add_theme_stylebox_override("hover", button_style(tone, true, false))
 	button.add_theme_stylebox_override("pressed", button_style(tone, false, true))
-	button.add_theme_stylebox_override("focus", button_style(tone, true, false))
+	button.add_theme_stylebox_override("focus", registered_control_style(&"focus"))
 	button.add_theme_stylebox_override("disabled", button_style(&"disabled", false, false))
 	button.modulate = Color(1, 1, 1, 1) if not button.disabled else Color(0.72, 0.76, 0.74, 1.0)
 	button.set_meta("ui_composition_role", &"button")
@@ -963,8 +885,8 @@ static func style_box_from_asset_ref_with_insets(
 static func style_box_from_texture(texture: Texture2D, padding: int = 8, texture_margin: int = 16) -> StyleBoxTexture:
 	if texture == null:
 		return null
-	var slice_margin := maxi(texture_margin, 0)
-	var content_inset := safe_content_margin(padding, slice_margin)
+	var slice_margin := clampi(texture_margin, 0, Art21UIPlacementContractScript.station_slice_limit(texture))
+	var content_inset := safe_content_margin(padding, texture_margin)
 	var style := StyleBoxTexture.new()
 	style.texture = texture
 	style.texture_margin_left = slice_margin
@@ -988,10 +910,11 @@ static func style_box_from_texture_with_insets(
 		return null
 	var style := StyleBoxTexture.new()
 	style.texture = texture
-	style.texture_margin_left = maxf(0.0, slice_insets.x)
-	style.texture_margin_top = maxf(0.0, slice_insets.y)
-	style.texture_margin_right = maxf(0.0, slice_insets.z)
-	style.texture_margin_bottom = maxf(0.0, slice_insets.w)
+	var limit := float(Art21UIPlacementContractScript.station_slice_limit(texture))
+	style.texture_margin_left = clampf(slice_insets.x, 0.0, limit)
+	style.texture_margin_top = clampf(slice_insets.y, 0.0, limit)
+	style.texture_margin_right = clampf(slice_insets.z, 0.0, limit)
+	style.texture_margin_bottom = clampf(slice_insets.w, 0.0, limit)
 	style.content_margin_left = maxf(0.0, content_insets.x)
 	style.content_margin_top = maxf(0.0, content_insets.y)
 	style.content_margin_right = maxf(0.0, content_insets.z)
@@ -1275,166 +1198,49 @@ static func play_panel_open(control: Control) -> void:
 
 
 static func panel_style(tone: StringName = &"surface") -> StyleBox:
-	var bg := color(&"panel")
-	var border := color(&"accent")
-	var border_width := 1
-	var padding := 10
-	var texture_role := &"panel_terminal"
+	var texture := StationSkin.PLATE
+	var padding := 10.0
+	var slice := 12.0
 	match tone:
-		&"deep":
-			bg = color(&"panel_deep")
-			border = color(&"muted")
-			border_width = 2
-			padding = 12
-			texture_role = &"panel_terminal"
-		&"summary":
-			bg = Color(0.044, 0.058, 0.058, 0.58)
-			border = color(&"warning")
-			border_width = 2
-			padding = 12
-			texture_role = &"panel_summary"
-		&"notice":
-			bg = Color(0.052, 0.061, 0.048, 0.54)
-			border = color(&"gold")
-			border_width = 2
-			padding = 10
-			texture_role = &"panel_summary"
-		&"card":
-			bg = Color(0.030, 0.052, 0.056, 0.56)
-			border = Color(0.24, 0.36, 0.34, 1.0)
-			border_width = 2
-			padding = 12
-			texture_role = &"panel_deploy_main"
-		&"selected":
-			bg = Color(0.050, 0.078, 0.066, 0.70)
-			border = color(&"accent")
-			border_width = 3
-			padding = 12
-			texture_role = &"panel_highlight"
-		&"slot":
-			bg = color(&"slot")
-			border = Color(0.30, 0.46, 0.42, 1.0)
-			border_width = 2
-			padding = 6
-			texture_role = &"button_dark"
-		&"gold":
-			bg = color(&"gold_dark")
-			border = color(&"gold")
-			border_width = 3
-			padding = 12
-			texture_role = &"button_confirm"
-		&"reward":
-			bg = Color(0.20, 0.13, 0.04, 0.68)
-			border = color(&"gold")
-			border_width = 2
-			texture_role = &"button_confirm"
-		&"ready":
-			bg = Color(0.044, 0.078, 0.052, 0.66)
-			border = color(&"accent")
-			border_width = 2
-			texture_role = &"button_selected_tab"
-		&"new":
-			bg = Color(0.050, 0.066, 0.088, 0.66)
-			border = Color(0.55, 0.78, 0.96, 1.0)
-			texture_role = &"button_selected_tab"
-		&"locked":
-			bg = Color(0.020, 0.026, 0.028, 0.52)
-			border = color(&"disabled")
-			texture_role = &"button_dark"
-		&"warning":
-			bg = Color(0.068, 0.050, 0.026, 0.68)
-			border = color(&"warning")
-			border_width = 2
-			texture_role = &"panel_summary"
-		&"danger":
-			bg = Color(0.060, 0.032, 0.032, 0.68)
-			border = color(&"danger")
-			border_width = 2
-			texture_role = &"button_dark"
-		&"soft":
-			bg = color(&"panel_soft")
-			border = color(&"muted")
-			padding = 8
-			texture_role = &"panel_summary"
-		_:
-			bg = color(&"panel")
-			border = color(&"accent")
-	var textured := _texture_style_box(texture_role, padding, _texture_margin_for(texture_role))
-	if textured != null:
-		return textured
-	return _style_box(bg, border, border_width, padding, 3)
+		&"card", &"deep", &"modal", &"bar_summary":
+			texture = StationSkin.RAIL
+			padding = 12.0
+		&"summary", &"notice", &"soft":
+			texture = StationSkin.STATUS
+		&"danger", &"warning":
+			texture = StationSkin.ALERT
+		&"new", &"ready", &"selected", &"slot", &"gold", &"reward", &"locked":
+			var token := &"slot"
+			match tone:
+				&"new", &"ready", &"selected":
+					token = &"selected"
+				&"gold", &"reward":
+					token = &"primary"
+				&"locked":
+					token = &"disabled"
+			texture = StationSkin.BUTTONS[token]
+			padding = 6.0 if tone == &"slot" else 12.0
+			slice = 9.0
+	return style_box_from_texture_with_insets(texture, Vector4.ONE * padding, Vector4.ONE * slice)
 
 
 static func button_style(tone: StringName = &"secondary", hover: bool = false, pressed: bool = false) -> StyleBox:
-	var bg := Color(0.032, 0.056, 0.060, 0.95)
-	var border := color(&"muted")
-	var border_width := 1
-	var padding := 8
-	var texture_role := &"button_dark"
+	var token := &"normal"
+	var padding := 8.0
 	match tone:
-		&"primary":
-			bg = Color(0.052, 0.082, 0.074, 0.99)
-			border = color(&"accent")
-			border_width = 2
-			padding = 12
-			texture_role = &"button_selected_tab"
-		&"selected":
-			bg = Color(0.066, 0.100, 0.082, 1.0)
-			border = color(&"accent")
-			border_width = 3
-			padding = 12
-			texture_role = &"button_selected_tab"
-		&"gold":
-			bg = color(&"gold_dark")
-			border = color(&"gold")
-			border_width = 3
-			padding = 12
-			texture_role = &"button_confirm"
-		&"reward":
-			bg = Color(0.20, 0.13, 0.04, 0.96)
-			border = color(&"gold")
-			border_width = 3
-			padding = 10
-			texture_role = &"button_confirm"
-		&"ready":
-			bg = Color(0.045, 0.080, 0.052, 0.96)
-			border = color(&"accent")
-			border_width = 2
-			padding = 10
-			texture_role = &"button_selected_tab"
-		&"new":
-			bg = Color(0.050, 0.066, 0.088, 0.96)
-			border = Color(0.55, 0.78, 0.96, 1.0)
-			border_width = 2
-			texture_role = &"button_selected_tab"
-		&"locked":
-			bg = Color(0.020, 0.028, 0.030, 0.72)
-			border = color(&"disabled")
-			texture_role = &"button_dark"
-		&"warning":
-			border = color(&"warning")
-			border_width = 2
-			texture_role = &"button_dark"
-		&"danger":
-			border = color(&"danger")
-			border_width = 2
-			texture_role = &"button_dark"
-		&"disabled":
-			bg = Color(0.020, 0.028, 0.030, 0.70)
-			border = color(&"disabled")
-			texture_role = &"button_dark"
-		_:
-			border = color(&"muted")
-	if hover:
-		bg = bg.lightened(0.10)
-		border_width = max(border_width, 2)
-	if pressed:
-		bg = bg.darkened(0.12)
-		border_width = max(border_width, 2)
-	var textured := _texture_style_box(texture_role, padding, _texture_margin_for(texture_role))
-	if textured != null:
-		return textured
-	return _style_box(bg, border, border_width, padding, 3)
+		&"primary", &"gold", &"reward":
+			token = &"primary"
+			padding = 12.0
+		&"selected", &"ready", &"new":
+			token = &"selected"
+			padding = 12.0
+		&"warning", &"danger":
+			token = &"danger"
+		&"locked", &"disabled":
+			token = &"disabled"
+	if token == &"normal" and (hover or pressed):
+		token = &"selected" if pressed else &"hover"
+	return style_box_from_texture_with_insets(StationSkin.BUTTONS[token], Vector4.ONE * padding, Vector4.ONE * 9.0)
 
 
 static func transparent_style_box(padding: int = 0) -> StyleBoxFlat:
@@ -1444,54 +1250,6 @@ static func transparent_style_box(padding: int = 0) -> StyleBoxFlat:
 	style.border_width_top = 0
 	style.border_width_right = 0
 	style.border_width_bottom = 0
-	style.content_margin_left = padding
-	style.content_margin_top = padding
-	style.content_margin_right = padding
-	style.content_margin_bottom = padding
-	return style
-
-
-static func _texture_style_box(role: StringName, padding: int, texture_margin: int) -> StyleBoxTexture:
-	var texture := art21_texture(role)
-	if texture == null:
-		texture = art19_texture(role)
-	return style_box_from_texture(texture, padding, texture_margin)
-
-
-static func _texture_margin_for(role: StringName) -> int:
-	match role:
-		&"panel_terminal":
-			return 32
-		&"panel_deploy_main":
-			return 28
-		&"panel_summary":
-			return 16
-		&"panel_highlight":
-			return 16
-		&"button_confirm":
-			return 20
-		&"button_selected_tab":
-			return 14
-		&"button_dark":
-			return 14
-		&"bar_summary":
-			return 18
-		_:
-			return 12
-
-
-static func _style_box(bg: Color, border: Color, border_width: int, padding: int, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.border_color = border
-	style.border_width_left = border_width
-	style.border_width_top = border_width
-	style.border_width_right = border_width
-	style.border_width_bottom = border_width
-	style.corner_radius_top_left = radius
-	style.corner_radius_top_right = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_bottom_right = radius
 	style.content_margin_left = padding
 	style.content_margin_top = padding
 	style.content_margin_right = padding

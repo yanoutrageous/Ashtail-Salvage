@@ -8,7 +8,24 @@ const RunStartConfigScript := preload("res://scripts/core/run/run_start_config.g
 const RunStateMachineScript := preload("res://scripts/core/run/run_state_machine.gd")
 const CheckpointServiceScript := preload("res://scripts/core/save/run_checkpoint_service.gd")
 const VitalsEffects := preload("res://scripts/core/run/run_effect_applier.gd")
+const BreakableCombat := preload("res://scripts/gameplay/combat/voxel_breakable_combat.gd")
 const Z2_CONTENT_VERSION := "z2-system-20261116"
+# These builds use the same Z2 snapshot schema. Keep the regular save integrity
+# and state validation while opening checkpoints from known compatible builds.
+const Z2_COMPATIBLE_CHECKPOINT_HASHES := [
+	"05aa08d5835587eda620ae96076e7ad7fc494f6fc7b98c6d6285accf7650d5bc", # Base game 698beba
+	"377e072c167f0875e79401a355187f9add35881dc1427f5b3fba05e093481e51", # Local merge 66fece5
+	"0912e4179d706121a3d9a93c0ffa4ff72ba9cf5367876489bbeac67c90b1ccc9", # Voxel polish cd37cc1
+	"6dab75d62f73388b7bebe59ad2c88edb9c7078bc6caf2d8de3c3fa595ac6fd15", # UI handoff
+	"6e997f32b5f01ef7b5a2d763b383cdf8282174eca42b572b44f77b231dc9366c", # UI integration repair
+	"a36740400ce1e113950c77e52e16356901b001cf47aab1e5c69634fb762e0adc", # Local polish preview
+	"ee33ae31752e35257774dbd41ed67e8a79ececd19d6abc1ef36a4dea177de768", # Local polish checkpoint verification
+	"0efc9ea1d03d5043127a321bf6e19c5d8fbe06d8a4aedc2d47226854ff9ede34", # Scene and combat polish
+	"df69a96e0a6f336b709e1c57a16a8b866d2392723e79340e2171bc278f86adb0", # First-combat hitch fix
+	"cccf3429daad2f9790292b136b7423e4c09c06091dee8389e6d3b4bd731371e7", # Combat impact and lobby door polish
+	"57a9a08ee1e2bc704a73d7a27098c8d79ccb374cd6aa5bc751c3415dca636c01", # Background hit checkpoints
+	"776a7d6badc69d0955e88d0c3e1fe8e688458e81bc5ffc5f6d864ebebc21617d", # Boss and weapon playtest
+]
 const StateSnapshotScript := preload("res://scripts/core/run/run_state_snapshot.gd")
 const ActionTransactionScript := preload("res://scripts/core/run/run_action_transaction.gd")
 const Z2Hooks := preload("res://scripts/core/run/z2_run_hooks.gd")
@@ -49,6 +66,9 @@ var transaction_revision: int = 0
 var action_receipts: Dictionary = {}
 var checkpoint_writer: Callable = Callable()
 var checkpoint_service
+var background_axe_checkpoints := false
+var _combat_save_thread: Thread
+var _pending_combat_save: Dictionary = {}
 var _planning_action: bool = false
 var _pending_terminal_reason: String = ""
 var persistence_error: Dictionary = {}
@@ -232,6 +252,8 @@ func bind_meta_progress_adapter(adapter) -> void:
 
 
 func execute_meta_action(action: Dictionary) -> Dictionary:
+	if has_pending_combat_save():
+		return _combat_save_pending()
 	var request_id := _exact_meta_id(action.get("request_id", ""))
 	var source_page := _exact_meta_id(action.get("source_page", ""))
 	var action_id := StringName(_exact_meta_id(action.get("action", "")))
@@ -840,10 +862,10 @@ func capture_authoritative_state() -> Dictionary:
 		"pending_terminal": {"phase": str(context.phase), "reason": _pending_terminal_reason} if context.run_started and not context.run_active else {},
 	}
 
-func install_authoritative_state(snapshot: Dictionary) -> Dictionary:
+func install_authoritative_state(snapshot: Dictionary, installed_snapshot: Dictionary = {}) -> Dictionary:
 	if int(snapshot.get("schema_version", 0)) != 1 or not snapshot.get("context") is Dictionary:
 		return {"ok": false, "reason": "invalid_runtime_snapshot"}
-	var installed := StateSnapshotScript.install_context(context, snapshot["context"])
+	var installed := StateSnapshotScript.install_context(context, snapshot["context"], installed_snapshot.get("context", {}))
 	if not bool(installed.get("ok", false)):
 		return installed
 	transaction_revision = int(snapshot.get("revision", 0))
@@ -921,15 +943,11 @@ func persist_candidate_state(snapshot: Dictionary) -> Dictionary:
 		return _persist_checkpoint(snapshot)
 	return {"ok": true, "memory_only": true}
 
-func _persist_checkpoint(snapshot: Dictionary) -> Dictionary:
+func _persist_checkpoint(snapshot: Dictionary, encoded_state: Variant = null) -> Dictionary:
 	if not bool(snapshot["context"]["data"].get("run_started", false)):
 		return {"ok": true, "status": "no_run"}
-	var checkpoint := {
-		"schema_version": 1, "profile_id": checkpoint_service.profile_id,
-		"run_id": str(snapshot["run_id"]), "ruleset_id": "z2", "content_version": Z2_CONTENT_VERSION,
-		"content_hash": _content_hash, "revision": int(snapshot["revision"]),
-		"state": encode_checkpoint_state(snapshot),
-	}
+	var checkpoint := _checkpoint_header(snapshot)
+	checkpoint["state"] = encode_checkpoint_state(snapshot) if encoded_state == null else encoded_state
 	var admission: Dictionary = meta_progress_adapter.data.get("admission", {})
 	if admission.is_empty() or str(admission.get("run_id", "")) != str(snapshot["run_id"]):
 		var reserved: Array = []
@@ -940,7 +958,17 @@ func _persist_checkpoint(snapshot: Dictionary) -> Dictionary:
 		return checkpoint_service.begin_admission(checkpoint, reserved)
 	return checkpoint_service.save_checkpoint(checkpoint)
 
+
+func _checkpoint_header(snapshot: Dictionary) -> Dictionary:
+	return {
+		"schema_version": 1, "profile_id": checkpoint_service.profile_id,
+		"run_id": str(snapshot["run_id"]), "ruleset_id": "z2", "content_version": Z2_CONTENT_VERSION,
+		"content_hash": _content_hash, "revision": int(snapshot["revision"]),
+	}
+
 func execute_atomic_command(command_name: StringName, payload: Dictionary) -> Dictionary:
+	if has_pending_combat_save():
+		return _combat_save_pending()
 	if command_name == &"retry_terminal_commit":
 		# Settlement owns its durable receipt and removes the run checkpoint.
 		# It must never execute inside a speculative run-state candidate.
@@ -1007,6 +1035,8 @@ func guarded_event_display(event_state: Dictionary) -> Dictionary:
 	return display
 
 func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: Callable, action_id: String = "") -> Dictionary:
+	if has_pending_combat_save():
+		return _combat_save_pending()
 	if _planning_action:
 		return operation.call()
 	if not persistence_error.is_empty():
@@ -1051,6 +1081,8 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 	_pending_terminal_reason = ""
 	var returned: Variant = operation.call()
 	var result: Dictionary = returned if returned is Dictionary else _atomic_error("invalid_action_result")
+	if kind == &"combat_fixed_step" and bool(result.get("ok", false)):
+		_apply_combat_breakable_facts(result)
 	if result.get("ok", false):
 		var triggered := Z2Hooks.after_action(context, before["context"], action_id)
 		if not triggered.get("ok", false):
@@ -1077,36 +1109,61 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 	var change_scope := _pending_change_scope
 	var requested_commands := _pending_commands.duplicate(true)
 	var after := capture_authoritative_state()
+	var preview := bool(payload.get("preview", false))
+	var keep_combat_candidate: bool = (
+		kind == &"combat_fixed_step" and bool(result.get("ok", false)) and durability and not preview
+		and context.run_active and before["run_id"] == after["run_id"]
+		and not checkpoint_writer.is_valid() and checkpoint_service != null
+		and checkpoint_service.get_script() == CheckpointServiceScript
+		and checkpoint_service.save_adapter.get_script() == CheckpointServiceScript.SaveAdapterScript
+	)
 	_planning_action = false
 	_active_action_id = ""
 	_pending_terminal_reason = ""
-	install_authoritative_state(before)
-	command_bus.set_block_signals(was_blocking)
+	if not keep_combat_candidate:
+		install_authoritative_state(before)
+		command_bus.set_block_signals(was_blocking)
 	if not bool(result.get("ok", false)):
-		if not bool(payload.get("preview", false)):
+		if not preview:
 			_publish_command_requests(requested_commands)
 		return _without_uncommitted_facts(result)
-	if bool(payload.get("preview", false)):
+	if preview:
 		result["preview"] = true
 		result["condition_fingerprint"] = conditions
 		return result
 	if action_id.is_empty():
 		action_id = "%s:%d:%d:%s" % [str(after.get("run_id", "")), int(after.get("command_sequence", 0)), transaction_revision, str(kind)]
-	var planned := ActionTransactionScript.plan(before, {
-		"kind": kind, "action_id": action_id, "payload": identity_payload,
-		"expected_revision": before["revision"], "computed_state": after,
-		"result": result, "durability_required": durability,
-		"record_receipt": kind not in [&"checkpoint", &"idle_time"],
-	})
-	if not bool(planned.get("ok", false)):
-		return _atomic_error(str(planned.get("reason", "invalid_plan")))
-	var committed := ActionTransactionScript.commit(self, planned["plan"])
+	if durability:
+		# This candidate already saves the entire run at this tick. Start the
+		# next periodic interval at this checkpoint rather than writing again
+		# just after a room entry, hit, or explicitly saved action.
+		after["checkpoint_elapsed"] = 0.0
+	var committed: Dictionary
+	if keep_combat_candidate:
+		if background_axe_checkpoints and _has_landed_axe(result.get("facts", [])):
+			if _start_combat_save(before, after, result, action_id, fingerprint, change_scope, requested_commands):
+				install_authoritative_state(before, after)
+				command_bus.set_block_signals(was_blocking)
+				return _combat_save_pending()
+		committed = _commit_live_combat_candidate(after, result, action_id, fingerprint)
+	else:
+		var planned := ActionTransactionScript.plan(before, {
+			"kind": kind, "action_id": action_id, "payload": identity_payload,
+			"expected_revision": before["revision"], "computed_state": after,
+			"result": result, "durability_required": durability,
+			"record_receipt": kind not in [&"checkpoint", &"idle_time"],
+		})
+		if not bool(planned.get("ok", false)):
+			return _atomic_error(str(planned.get("reason", "invalid_plan")))
+		committed = ActionTransactionScript.commit(self, planned["plan"])
 	if not bool(committed.get("ok", false)):
 		install_authoritative_state(before)
+		command_bus.set_block_signals(was_blocking)
 		if str(committed.get("status", "")) == "save_failed":
 			persistence_error = committed.duplicate(true)
 		_publish_command_requests(requested_commands)
 		return committed
+	command_bus.set_block_signals(was_blocking)
 	_publish_command_requests(requested_commands)
 	if durability and kind != &"checkpoint":
 		command_bus._emit_state(change_scope if change_scope != &"" else (&"combat" if kind in [&"combat_fixed_step", &"idle_time", &"combat_hit"] else &"all"))
@@ -1114,6 +1171,142 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 		if not context.result_snapshot.is_empty() and not context.run_active and context.result_snapshot != previous_result:
 			command_bus.result_available.emit(context.result_snapshot.duplicate(true))
 	return committed
+
+
+func _commit_live_combat_candidate(
+	candidate: Dictionary, result: Dictionary, action_id: String, fingerprint: String
+) -> Dictionary:
+	# The default writer is synchronous and has no game callbacks. Keep the
+	# speculative state installed with signals blocked until its snapshot is
+	# validated and saved. The caller restores the complete pre-step state on error.
+	var committed := _prepare_combat_receipt(candidate, result, action_id, fingerprint)
+	var encoded := StateSnapshotScript.pack_checkpoint(candidate)
+	if encoded.is_empty():
+		return _atomic_error("invalid_candidate_state")
+	var saved := _persist_checkpoint(candidate, encoded)
+	if not bool(saved.get("ok", false)):
+		return {"ok": false, "reason": str(saved.get("reason", saved.get("error", "checkpoint_save_failed"))),
+			"status": &"save_failed", "storage_error": saved}
+	transaction_revision = candidate["revision"]
+	action_receipts = candidate["receipts"]
+	_checkpoint_elapsed = candidate["checkpoint_elapsed"]
+	return committed
+
+
+func _prepare_combat_receipt(candidate: Dictionary, result: Dictionary, action_id: String, fingerprint: String) -> Dictionary:
+	var committed := result.duplicate(true)
+	candidate["revision"] = transaction_revision + 1
+	committed["revision"] = candidate["revision"]
+	committed["action_id"] = action_id
+	candidate["receipts"][action_id] = {"fingerprint": fingerprint, "result": committed.duplicate(true)}
+	return committed
+
+
+func _has_landed_axe(facts: Array) -> bool:
+	for fact: Dictionary in facts:
+		if fact.get("event_type") == &"player_attack_resolved" and fact.get("weapon", &"axe") == &"axe" and (int(fact.get("hit_count", 0)) > 0 or fact.has("hit_breakable_ids")):
+			return true
+	return false
+
+
+func _apply_combat_breakable_facts(result: Dictionary) -> void:
+	for fact: Dictionary in result.get("facts", []):
+		if fact.get("event_type") != &"player_attack_resolved":
+			continue
+		var simulation = in_run_runtime.simulation
+		var obstacles: Array = simulation.arena_obstacles if simulation != null else []
+		var hits := BreakableCombat.breakable_hits(context, fact, obstacles)
+		if not hits.is_empty():
+			BreakableCombat.install_hits(context, hits)
+			fact["hit_breakable_ids"] = hits.keys()
+			result["durability_required"] = true
+
+
+func commit_field_attack(fact: Dictionary, mutate_weapon: Callable = Callable()) -> Dictionary:
+	if not context.run_active or in_run_runtime.has_active_combat():
+		return _atomic_error("field_attack_unavailable")
+	var impacted := BreakableCombat.breakable_hits(context, fact, fact.get("arena_obstacles", []))
+	if impacted.is_empty() and not mutate_weapon.is_valid():
+		return {"ok": true, "status": &"field_swing", "field_attack": fact}
+	return execute_atomic_operation(&"field_attack", fact, func() -> Dictionary:
+		if mutate_weapon.is_valid():
+			mutate_weapon.call()
+		BreakableCombat.install_hits(context, impacted)
+		_pending_change_scope = &"combat"
+		return {"ok": true, "status": &"field_attack", "field_attack": fact, "hit_breakable_ids": impacted.keys()}
+	)
+
+
+func _start_combat_save(
+	before: Dictionary, candidate: Dictionary, result: Dictionary, action_id: String, fingerprint: String,
+	change_scope: StringName, requested_commands: Array[Dictionary]
+) -> bool:
+	var admission: Dictionary = meta_progress_adapter.data.get("admission", {})
+	if admission.get("phase") != "active" or admission.get("run_id") != candidate["run_id"]:
+		return false
+	if not meta_progress_adapter.can_write_persistence():
+		return false
+	var committed := _prepare_combat_receipt(candidate, result, action_id, fingerprint)
+	# The worker receives only detached data. It never accesses game objects or
+	# the live save adapters, and uses the same validated atomic writer.
+	var profile := {
+		"id": meta_progress_adapter.active_profile_id,
+		"path": meta_progress_adapter.active_meta_progress_path,
+		"data": meta_progress_adapter.data.duplicate(true),
+	}
+	var thread := Thread.new()
+	if thread.start(_write_combat_save.bind(candidate, _checkpoint_header(candidate), profile)) != OK:
+		return false
+	_pending_combat_save = {
+		"before": before, "candidate": candidate, "result": committed, "scope": change_scope, "commands": requested_commands,
+	}
+	_combat_save_thread = thread
+	return true
+
+
+static func _write_combat_save(candidate: Dictionary, checkpoint: Dictionary, profile: Dictionary) -> Dictionary:
+	var encoded := StateSnapshotScript.pack_checkpoint(candidate)
+	if encoded.is_empty():
+		return {"ok": false, "reason": "invalid_candidate_state"}
+	checkpoint["state"] = encoded
+	var meta := MetaProgressAdapter.new()
+	meta.active_profile_id = profile["id"]
+	meta.active_meta_progress_path = profile["path"]
+	meta.data = profile["data"]
+	var writer := CheckpointServiceScript.new()
+	var configured := writer.configure(meta, "z2", Z2_CONTENT_VERSION)
+	return writer.save_checkpoint(checkpoint) if bool(configured.get("ok", false)) else configured
+
+
+func has_pending_combat_save() -> bool:
+	return _combat_save_thread != null
+
+
+func _combat_save_pending() -> Dictionary:
+	return {"ok": false, "status": &"checkpoint_pending", "reason": "checkpoint_pending"}
+
+
+func finish_pending_combat_save(wait := false, publish := true) -> Dictionary:
+	if not has_pending_combat_save():
+		return {"ok": true}
+	if not wait and _combat_save_thread.is_alive():
+		return _combat_save_pending()
+	var saved: Dictionary = _combat_save_thread.wait_to_finish()
+	var pending := _pending_combat_save
+	_combat_save_thread = null
+	_pending_combat_save = {}
+	if not bool(saved.get("ok", false)):
+		var failed := {"ok": false, "reason": str(saved.get("reason", "checkpoint_save_failed")),
+			"status": &"save_failed", "storage_error": saved}
+		persistence_error = failed.duplicate(true)
+		return failed
+	var installed := install_authoritative_state(pending["candidate"], pending["before"])
+	if not bool(installed.get("ok", false)):
+		return _storage_error(installed)
+	if publish:
+		_publish_command_requests(pending["commands"])
+		command_bus._emit_state(pending["scope"] if pending["scope"] != &"" else &"combat")
+	return pending["result"]
 
 func retry_persistence() -> Dictionary:
 	if persistence_error.is_empty():
@@ -1174,7 +1367,8 @@ func _restore_durable_checkpoint(force_install: bool) -> Dictionary:
 	if not loaded.has("snapshot"):
 		return loaded
 	var checkpoint: Dictionary = loaded["snapshot"]
-	if str(checkpoint.get("content_hash", "")) != _content_hash:
+	var checkpoint_hash := str(checkpoint.get("content_hash", ""))
+	if checkpoint_hash != _content_hash and checkpoint_hash not in Z2_COMPATIBLE_CHECKPOINT_HASHES:
 		return _storage_error(_atomic_error("checkpoint_content_mismatch"))
 	# Validate even at the same revision. Retain unsaved motion when the primary
 	# is valid and current; a recovered backup must install before repair.
@@ -1197,6 +1391,8 @@ func _storage_error(result: Dictionary) -> Dictionary:
 	return result
 
 func save_current_checkpoint() -> Dictionary:
+	if has_pending_combat_save():
+		return finish_pending_combat_save(true)
 	if not context.run_started or checkpoint_service == null:
 		return {"ok": persistence_error.is_empty(), "status": "no_active_checkpoint"}
 	if not persistence_error.is_empty():
@@ -1275,6 +1471,20 @@ func advance_simulation_time(delta: float, trigger: Dictionary = {}) -> Dictiona
 	return result
 
 
+func can_advance_transient_combat_time(delta: float) -> bool:
+	if _planning_action or not persistence_error.is_empty() or not context.run_active or context.hp <= 0:
+		return false
+	if _checkpoint_elapsed + delta >= 1.0 or not context.temporary_statuses.is_empty():
+		return false
+	return not Z2Hooks.applies_to(context) or (
+		int(context.z1_event_flags.get("z2_income_cursor", 0)) == context.asset_ledger.settlement_log.size()
+	)
+
+
+func advance_transient_combat_time(delta: float) -> void:
+	_checkpoint_elapsed += delta
+
+
 func begin_z2_search() -> Dictionary:
 	var search := Z2Search.new()
 	var saved: Dictionary = context.z1_event_flags.get("z2_search", {})
@@ -1332,6 +1542,8 @@ func advance_idle_frame(delta: float) -> Dictionary:
 		var durable := false
 		while _idle_accumulator + 0.000000001 >= 1.0 / 60.0:
 			_idle_accumulator = maxf(0.0, _idle_accumulator - 1.0 / 60.0)
+			if in_run_runtime != null:
+				in_run_runtime.advance_field_reload(1.0 / 60.0)
 			var advanced := advance_simulation_time(1.0 / 60.0)
 			if not bool(advanced.get("ok", false)):
 				return advanced

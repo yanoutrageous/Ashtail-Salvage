@@ -25,6 +25,7 @@ var focused: bool = false
 var visual_state: StringName = &"idle"
 var prompt_text: String = "Interact"
 var payload: Dictionary = {}
+var _room_supplies_visual := false
 
 
 func configure_interactable(data: Dictionary) -> void:
@@ -69,6 +70,11 @@ func get_context_anchor_world() -> Vector2:
 
 func set_focused(next_focused: bool) -> void:
 	focused = next_focused and enabled
+	_apply_visual_state()
+
+
+func set_room_supplies_visual(supplies_visual: bool) -> void:
+	_room_supplies_visual = supplies_visual
 	_apply_visual_state()
 
 
@@ -151,7 +157,7 @@ func _apply_visual_state() -> void:
 	var placeholder := get_node_or_null("VisualRoot/ProgramPlaceholder") as Polygon2D
 	if placeholder != null:
 		placeholder.color = _placeholder_color()
-		placeholder.visible = not has_resolved_art_visual()
+		placeholder.visible = not _room_supplies_visual and not has_resolved_art_visual()
 		placeholder.set_meta("fallback_reason", &"art_texture_unresolved" if placeholder.visible else &"none")
 	var prompt := get_node_or_null("PromptAnchor/InteractionPrompt") as Label
 	if prompt != null:

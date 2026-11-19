@@ -1,0 +1,95 @@
+{
+  "code": "B29",
+  "event_id": "demine",
+  "title": "排雷",
+  "render": "renders/B29_demine.png",
+  "blend": "blend/B29_demine_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B29_demine__main_station_DetonatorPier_stone",
+        "B29_demine__main_station_TableTop_woodlight",
+        "B29_demine__main_station_TableTop_wood",
+        "B29_demine__main_station_TableBands_iron",
+        "B29_demine__main_station_TableRivets_copper",
+        "B29_demine__main_station_DetonatorBox_wooddark",
+        "B29_demine__main_station_DetonatorBand_iron",
+        "B29_demine__main_station_Plunger_edge",
+        "B29_demine__main_station_PlungerGrip_woodlight",
+        "B29_demine__main_station_Pipe_copper",
+        "B29_demine__main_station_PipeFlange_iron",
+        "B29_demine__main_station_BlastBackstop_stone"
+      ],
+      "bounds": [
+        [
+          2.049999952316284,
+          1.149999976158142,
+          0.05999999865889549
+        ],
+        [
+          4.287499904632568,
+          4.105000019073486,
+          2.4049999713897705
+        ]
+      ]
+    },
+    {
+      "id": "cable_stock",
+      "kind": "floor",
+      "objects": [
+        "B29_demine__cable_stock_ShelfUpright_wood",
+        "B29_demine__cable_stock_ShelfBack_wooddark",
+        "B29_demine__cable_stock_ShelfBoard_woodlight",
+        "B29_demine__cable_stock_Cylinder_copper",
+        "B29_demine__cable_stock_SpoolEnd_wood"
+      ],
+      "bounds": [
+        [
+          4.474999904632568,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          6.724999904632568,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "tool_rack",
+      "kind": "floor",
+      "objects": [
+        "B29_demine__tool_rack_ToolStand_wood",
+        "B29_demine__tool_rack_ToolFoot_wooddark",
+        "B29_demine__tool_rack_ToolBoard_wooddark",
+        "B29_demine__tool_rack_ToolShaft_edge",
+        "B29_demine__tool_rack_ToolHead_iron",
+        "B29_demine__tool_rack_ToolHead_copper"
+      ],
+      "bounds": [
+        [
+          4.825000286102295,
+          1.5,
+          0.05999999865889549
+        ],
+        [
+          6.775000095367432,
+          2.0999999046325684,
+          2.075000047683716
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

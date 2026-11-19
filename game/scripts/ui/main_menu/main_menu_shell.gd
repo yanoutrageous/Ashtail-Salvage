@@ -10,7 +10,10 @@ const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_
 const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
 const Art23LongTermAssetContractScript := preload("res://scripts/presentation/art23_long_term_asset_contract.gd")
 const CharacterPresentationCatalogScript := preload("res://scripts/presentation/character/character_presentation_catalog.gd")
-const MainMenuVisualsScript := preload("res://scripts/ui/main_menu/main_menu_visuals.gd")
+const StationCharacterFrames := preload("res://scripts/ui/shell/station_character_frames.gd")
+const STATION_GATE_SHADER := preload("res://scripts/ui/main_menu/main_menu_station_gate.gdshader")
+const STATION_APPROACH_OFFSET := Vector2(37, -118)
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
 const MainMenuSignButtonScript := preload("res://scripts/ui/main_menu/main_menu_sign_button.gd")
 
 signal navigation_intent_requested(intent: Dictionary)
@@ -92,11 +95,12 @@ var company_activation_texture: TextureRect
 var generic_focus_texture: Panel
 var explore_focus_texture: TextureRect
 var transition_texture: ColorRect
+var station_gate_material: ShaderMaterial
 
 var animated_groups: Array[Dictionary] = []
 var idle_elapsed := 0.0
 var scene_elapsed := 0.0
-var idle_frame_index := 0
+var character_focus_pose_remaining := 0.0
 var transition_active := false
 var transition_token := 0
 var transition_profile_id: StringName = &""
@@ -126,17 +130,12 @@ func build(model: Dictionary = {}, initial_snapshot: Dictionary = {}) -> void:
 	_build_brand_sign()
 	_build_character_scene()
 	_build_notice_board()
-	_build_environment_motion()
 	_build_menu_signpost()
-	_build_ambient_fx()
 	_build_transition_layer()
-	main_menu_visuals = MainMenuVisualsScript.new()
-	main_menu_visuals.name = "MainMenuVisuals"
-	add_child(main_menu_visuals)
-	main_menu_visuals.setup(self)
 	_index_entries()
 	_connect_focus_neighbors()
 	_set_focus_state(&"deploy")
+	_refresh_ui_scaled_copy()
 	set_page_active(true)
 	call_deferred("_grab_default_focus")
 
@@ -220,7 +219,6 @@ func play_navigation_transition(token: int, profile_id: StringName, entry_id: St
 		_reset_navigation_transition(false)
 		return false
 	transition_active = not bool(initial_pose.get("complete", false))
-	_set_entry_visual_state(entry_id, &"pressed")
 	_apply_transition_pose(initial_pose)
 	if transition_active:
 		set_process(true)
@@ -249,6 +247,7 @@ func cancel_navigation_transition(token: int, restore_focus: bool = true) -> boo
 
 func _clear_children() -> void:
 	main_menu_visuals = null
+	station_gate_material = null
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -258,6 +257,8 @@ func _clear_children() -> void:
 	animated_groups.clear()
 	company_window_nodes.clear()
 	character_idle_frames.clear()
+	idle_elapsed = 0.0
+	character_focus_pose_remaining = 0.0
 	character_focus_frames.clear()
 	character_clip_descriptors.clear()
 	character_clip_frames.clear()
@@ -306,7 +307,15 @@ func _build_background_scene() -> void:
 		fixed_underlay.z_as_relative = false
 	var background_root := _root(&"BackgroundRoot")
 	_add_color_rect(background_root, "MainMenuSceneBackdrop", Rect2(0, 0, 1280, 720), Color(0.035, 0.12, 0.20, 1.0))
-	_add_texture(background_root, "MainMenuSceneCleanPlate", Rect2(0, 0, 1280, 720), &"main_menu.scene.background.scene_clean_plate", 1)
+	var texture := load("res://assets/ui/station/front_station.png") as Texture2D
+	var backdrop := _add_texture_from_texture(background_root, "MainMenuSceneCleanPlate", Rect2(0, 0, 1280, 720), texture, 1)
+	if backdrop != null:
+		backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		station_gate_material = ShaderMaterial.new()
+		station_gate_material.shader = STATION_GATE_SHADER
+		_set_station_gate_lift(0.0)
+		backdrop.material = station_gate_material
+	_add_color_rect(background_root, "MainMenuTopFade", Rect2(0, 0, 1280, 6), StationSkin.JADE.darkened(0.50)).z_index = 2
 
 
 func _build_environment_motion() -> void:
@@ -363,202 +372,128 @@ func _build_architecture_scene() -> void:
 
 func _build_brand_sign() -> void:
 	var content_root := _root(&"MainContentRoot")
-	_add_scene_label(content_root, "MainMenuTitle", Rect2(170, 104, 330, 90), String(current_model.get("title", "灰尾回收")), 58, Color(0.98, 0.79, 0.39), 1, 3)
+	StationSkin.add_plate(content_root, "MainMenuNameplateFrame", Rect2(26, 25, 345, 147))
+	_add_texture_from_texture(content_root, "MainMenuWorkshopBadge", Rect2(309, 64, 42, 42), preload("res://assets/ui/station/station_badge.svg"), 1)
+	StationSkin.add_trim(content_root, &"title", StationSkin.BRASS, Rect2(48, 134, 279, 14))
+	_add_scene_label(content_root, "MainMenuTitle", Rect2(46, 42, 398, 86), String(current_model.get("title", "灰尾回收")), 62, StationSkin.INK, 1, 0)
 
 
 func _build_character_scene() -> void:
 	var character_root := _root(&"CharacterRoot")
-	character_shadow_texture = _add_texture(character_root, "MainMenuCharacterShadow", Rect2(286, 594, 196, 24), &"main_menu.scene.character.shadow", 0)
+	character_shadow_texture = _add_texture_from_texture(character_root, "MainMenuCharacterShadow", Rect2(549, 514, 192, 42), StationCharacterFrames.floor_shadow(), 0)
+	character_shadow_texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var presentation := _dictionary_from(current_model.get("character_presentation", {}))
 	character_actor_id = StringName(presentation.get("actor_id", CharacterPresentationCatalogScript.DEFAULT_ACTOR_ID))
 	character_appearance_id = StringName(presentation.get("appearance_id", CharacterPresentationCatalogScript.DEFAULT_APPEARANCE_ID))
-	_load_character_clip(&"idle")
 	_load_character_clip(&"focus_deploy")
 	_load_character_clip(&"focus_long_term")
 	_load_character_clip(&"walk_dungeon")
-	character_idle_frames.assign(character_clip_frames.get(&"idle", []) as Array)
+	character_idle_frames = StationCharacterFrames.lobby_frames(true)
 	for focus_clip_id in [&"focus_deploy", &"focus_long_term"]:
 		for frame in character_clip_frames.get(focus_clip_id, []) as Array:
 			if frame is Texture2D:
 				character_focus_frames.append(frame as Texture2D)
-	var initial := CharacterPresentationCatalogScript.frame_at(
-		character_idle_frames,
-		_dictionary_from(character_clip_descriptors.get(&"idle", {})),
-		0
-	)
-	character_texture = _add_texture_from_texture(character_root, "MainMenuCharacter", Rect2(286, 408, 190, 216), initial, 1)
+	var initial := character_idle_frames[StationCharacterFrames.lobby_frame_index(0.0)]
+	character_texture = _add_texture_from_texture(character_root, "MainMenuCharacter", Rect2(499, 185, 309, 357), initial, 1)
 
 
 func _build_notice_board() -> void:
 	var notice_root := _root(&"SideStatusRoot")
+	var notice_panel := Panel.new()
+	notice_panel.name = "MainMenuNoticePanel"
+	notice_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	notice_panel.add_theme_stylebox_override("panel", Art10UISkinKitScript.panel_style(&"notice"))
+	_set_rect(notice_panel, Rect2(928, 482, 304, 157))
+	notice_root.add_child(notice_panel)
+	StationSkin.add_trim(notice_panel, &"fascia", StationSkin.JADE, Rect2(14, 129, 276, 14))
+	_add_color_rect(notice_root, "MainMenuNoticeRule", Rect2(945, 530, 268, 1), StationSkin.EDGE).z_index = 1
 	var notice: Dictionary = _dictionary_from(current_model.get("notice", {}))
 	var title_text := String(notice.get("title", "回收站简报"))
 	var body_text := String(notice.get("body", ""))
-	var text_fit: Dictionary = MainMenuLayoutContractScript.fit_notice(title_text, body_text, ui_scale_factor)
-	var title_fit: Dictionary = _dictionary_from(text_fit.get("title", {}))
-	var body_fit: Dictionary = _dictionary_from(text_fit.get("description", {}))
-	var heading_size := mini(28, Art10UISkinKitScript.scaled_font_size(22, ui_scale_factor))
-	_add_scene_label(notice_root, "MainMenuNoticeHeading", _layout_rect(&"notice.heading"), "公告", heading_size, Color(0.95, 0.75, 0.35), 2, 2)
 	var title := _add_scene_label(
 		notice_root,
 		"MainMenuNoticeTitle",
-		_layout_rect(&"notice.title"),
-		String(title_fit.get("display_text", title_text)),
-		int(title_fit.get("font_size", 20)),
-		Color(0.38, 0.22, 0.10),
+		Rect2(945, 494, 268, 34),
+		title_text,
+		20,
+		StationSkin.BRASS,
 		3,
 		0
 	)
 	if title != null:
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		title.add_theme_font_size_override("font_size", mini(roundi(20 * ui_scale_factor), 28))
 	var body := _add_scene_label(
 		notice_root,
 		"MainMenuNoticeText",
-		_layout_rect(&"notice.description"),
-		String(body_fit.get("display_text", body_text)),
-		int(body_fit.get("font_size", 16)),
-		Color(0.24, 0.15, 0.09),
+		Rect2(945, 535, 268, 85),
+		body_text,
+		15,
+		StationSkin.MUTED,
 		3,
 		0
 	)
 	if body != null:
 		body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		body.autowrap_mode = TextServer.AUTOWRAP_OFF
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_theme_font_size_override("font_size", mini(roundi(15 * ui_scale_factor), 20))
 		body.add_theme_constant_override("line_spacing", 0)
 
 
 func _build_menu_signpost() -> void:
 	var action_root := _root(&"PrimaryActionRoot")
-	explore_focus_texture = _add_texture(_root(&"FloatingInfoRoot"), "MainMenuExploreFocusOutline", _entry_component_rect(&"deploy", &"focus"), &"main_menu.scene.fx.focus_explore", 3)
-	generic_focus_texture = _add_focus_outline(_root(&"FloatingInfoRoot"), "MainMenuUtilityFocusOutline", _entry_component_rect(&"long_term", &"focus"), 3)
-	cave_activation_texture = _add_texture(_root(&"FloatingInfoRoot"), "MainMenuCaveFocusGlow", Rect2(230, 245, 218, 286), &"main_menu.scene.fx.cave_activation", 1)
-	company_activation_texture = _add_texture(_root(&"FloatingInfoRoot"), "MainMenuCompanyFocusGlow", Rect2(687, 287, 224, 126), &"main_menu.scene.fx.company_activation", 1)
-	if explore_focus_texture != null:
-		explore_focus_texture.visible = false
-		explore_focus_texture.modulate = Color(1, 1, 1, 0.22)
-	if generic_focus_texture != null:
-		generic_focus_texture.visible = false
-	if cave_activation_texture != null:
-		cave_activation_texture.visible = false
-	if company_activation_texture != null:
-		company_activation_texture.visible = false
-
+	StationSkin.add_plate(action_root, "MainMenuControlsHousing", Rect2(26, 217, 330, 346), StationSkin.RAIL)
+	StationSkin.add_trim(action_root, &"fascia", StationSkin.BRASS, Rect2(34, 225, 314, 14))
+	var index := 0
 	for raw_entry in _array_from(current_model, "entries"):
 		if raw_entry is Dictionary:
-			_build_entry(action_root, (raw_entry as Dictionary).duplicate(true))
+			_build_entry(action_root, raw_entry, index)
+			index += 1
 
 
-func _build_entry(parent: Control, entry: Dictionary) -> void:
+func _build_entry(parent: Control, entry: Dictionary, index: int) -> void:
 	var entry_id := StringName(entry.get("id", &""))
-	if not ENTRY_BOARD_NAMES.has(entry_id):
-		return
-	var board_name := String(ENTRY_BOARD_NAMES[entry_id])
-	var label_text := String(entry.get("label", ""))
-	var text_fit: Dictionary = MainMenuLayoutContractScript.fit_entry_text(entry_id, label_text, ui_scale_factor)
-	var board_rect := _entry_component_rect(entry_id, &"board")
-	var text_rect := _entry_component_rect(entry_id, &"text")
-	var hit_rect := _entry_component_rect(entry_id, &"hit")
-	var board := _add_texture(parent, "MainMenuBoard_" + String(entry_id), board_rect, StringName("main_menu.scene.menu.%s.normal" % board_name), 1)
-	var label := _add_scene_label(
-		parent,
-		"MainMenuBoardLabel_" + String(entry_id),
-		text_rect,
-		String(text_fit.get("display_text", label_text)),
-		int(text_fit.get("font_size", 24)),
-		Color(0.98, 0.79, 0.39),
-		2
-	)
+	var primary: bool = entry_id == &"deploy"
 	var button := MainMenuSignButtonScript.new()
 	button.name = "MainMenuEntry_%s" % String(entry_id)
-	button.text = ""
+	button.text = "开始游戏" if primary else String(entry.get("label", ""))
+	button.tooltip_text = String(entry.get("description", ""))
 	button.focus_mode = Control.FOCUS_ALL
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_set_rect(button, hit_rect)
-	_apply_transparent_button_style(button)
+	var rect := Rect2(48, 252 if primary else 347 + (index - 1) * 64, 286, 70 if primary else 50)
+	_set_rect(button, rect)
+	StationSkin.style_button(button, &"primary" if primary else &"normal")
+	button.add_theme_font_size_override("font_size", 31 if primary else 21)
 	button.focus_entered.connect(func() -> void: _set_focus_state(entry_id))
-	button.mouse_entered.connect(func() -> void:
-		button.grab_focus()
-		_set_focus_state(entry_id)
-	)
-	button.button_down.connect(func() -> void: _set_entry_visual_state(entry_id, &"pressed"))
-	button.button_up.connect(func() -> void: _set_entry_visual_state(entry_id, &"focused"))
 	button.pressed.connect(func() -> void: _activate_entry(entry))
-	button.set_meta("runtime_ui_scale_factor", ui_scale_factor)
 	parent.add_child(button)
-	entry_nodes[entry_id] = {
-		"board": board,
-		"label": label,
-		"button": button,
-		"base_board_rect": board_rect,
-		"base_label_rect": text_rect,
-		"base_hit_rect": hit_rect,
-		"board_name": board_name,
-	}
+	var icon_id: StringName = {
+		&"deploy": &"launch",
+		&"long_term": &"archive",
+		&"settings": &"settings",
+		&"exit_game": &"exit",
+	}.get(entry_id, &"")
+	if not icon_id.is_empty():
+		StationSkin.add_trim(button, icon_id, Color("#50391f") if primary else StationSkin.JADE)
+	entry_nodes[entry_id] = {"button": button}
 
 
 func _refresh_ui_scaled_copy() -> void:
-	var notice: Dictionary = _dictionary_from(current_model.get("notice", {}))
-	var notice_title_text := String(notice.get("title", "回收站简报"))
-	var notice_body_text := String(notice.get("body", ""))
-	var notice_fit: Dictionary = MainMenuLayoutContractScript.fit_notice(
-		notice_title_text,
-		notice_body_text,
-		ui_scale_factor
-	)
-	var title_fit := _dictionary_from(notice_fit.get("title", {}))
-	var body_fit := _dictionary_from(notice_fit.get("description", {}))
-	var notice_heading := get_node_or_null("SideStatusRoot/MainMenuNoticeHeading") as Label
-	var notice_title := get_node_or_null("SideStatusRoot/MainMenuNoticeTitle") as Label
-	var notice_body := get_node_or_null("SideStatusRoot/MainMenuNoticeText") as Label
-	_apply_scaled_copy_label(
-		notice_heading,
-		&"title",
-		mini(28, Art10UISkinKitScript.scaled_font_size(22, ui_scale_factor)),
-		notice_heading.text if notice_heading != null else "公告"
-	)
-	_apply_scaled_copy_label(
-		notice_title,
-		&"title",
-		int(title_fit.get("font_size", 20)),
-		String(title_fit.get("display_text", notice_title_text))
-	)
-	_apply_scaled_copy_label(
-		notice_body,
-		&"body",
-		int(body_fit.get("font_size", 16)),
-		String(body_fit.get("display_text", notice_body_text))
-	)
-	if notice_body != null:
-		notice_body.autowrap_mode = TextServer.AUTOWRAP_OFF
-		notice_body.add_theme_constant_override("line_spacing", 0)
+	for path in ["MainContentRoot/MainMenuTitle", "SideStatusRoot/MainMenuNoticeTitle", "SideStatusRoot/MainMenuNoticeText"]:
+		var label := get_node_or_null(path) as Label
+		if label == null:
+			continue
+		var base := 62 if label.name == &"MainMenuTitle" else (19 if label.name == &"MainMenuNoticeTitle" else 15)
+		var cap := 76 if base == 62 else 23
+		label.add_theme_font_size_override("font_size", mini(cap, Art10UISkinKitScript.scaled_font_size(base, ui_scale_factor)))
+		label.set_meta("runtime_ui_scale_factor", ui_scale_factor)
 	for entry_id in entry_nodes:
-		var nodes := _dictionary_from(entry_nodes[entry_id])
-		var entry := _dictionary_from(entry_by_id.get(entry_id, {}))
-		var label_text := String(entry.get("label", ""))
-		var text_fit := MainMenuLayoutContractScript.fit_entry_text(
-			StringName(entry_id),
-			label_text,
-			ui_scale_factor
-		)
-		var label := nodes.get("label") as Label
-		_apply_scaled_copy_label(
-			label,
-			&"button",
-			int(text_fit.get("font_size", 24)),
-			String(text_fit.get("display_text", label_text))
-		)
-		var button := nodes.get("button") as Button
+		var button := _dictionary_from(entry_nodes[entry_id]).get("button") as Button
 		if button != null:
+			var primary: bool = entry_id == &"deploy"
+			button.add_theme_font_size_override("font_size", mini(42 if primary else 28, Art10UISkinKitScript.scaled_font_size(31 if primary else 21, ui_scale_factor)))
 			button.set_meta("runtime_ui_scale_factor", ui_scale_factor)
-
-
-func _apply_scaled_copy_label(label: Label, role: StringName, font_size_value: int, text: String) -> void:
-	if label == null:
-		return
-	label.text = text
-	Art10UISkinKitScript.apply_composition_label(label, role, font_size_value)
-	label.set_meta("runtime_ui_scale_factor", ui_scale_factor)
 
 
 func _build_ambient_fx() -> void:
@@ -617,70 +552,29 @@ func _grab_default_focus() -> void:
 func _set_focus_state(entry_id: StringName) -> void:
 	if not entry_nodes.has(entry_id) or transition_token > 0:
 		return
+	character_focus_pose_remaining = 0.65
 	current_focus = entry_id
-	for raw_id in entry_nodes.keys():
-		var id := StringName(raw_id)
-		_set_entry_visual_state(id, &"focused" if id == entry_id else &"normal")
-
-	var explore_focused := entry_id == &"deploy"
-	var company_focused := entry_id == &"long_term"
-	if cave_activation_texture != null:
-		cave_activation_texture.visible = explore_focused
-	if company_activation_texture != null:
-		company_activation_texture.visible = company_focused
-	if explore_focus_texture != null:
-		explore_focus_texture.visible = explore_focused
-		if explore_focused:
-			_set_rect(explore_focus_texture, _entry_component_rect(entry_id, &"focus", &"focused"))
-	if generic_focus_texture != null:
-		generic_focus_texture.visible = not explore_focused
-		if not explore_focused:
-			_set_rect(generic_focus_texture, _entry_component_rect(entry_id, &"focus", &"focused"))
-	if cave_interior_texture != null:
-		cave_interior_texture.texture = _texture(&"main_menu.scene.architecture.cave.focused" if explore_focused else &"main_menu.scene.architecture.cave.normal")
-	if dungeon_gate_texture != null:
-		dungeon_gate_texture.texture = _texture(&"main_menu.scene.architecture.dungeon_gate.focused" if explore_focused else &"main_menu.scene.architecture.dungeon_gate.normal")
-	if company_door_texture != null:
-		company_door_texture.texture = _texture(&"main_menu.scene.architecture.company_door.focused" if company_focused else &"main_menu.scene.architecture.company_door.normal")
-	for window in company_window_nodes:
-		window.texture = _texture(&"main_menu.scene.fx.company_window.01" if company_focused else &"main_menu.scene.fx.company_window.00")
 	_update_character_focus_texture()
-
-
-func _set_entry_visual_state(entry_id: StringName, state: StringName) -> void:
-	if not entry_nodes.has(entry_id):
-		return
-	var node_set := _dictionary_from(entry_nodes[entry_id])
-	var board := node_set.get("board") as TextureRect
-	var label := node_set.get("label") as Label
-	var button := node_set.get("button") as Button
-	var board_name := String(node_set.get("board_name", ""))
-	if board != null:
-		board.texture = _texture(StringName("main_menu.scene.menu.%s.%s" % [board_name, String(state)]))
-		_set_rect(board, _entry_component_rect(entry_id, &"board", state))
-	if label != null:
-		_set_rect(label, _entry_component_rect(entry_id, &"text", state))
-		label.modulate = Color(1.10, 1.06, 0.92, 1.0) if state == &"focused" else Color.WHITE
-	if button != null:
-		_set_rect(button, _entry_component_rect(entry_id, &"hit", state))
-	if entry_id == current_focus:
-		var focus_rect := _entry_component_rect(entry_id, &"focus", state)
-		if entry_id == &"deploy" and explore_focus_texture != null:
-			_set_rect(explore_focus_texture, focus_rect)
-		elif entry_id != &"deploy" and generic_focus_texture != null:
-			_set_rect(generic_focus_texture, focus_rect)
-	if main_menu_visuals != null:
-		main_menu_visuals.refresh_mounts()
 
 
 func _update_character_focus_texture() -> void:
 	if character_texture == null or transition_token > 0:
 		return
-	if current_focus == &"deploy" and _apply_character_clip_pose(&"focus_deploy"):
+	if not reduced_motion and character_focus_pose_remaining > 0.0:
+		if current_focus == &"deploy" and _apply_character_clip_pose(&"focus_deploy"):
+			return
+		if current_focus == &"long_term" and _apply_character_clip_pose(&"focus_long_term"):
+			return
+	_apply_lobby_frame(0.0 if reduced_motion else idle_elapsed)
+
+
+func _apply_lobby_frame(elapsed: float) -> void:
+	if character_texture == null or character_idle_frames.is_empty():
 		return
-	if current_focus == &"long_term" and _apply_character_clip_pose(&"focus_long_term"):
-		return
-	_apply_character_clip_pose(&"idle", idle_frame_index)
+	var frame := character_idle_frames[StationCharacterFrames.lobby_frame_index(elapsed)]
+	if character_texture.texture != frame:
+		character_texture.texture = frame
+	character_texture.flip_h = false
 
 
 func _activate_entry(entry: Dictionary) -> void:
@@ -709,15 +603,9 @@ func _process(delta: float) -> void:
 	if transition_token > 0:
 		return
 	if not reduced_motion:
+		character_focus_pose_remaining = maxf(0.0, character_focus_pose_remaining - delta)
 		idle_elapsed += delta
-		var idle_descriptor := _dictionary_from(character_clip_descriptors.get(&"idle", {}))
-		var idle_sequence := idle_descriptor.get("sequence", []) as Array
-		var idle_frame_seconds := maxf(0.01, float(idle_descriptor.get("frame_seconds", 0.32)))
-		if not idle_sequence.is_empty() and idle_elapsed >= idle_frame_seconds:
-			idle_elapsed = fmod(idle_elapsed, idle_frame_seconds)
-			idle_frame_index = (idle_frame_index + 1) % idle_sequence.size()
-			if current_focus != &"deploy" and current_focus != &"long_term":
-				_update_character_focus_texture()
+		_update_character_focus_texture()
 		_update_ambient_motion(delta)
 	else:
 		for group in animated_groups:
@@ -813,6 +701,7 @@ func _update_cloud_drift() -> void:
 
 
 func _apply_reduced_motion_pose() -> void:
+	_update_character_focus_texture()
 	for group in animated_groups:
 		var node := group.get("node") as TextureRect
 		if node == null:
@@ -854,6 +743,7 @@ func _apply_transition_pose(pose: Dictionary) -> void:
 	if transition_texture != null:
 		transition_texture.color = overlay_color
 		transition_texture.visible = overlay_color.a > 0.001
+	_set_station_gate_lift(float(pose.get("station_gate_lift", 0.0)))
 	_apply_activation_alpha(cave_activation_texture, float(pose.get("cave_activation_alpha", 0.0)))
 	_apply_activation_alpha(company_activation_texture, float(pose.get("company_activation_alpha", 0.0)))
 	_apply_character_transition_pose(
@@ -861,8 +751,15 @@ func _apply_transition_pose(pose: Dictionary) -> void:
 		int(pose.get("character_clip_step", 0))
 	)
 	_apply_character_transition_transform(pose)
-	if character_shadow_texture != null:
-		character_shadow_texture.modulate = Color(1, 1, 1, clampf(float(pose.get("shadow_alpha", 1.0)), 0.0, 1.0))
+	if character_shadow_texture != null and not transition_character_base_state.is_empty():
+		var shadow_modulate := transition_character_base_state["shadow_modulate"] as Color
+		shadow_modulate.a *= clampf(float(pose.get("shadow_alpha", 1.0)), 0.0, 1.0)
+		character_shadow_texture.modulate = shadow_modulate
+
+
+func _set_station_gate_lift(lift: float) -> void:
+	if station_gate_material != null:
+		station_gate_material.set_shader_parameter(&"gate_lift", lift)
 
 
 func _apply_activation_alpha(texture_rect: TextureRect, alpha: float) -> void:
@@ -878,7 +775,7 @@ func _apply_character_transition_pose(pose_id: StringName, step: int = 0) -> voi
 		return
 	if pose_id in [&"focus_deploy", &"focus_long_term", &"walk_dungeon"] and _apply_character_clip_pose(pose_id, step):
 		return
-	_apply_character_clip_pose(&"idle", idle_frame_index)
+	_apply_lobby_frame(0.0 if reduced_motion else idle_elapsed)
 
 
 func _apply_character_transition_transform(pose: Dictionary) -> void:
@@ -896,13 +793,16 @@ func _apply_character_transition_transform(pose: Dictionary) -> void:
 		return
 
 	var travel_progress := clampf(float(pose.get("character_travel_progress", 0.0)), 0.0, 1.0)
-	var target_position := MainMenuLayoutContractScript.logical_anchor(&"character_cave_inside")
+	var travel_offset := (STATION_APPROACH_OFFSET * travel_progress).round()
 	var scale_factor := clampf(float(pose.get("character_scale_factor", 1.0)), 0.1, 1.0)
 	var alpha := clampf(float(pose.get("character_alpha", 1.0)), 0.0, 1.0)
-	character_texture.pivot_offset = character_texture.size * 0.5
-	character_texture.position = base_position.lerp(target_position, travel_progress).round()
+	character_texture.pivot_offset = Vector2(character_texture.size.x * 0.5, character_texture.size.y)
+	character_texture.position = base_position + travel_offset
 	character_texture.scale = Vector2(base_scale.x * scale_factor, base_scale.y * scale_factor)
 	character_texture.modulate = Color(base_modulate.r, base_modulate.g, base_modulate.b, base_modulate.a * alpha)
+	if character_shadow_texture != null:
+		var shadow_position := transition_character_base_state["shadow_position"] as Vector2
+		character_shadow_texture.position = shadow_position + travel_offset
 
 
 func _load_character_clip(clip_id: StringName) -> void:
@@ -912,7 +812,7 @@ func _load_character_clip(clip_id: StringName) -> void:
 		clip_id
 	)
 	character_clip_descriptors[clip_id] = descriptor
-	character_clip_frames[clip_id] = CharacterPresentationCatalogScript.load_frames(descriptor)
+	character_clip_frames[clip_id] = CharacterPresentationCatalogScript.load_frames(descriptor, StationCharacterFrames.front_frame)
 
 
 func _apply_character_clip_pose(clip_id: StringName, step: int = 0) -> bool:
@@ -951,6 +851,8 @@ func _capture_transition_character_state() -> void:
 		"pivot_offset": character_texture.pivot_offset,
 		"texture": character_texture.texture,
 		"flip_h": character_texture.flip_h,
+		"shadow_position": character_shadow_texture.position if character_shadow_texture != null else Vector2.ZERO,
+		"shadow_modulate": character_shadow_texture.modulate if character_shadow_texture != null else Color.WHITE,
 	}
 
 
@@ -980,6 +882,9 @@ func _restore_transition_character_state() -> void:
 		character_texture.pivot_offset = transition_character_base_state.get("pivot_offset", character_texture.pivot_offset) as Vector2
 		character_texture.texture = transition_character_base_state.get("texture", character_texture.texture) as Texture2D
 		character_texture.flip_h = bool(transition_character_base_state.get("flip_h", character_texture.flip_h))
+		if character_shadow_texture != null:
+			character_shadow_texture.position = transition_character_base_state["shadow_position"] as Vector2
+			character_shadow_texture.modulate = transition_character_base_state["shadow_modulate"] as Color
 	transition_character_base_state.clear()
 
 
@@ -990,8 +895,7 @@ func _reset_navigation_transition(restore_focus_owner: bool) -> void:
 	if transition_texture != null:
 		transition_texture.color = Color(0.018, 0.024, 0.032, 0.0)
 		transition_texture.visible = false
-	if character_shadow_texture != null:
-		character_shadow_texture.modulate = Color.WHITE
+	_set_station_gate_lift(0.0)
 	if cave_activation_texture != null:
 		cave_activation_texture.modulate = Color(1, 1, 1, 0.30)
 	if company_activation_texture != null:
@@ -1173,6 +1077,8 @@ func _add_scene_label(parent: Control, node_name: String, rect: Rect2, text: Str
 	elif node_name.begins_with("MainMenuBoardLabel_"):
 		composition_role = &"button"
 	Art10UISkinKitScript.apply_composition_label(label, composition_role, font_size, color)
+	StationSkin.apply_label(label, color)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if outline_size > 0:
 		label.add_theme_color_override("font_outline_color", Color(0.10, 0.055, 0.025, 0.92))
 		label.add_theme_constant_override("outline_size", outline_size)

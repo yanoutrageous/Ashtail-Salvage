@@ -3,9 +3,8 @@ class_name MapOverlayPanel
 
 const RunUIViewModel := preload("res://scripts/ui/shell/run_ui_view_model.gd")
 const UILayerContractScript := preload("res://scripts/ui/shell/ui_layer_contract.gd")
-const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
-const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
 const Art24MapOverlayLayoutScript := preload("res://scripts/presentation/art24/art24_map_overlay_layout.gd")
 const SemanticActionHintScript := preload("res://scripts/core/input/semantic_action_hint.gd")
 const MapCellLayerLayoutScript := preload("res://scripts/ui/map_shared/map_cell_layer_layout.gd")
@@ -334,7 +333,8 @@ func _add_marker_node(grid: GridContainer, marker: Dictionary) -> void:
 	button.set_meta("map_cell_layer_layout", layer_layout.duplicate(true))
 	button.set_meta("map_cell_clip_contract", true)
 	_apply_marker_button_style(button, theme_key, state, selected)
-	var texture := Art09ManifestAssetMappingScript.resolve_texture(_map_overlay_asset_ref_for_marker(marker))
+	var texture := RunVectorSkin.map_symbol(state)
+	button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	if texture != null:
 		var semantic_icon := TextureRect.new()
 		semantic_icon.name = "SemanticMarker"
@@ -346,7 +346,7 @@ func _add_marker_node(grid: GridContainer, marker: Dictionary) -> void:
 		MapCellLayerLayoutScript.apply_rect(semantic_icon, Rect2(layer_layout.get("semantic_rect", Rect2())))
 		button.add_child(semantic_icon)
 		button.set_meta("semantic_texture", texture)
-	else:
+	elif state not in [&"unknown", &"scanned", &"explored"]:
 		var semantic_fallback := Label.new()
 		semantic_fallback.name = "SemanticFallback"
 		semantic_fallback.text = label_text
@@ -433,16 +433,8 @@ func _apply_overlay_panel_style(control: Control) -> void:
 	var panel := control as PanelContainer
 	# The host remains tightly fitted, but it must be opaque enough that protocol
 	# copy and room art cannot remain legible through grid gaps.
-	var backing := StyleBoxFlat.new()
-	backing.bg_color = Color(0.045, 0.050, 0.042, 0.99)
-	backing.border_color = Color(0.54, 0.46, 0.30, 0.96)
-	backing.set_border_width_all(2)
-	backing.content_margin_left = 0
-	backing.content_margin_top = 0
-	backing.content_margin_right = 0
-	backing.content_margin_bottom = 0
-	panel.add_theme_stylebox_override("panel", backing)
-	panel.set_meta("map_content_backing_alpha", backing.bg_color.a)
+	panel.add_theme_stylebox_override("panel", RunVectorSkin.frame(RunVectorSkin.RAIL, Vector4.ZERO))
+	panel.set_meta("map_content_backing_alpha", 1.0)
 
 
 func _apply_overlay_text_hierarchy(title: Label, detail: Label, action_button: Button, footer: Label) -> void:
@@ -466,6 +458,8 @@ func _apply_overlay_text_hierarchy(title: Label, detail: Label, action_button: B
 			&"primary",
 			Art10UISkinKitScript.scaled_font_size(14, ui_scale_factor)
 		)
+		RunVectorSkin.apply_button(action_button, Vector4(12, 4, 12, 4), &"primary")
+		RunVectorSkin.set_icon(action_button, RunVectorSkin.MAP)
 	if footer != null:
 		footer.custom_minimum_size = Vector2(text_width, float(layout_metrics.get("footer_height", 26)))
 		footer.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -506,29 +500,9 @@ func _art24_map_tile_style(state: StringName, selected: bool) -> StyleBox:
 				token = "danger"
 			&"monster":
 				token = "danger"
-	var texture := load("res://assets/art24/ui/map_tile_%s.png" % token) as Texture2D
-	if texture == null:
-		return Art10UISkinKitScript.transparent_style_box(0)
-	var style := StyleBoxTexture.new()
-	style.texture = texture
-	style.texture_margin_left = 8
-	style.texture_margin_top = 8
-	style.texture_margin_right = 8
-	style.texture_margin_bottom = 8
-	# The tile border uses an 8 px source slice, but its icon needs only a 4 px
-	# rendered safe inset. Leaving content margins implicit made the player icon
-	# enlarge one GridContainer row beyond the requested marker size.
-	style.content_margin_left = 4
-	style.content_margin_top = 4
-	style.content_margin_right = 4
-	style.content_margin_bottom = 4
-	style.draw_center = true
-	if token == "flagged":
-		# UE communicates a player-authored danger flag with a red cell field.  The
-		# source tile remains copper/yellow and reusable; tint only the background
-		# style so the separately rendered flag icon keeps its gold identity.
-		style.modulate_color = Color(1.20, 0.42, 0.42, 1.0)
-	return style
+	return Art10UISkinKitScript.style_box_from_texture_with_insets(
+		RunVectorSkin.map_tile(StringName(token)), Vector4.ONE * 4.0, Vector4.ONE * 4.0
+	)
 
 
 func _icon_width_for_marker_state(state: StringName, size: Vector2) -> int:
@@ -567,17 +541,6 @@ func _modulate_for_marker_state(state: StringName, selected: bool) -> Color:
 
 func _public_adjacent_mines(marker: Dictionary) -> int:
 	return PresentationMapping.public_adjacent_mines(marker)
-
-
-func _map_overlay_asset_ref_for_marker(marker: Dictionary) -> Dictionary:
-	var state := PresentationMapping.map_marker_state(marker)
-	match state:
-		&"flagged", &"event":
-			return Art21UIPlacementContractScript.map_ref(state)
-		&"monster":
-			return Art09ManifestAssetMappingScript.asset_ref(&"icon.room.monster", &"icon.minimap.explored", &"map_overlay_marker", state)
-		_:
-			return Art09ManifestAssetMappingScript.art19_map64_ref(state)
 
 
 func _is_selected_marker(marker: Dictionary) -> bool:

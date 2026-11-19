@@ -39,7 +39,7 @@ static func build(snapshot: Dictionary) -> Dictionary:
 	))
 	# Salvage selection is the only legal next step while pending.  Ignore any
 	# stale action flags carried by a legacy display snapshot.
-	if awaiting_salvage:
+	if awaiting_salvage or persistence_state == &"debug_tainted_production_profile_blocked":
 		normal_exit_allowed = false
 		retry_save_allowed = false
 		discard_unsaved_allowed = false
@@ -251,6 +251,7 @@ static func _persistence_state(snapshot: Dictionary, awaiting_salvage: bool) -> 
 		&"duplicate_ignored",
 		&"save_failed",
 		&"write_blocked",
+		&"debug_tainted_production_profile_blocked",
 		&"meta_progress_adapter_missing",
 		&"discarded_unsaved",
 		&"tutorial_completed",
@@ -360,6 +361,8 @@ static func _persistence_text(state: StringName) -> String:
 			return "确认保全后才会保存本次结果。"
 		&"save_failed", &"write_blocked":
 			return "档案暂时无法写入；请重试保存，或明确放弃这份未保存结果。"
+		&"debug_tainted_production_profile_blocked":
+			return "此局含有调试记录，只能在试玩档案中结算。本局记录已保留。"
 		&"meta_progress_adapter_missing":
 			return "暂时无法连接进度存储；本次结果尚未保存。"
 		&"discarded_unsaved":

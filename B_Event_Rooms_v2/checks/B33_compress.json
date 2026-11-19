@@ -1,0 +1,123 @@
+{
+  "code": "B33",
+  "event_id": "compress",
+  "title": "压缩",
+  "render": "renders/B33_compress.png",
+  "blend": "blend/B33_compress_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B33_compress__main_station_PressBase_iron",
+        "B33_compress__main_station_PressPillar_edge",
+        "B33_compress__main_station_PressBeam_iron",
+        "B33_compress__main_station_Screw_copper",
+        "B33_compress__main_station_ScrewRidge_edge",
+        "B33_compress__main_station_PressPlate_iron",
+        "B33_compress__main_station_Bed_edge",
+        "B33_compress__main_station_CratePlanks_wood",
+        "B33_compress__main_station_CratePlanks_woodlight",
+        "B33_compress__main_station_CratePlanks_wooddark",
+        "B33_compress__main_station_CrateStrap_iron",
+        "B33_compress__main_station_Rivet_copper",
+        "B33_compress__main_station_Tray_iron",
+        "B33_compress__main_station_TrayRim_edge",
+        "B33_compress__main_station_ScreenFrame_iron",
+        "B33_compress__main_station_Screen_black",
+        "B33_compress__main_station_ScreenPixels_mint"
+      ],
+      "bounds": [
+        [
+          -1.274999976158142,
+          -1.0,
+          0.05999999865889549
+        ],
+        [
+          1.274999976158142,
+          1.149999976158142,
+          3.009999990463257
+        ]
+      ]
+    },
+    {
+      "id": "raw_materials",
+      "kind": "floor",
+      "objects": [
+        "B33_compress__raw_materials_CartWheel_iron",
+        "B33_compress__raw_materials_CartBed_woodlight",
+        "B33_compress__raw_materials_CartHandle_iron",
+        "B33_compress__raw_materials_RawMaterial_copper",
+        "B33_compress__raw_materials_RawMaterial_edge"
+      ],
+      "bounds": [
+        [
+          -3.6500000953674316,
+          0.1499999761581421,
+          0.05999999865889549
+        ],
+        [
+          -2.3499999046325684,
+          1.149999976158142,
+          1.4700000286102295
+        ]
+      ]
+    },
+    {
+      "id": "finished_blocks",
+      "kind": "floor",
+      "objects": [
+        "B33_compress__finished_blocks_CartWheel_iron",
+        "B33_compress__finished_blocks_CartBed_woodlight",
+        "B33_compress__finished_blocks_CartHandle_iron",
+        "B33_compress__finished_blocks_CompressedBlock_iron",
+        "B33_compress__finished_blocks_OutputStrap_copper"
+      ],
+      "bounds": [
+        [
+          2.3499999046325684,
+          0.1499999761581421,
+          0.05999999865889549
+        ],
+        [
+          3.6500000953674316,
+          1.149999976158142,
+          1.4700000286102295
+        ]
+      ]
+    },
+    {
+      "id": "maintenance",
+      "kind": "floor",
+      "objects": [
+        "B33_compress__maintenance_ToolStand_wood",
+        "B33_compress__maintenance_ToolFoot_wooddark",
+        "B33_compress__maintenance_ToolBoard_wooddark",
+        "B33_compress__maintenance_ToolShaft_edge",
+        "B33_compress__maintenance_ToolHead_iron",
+        "B33_compress__maintenance_ToolHead_copper"
+      ],
+      "bounds": [
+        [
+          -6.375,
+          4.049999713897705,
+          0.05999999865889549
+        ],
+        [
+          -4.425000190734863,
+          4.650000095367432,
+          2.075000047683716
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

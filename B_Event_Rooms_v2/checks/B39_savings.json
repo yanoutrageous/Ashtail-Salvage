@@ -1,0 +1,105 @@
+{
+  "code": "B39",
+  "event_id": "savings",
+  "title": "储蓄兑付",
+  "render": "renders/B39_savings.png",
+  "blend": "blend/B39_savings_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B39_savings__main_station_VaultPlinth_stone",
+        "B39_savings__main_station_CabinetBody_wooddark",
+        "B39_savings__main_station_CabinetEdge_iron",
+        "B39_savings__main_station_Rivets_copper",
+        "B39_savings__main_station_VaultRib_iron",
+        "B39_savings__main_station_SteppedVaultCrown_iron",
+        "B39_savings__main_station_GuardianEar_copper",
+        "B39_savings__main_station_GuardianMask_wooddark",
+        "B39_savings__main_station_MaskEye_bone",
+        "B39_savings__main_station_MaskEyeLight_mint",
+        "B39_savings__main_station_CoinDepositMouth_black",
+        "B39_savings__main_station_DepositLip_copper",
+        "B39_savings__main_station_Ring_iron",
+        "B39_savings__main_station_Ring_copper",
+        "B39_savings__main_station_VaultHandle_copper",
+        "B39_savings__main_station_Tray_iron",
+        "B39_savings__main_station_TrayRim_edge"
+      ],
+      "bounds": [
+        [
+          1.7750000953674316,
+          0.5249999761581421,
+          0.009999998845160007
+        ],
+        [
+          4.625,
+          2.75,
+          2.9800000190734863
+        ]
+      ]
+    },
+    {
+      "id": "sealed_records",
+      "kind": "floor",
+      "objects": [
+        "B39_savings__sealed_records_reuse_Prop_Crate_NW_01",
+        "B39_savings__sealed_records_Tag_paper",
+        "B39_savings__sealed_records_TagSeal_red"
+      ],
+      "bounds": [
+        [
+          5.360125541687012,
+          3.8239998817443848,
+          0.05999999865889549
+        ],
+        [
+          6.239875793457031,
+          4.791043281555176,
+          1.013700008392334
+        ]
+      ]
+    },
+    {
+      "id": "receipt_station",
+      "kind": "floor",
+      "objects": [
+        "B39_savings__receipt_station_TableTop_woodlight",
+        "B39_savings__receipt_station_TableTop_wood",
+        "B39_savings__receipt_station_TableBands_iron",
+        "B39_savings__receipt_station_TableRivets_copper",
+        "B39_savings__receipt_station_TableLegs_wooddark",
+        "B39_savings__receipt_station_TableRail_wood",
+        "B39_savings__receipt_station_BookCover_red",
+        "B39_savings__receipt_station_BookPages_paper",
+        "B39_savings__receipt_station_Paper_paper",
+        "B39_savings__receipt_station_Ink_wooddark",
+        "B39_savings__receipt_station_WaxSeal_red",
+        "B39_savings__receipt_station_Stamp_iron",
+        "B39_savings__receipt_station_StampGrip_wood"
+      ],
+      "bounds": [
+        [
+          -0.42499998211860657,
+          1.3599998950958252,
+          0.05999999865889549
+        ],
+        [
+          1.024999976158142,
+          2.240000009536743,
+          1.4450000524520874
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

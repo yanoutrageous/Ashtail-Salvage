@@ -95,18 +95,26 @@ func _run() -> void:
 	for scope in observed_scopes:
 		_require(scope == &"combat", "damage emitted a non-combat state scope")
 	var run_surface: Variant = run_scene.get("run_surface")
-	var combat_status_label := run_surface.get("vitals_label") as Label if run_surface != null else null
-	_require(combat_status_label != null, "production protocol vitals label is missing")
+	var health_hud: Control = run_surface.get("player_health_hud") if run_surface != null else null
+	var combat_status_label := health_hud.get_node_or_null("HealthValue") as Label if health_hud != null else null
+	_require(combat_status_label != null, "production health HUD number is missing")
 	if combat_status_label != null:
-		var expected_hp_line := "生命 %s/%s" % [context.hp, context.max_hp]
-		_require(combat_status_label.text.get_slice("\n", 0) == expected_hp_line, "lightweight combat refresh did not expose exact current/max HP")
+		var expected_hp_line := "%s / %s" % [context.hp, context.max_hp]
+		_require(combat_status_label.text == expected_hp_line, "lightweight combat refresh did not expose exact current/max HP")
 		_require(combat_status_label.is_visible_in_tree(), "current HP exists only in a hidden control")
 		_require(root.get_visible_rect().encloses(combat_status_label.get_global_rect()), "current HP is outside the viewport")
-		_require(not combat_status_label.clip_text and combat_status_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "current HP is clipped or abbreviated")
-		var font_size := combat_status_label.get_theme_font_size("font_size")
-		var hp_width := combat_status_label.get_theme_font("font").get_string_size(expected_hp_line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-		_require(font_size >= 13 and hp_width <= combat_status_label.size.x + 0.5, "complete current/max HP does not fit readable text width")
-		_require(combat_status_label.get_minimum_size().y <= combat_status_label.size.y + 0.5, "visible protocol vitals clip their native text height")
+		var maximum_label := health_hud.get_node_or_null("HealthMaximum") as Label
+		_require(maximum_label != null and maximum_label.is_visible_in_tree(), "maximum HP has no visible readout")
+		if maximum_label != null:
+			var current_size := combat_status_label.get_theme_font_size("font_size")
+			var maximum_size := maximum_label.get_theme_font_size("font_size")
+			var current_width := combat_status_label.get_theme_font("font").get_string_size(str(context.hp), HORIZONTAL_ALIGNMENT_LEFT, -1, current_size).x
+			var maximum_width := maximum_label.get_theme_font("font").get_string_size(maximum_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, maximum_size).x
+			_require(combat_status_label.visible_characters == str(context.hp).length() and maximum_label.text == "/ %s" % context.max_hp, "split-sized health readout changed its displayed values")
+			_require(current_size >= 13 and maximum_size >= 11 and current_size > maximum_size, "health glyph sizes lost readable hierarchy")
+			_require(current_width <= combat_status_label.size.x + 0.5 and maximum_width <= maximum_label.size.x + 0.5, "complete current/max HP does not fit readable text width")
+			for label: Label in [combat_status_label, maximum_label]:
+				_require(label.get_minimum_size().y <= label.size.y + 0.5, "visible protocol vitals clip their native text height")
 
 	for warmup_index in range(4):
 		bus.call("_emit_state")

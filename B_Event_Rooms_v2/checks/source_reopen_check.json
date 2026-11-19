@@ -1,0 +1,398 @@
+[
+  {
+    "file": "B23_information_preview.blend",
+    "event": "information",
+    "visible_meshes": 82,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B24_relief_preview.blend",
+    "event": "relief",
+    "visible_meshes": 72,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B25_first_aid_preview.blend",
+    "event": "first_aid",
+    "visible_meshes": 66,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B26_altar_preview.blend",
+    "event": "altar",
+    "visible_meshes": 57,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B27_recycle_preview.blend",
+    "event": "recycle",
+    "visible_meshes": 66,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B28_shop_preview.blend",
+    "event": "shop",
+    "visible_meshes": 81,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B29_demine_preview.blend",
+    "event": "demine",
+    "visible_meshes": 66,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B30_clock_in_preview.blend",
+    "event": "clock_in",
+    "visible_meshes": 85,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B31_mechanism_preview.blend",
+    "event": "mechanism",
+    "visible_meshes": 67,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B32_coil_preview.blend",
+    "event": "coil",
+    "visible_meshes": 75,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B33_compress_preview.blend",
+    "event": "compress",
+    "visible_meshes": 76,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B34_rps_preview.blend",
+    "event": "rps",
+    "visible_meshes": 70,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B35_shortcut_preview.blend",
+    "event": "shortcut",
+    "visible_meshes": 62,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B36_consign_preview.blend",
+    "event": "consign",
+    "visible_meshes": 82,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B37_trader_preview.blend",
+    "event": "trader",
+    "visible_meshes": 85,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B38_expand_preview.blend",
+    "event": "expand",
+    "visible_meshes": 74,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B39_savings_preview.blend",
+    "event": "savings",
+    "visible_meshes": 76,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B40_recon_preview.blend",
+    "event": "recon",
+    "visible_meshes": 75,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B41_cage_preview.blend",
+    "event": "cage",
+    "visible_meshes": 69,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B42_seal_preview.blend",
+    "event": "seal",
+    "visible_meshes": 117,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B43_pawn_preview.blend",
+    "event": "pawn",
+    "visible_meshes": 102,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  },
+  {
+    "file": "B44_dice_preview.blend",
+    "event": "dice",
+    "visible_meshes": 85,
+    "missing_images": [],
+    "finite_bounds": true,
+    "camera_type": "ORTHO",
+    "camera_ortho_scale": 21.59602928161621,
+    "camera_location": [
+      0.0,
+      -17.15183448791504,
+      26.413393020629883
+    ],
+    "resolution": [
+      1920,
+      1200
+    ]
+  }
+]

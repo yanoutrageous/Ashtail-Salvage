@@ -873,27 +873,9 @@ func _check_motion_contract(shell: Control) -> void:
 	shell.call("set_reduced_motion_enabled", false)
 	_check(not bool(shell.call("is_reduced_motion_enabled")), "Full-motion fixture could not leave inherited reduced-motion mode")
 	var frames := shell.get("character_frames") as Array
-	var descriptors := shell.get("character_clip_descriptors") as Dictionary
-	var clip_frames := shell.get("character_clip_frames") as Dictionary
-	var idle_descriptor := descriptors.get(&"idle", {}) as Dictionary
-	var idle_visual_keys := idle_descriptor.get("visual_keys", []) as Array
-	_check(not idle_visual_keys.is_empty(), "Character idle descriptor has no semantic frame slots")
-	_check(frames.size() == idle_visual_keys.size(), "Character idle frames do not preserve descriptor slots")
+	_check(frames.size() == 28, "Deploy portrait did not load all four idle poses")
 	for frame in frames:
-		_check(frame is Texture2D, "Character idle descriptor resolved a null frame slot")
-	var reachable_character_frames := {}
-	for clip_id in [&"idle", &"look"]:
-		var descriptor := descriptors.get(clip_id, {}) as Dictionary
-		var sequence := descriptor.get("sequence", []) as Array
-		var loaded := clip_frames.get(clip_id, []) as Array
-		_check(not sequence.is_empty() and not loaded.is_empty(), "Character clip is unavailable: " + String(clip_id))
-		for step in range(sequence.size()):
-			_check(bool(shell.call("_apply_character_clip_pose", clip_id, step)), "Character clip pose could not be applied: %s/%d" % [String(clip_id), step])
-			var pose_texture := (shell.get("character_texture") as TextureRect).texture
-			if pose_texture != null:
-				var pose_identity := pose_texture.resource_path if not pose_texture.resource_path.is_empty() else pose_texture.resource_name
-				reachable_character_frames[pose_identity] = true
-	_check(not reachable_character_frames.is_empty(), "Character descriptors expose no reachable presentation frames")
+		_check(frame is AtlasTexture, "Deploy portrait animation has a missing frame")
 	_check((shell.get("ambient_animations") as Array).size() == 8, "Expected eight ambient frame animations")
 	_check((shell.get("ambient_particles") as Array).size() == 2, "Expected two ambient particle fields")
 	var observed_frames := {}
@@ -902,14 +884,17 @@ func _check_motion_contract(shell: Control) -> void:
 	for _index in range(48):
 		shell.call("_process", 0.36)
 		if character != null and character.texture != null:
-			var identity := character.texture.resource_path if not character.texture.resource_path.is_empty() else character.texture.resource_name
-			observed_frames[identity] = true
+			var index := frames.find(character.texture)
+			observed_frames[index] = true
 		var summary_root := shell.get_node_or_null("SideStatusRoot") as Control
 		if summary_root != null and summary_root.position != Vector2.ZERO:
 			observed_sway = true
-	_check(not observed_frames.is_empty(), "Character cadence did not expose a presentation frame")
-	for observed_identity in observed_frames.keys():
-		_check(reachable_character_frames.has(observed_identity), "Character cadence escaped the resolved clip descriptors")
+	_check(not observed_frames.has(-1), "Character cadence left its deploy portrait frames")
+	for bounds in [Vector2i(0, 6), Vector2i(7, 13), Vector2i(14, 20), Vector2i(21, 27)]:
+		var unique_frames := 0
+		for index in range(bounds.x, bounds.y + 1):
+			unique_frames += int(observed_frames.has(index))
+		_check(unique_frames >= 2, "Deploy character did not animate idle frames %d-%d" % [bounds.x, bounds.y])
 	_check(observed_sway, "Hanging summary board did not produce subtle sway")
 
 

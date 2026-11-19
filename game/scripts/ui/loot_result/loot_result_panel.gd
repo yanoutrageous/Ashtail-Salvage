@@ -8,6 +8,7 @@ const Art09ManifestAssetMapping := preload("res://scripts/presentation/art09_man
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
 const SemanticActionHintScript := preload("res://scripts/core/input/semantic_action_hint.gd")
 const RunUIViewModel := preload("res://scripts/ui/shell/run_ui_view_model.gd")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 
 signal close_requested
 
@@ -49,7 +50,7 @@ func build() -> void:
 	result_panel = PanelContainer.new()
 	result_panel.name = "LootResultMetalPanel"
 	result_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	result_panel.add_theme_stylebox_override("panel", _textured_style("res://assets/art24/ui/modal_frame.png", 34, 28))
+	result_panel.add_theme_stylebox_override("panel", RunVectorSkin.frame(RunVectorSkin.PANEL, Vector4.ONE * 28.0))
 	add_child(result_panel)
 
 	var root := VBoxContainer.new()
@@ -217,14 +218,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _add_item_card(item: Dictionary) -> void:
 	var presentation := RunUIViewModel.item_presentation(item)
 	var rarity: Dictionary = presentation.get("rarity", {})
-	var row_texture := "res://assets/art24/ui/item_row_normal.png"
 	var card := PanelContainer.new()
 	card.name = "LootResultItemCard"
 	_set_scaled_minimum(card, Vector2(0, 88))
 	card.set_meta("rarity_border_token", rarity.get("border_token", &"rarity.border.unknown"))
 	card.set_meta("collectible_level", int(presentation.get("collectible_level", 0)))
 	card.tooltip_text = String(presentation.get("detail_text", ""))
-	card.add_theme_stylebox_override("panel", _textured_style(row_texture, 15, 12))
+	card.add_theme_stylebox_override("panel", RunVectorSkin.frame(RunVectorSkin.RAIL, Vector4.ONE * 12.0))
 	item_list.add_child(card)
 
 	var row := HBoxContainer.new()
@@ -369,43 +369,8 @@ func _array_from(source: Dictionary, key: String) -> Array:
 	return raw as Array if raw is Array else []
 
 
-func _textured_style(path: String, texture_margin: int, content_margin: int) -> StyleBox:
-	var texture := load(path) as Texture2D
-	if texture == null:
-		var fallback := StyleBoxFlat.new()
-		fallback.bg_color = Color("071114")
-		fallback.border_color = Color("a97931")
-		fallback.set_border_width_all(2)
-		fallback.set_content_margin_all(float(content_margin))
-		return fallback
-	var style := StyleBoxTexture.new()
-	style.texture = texture
-	style.texture_margin_left = texture_margin
-	style.texture_margin_top = texture_margin
-	style.texture_margin_right = texture_margin
-	style.texture_margin_bottom = texture_margin
-	style.content_margin_left = content_margin
-	style.content_margin_top = content_margin
-	style.content_margin_right = content_margin
-	style.content_margin_bottom = content_margin
-	style.draw_center = true
-	return style
-
-
 func _apply_button_style(button: Button) -> void:
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color("173032")
-	normal.border_color = Color("a87b32")
-	normal.set_border_width_all(2)
-	normal.set_corner_radius_all(3)
-	normal.set_content_margin_all(8)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color("244548")
-	hover.border_color = Color("e2ba61")
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	button.add_theme_stylebox_override("focus", hover)
+	RunVectorSkin.apply_button(button, Vector4.ONE * 8.0, &"primary")
 	_set_scaled_font(button, 15)
 	_set_scaled_minimum(button, Vector2(92, 38))
 	button.add_theme_color_override("font_color", Color("f0d58e"))

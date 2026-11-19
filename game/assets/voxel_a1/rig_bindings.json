@@ -1,0 +1,118 @@
+{
+  "Piece_00": {
+    "bone": "Head",
+    "label": "01 方形头部.001"
+  },
+  "Piece_01": {
+    "bone": "Hand.R",
+    "label": "01 硬木斧柄.001"
+  },
+  "Piece_02": {
+    "bone": "Head",
+    "label": "02 左耳.001"
+  },
+  "Piece_03": {
+    "bone": "Hand.R",
+    "label": "02 皮革握把.001"
+  },
+  "Piece_04": {
+    "bone": "Head",
+    "label": "03 右耳.001"
+  },
+  "Piece_05": {
+    "bone": "Hand.R",
+    "label": "03 握把尾扣.001"
+  },
+  "Piece_06": {
+    "bone": "Hand.R",
+    "label": "04 握把上箍.001"
+  },
+  "Piece_07": {
+    "bone": "Head",
+    "label": "04 方顶探险帽.001"
+  },
+  "Piece_08": {
+    "bone": "Hand.R",
+    "label": "05 斧眼金属座.001"
+  },
+  "Piece_09": {
+    "bone": "Chest",
+    "label": "05 橙围巾.001"
+  },
+  "Piece_10": {
+    "bone": "Chest",
+    "label": "06 外套躯干.001"
+  },
+  "Piece_11": {
+    "bone": "Hand.R",
+    "label": "06 斧眼黄铜箍.001"
+  },
+  "Piece_12": {
+    "bone": "Arm.L",
+    "label": "07 左臂.001"
+  },
+  "Piece_13": {
+    "bone": "Hand.R",
+    "label": "07 锻铁斧头 · 切面斧刃.001"
+  },
+  "Piece_14": {
+    "bone": "Arm.R",
+    "label": "08 右臂.001"
+  },
+  "Piece_15": {
+    "bone": "Hand.R",
+    "label": "08 铜铆钉 +1.001"
+  },
+  "Piece_16": {
+    "bone": "Hand.R",
+    "label": "08 铜铆钉 -1.001"
+  },
+  "Piece_17": {
+    "bone": "Hand.L",
+    "label": "09 左手套.001"
+  },
+  "Piece_18": {
+    "bone": "Hand.R",
+    "label": "10 右手套.001"
+  },
+  "Piece_19": {
+    "bone": "Thigh.L",
+    "label": "11 L · 大腿.001"
+  },
+  "Piece_20": {
+    "bone": "Shin.L",
+    "label": "11 L · 小腿.001"
+  },
+  "Piece_21": {
+    "bone": "Thigh.R",
+    "label": "12 R · 大腿.001"
+  },
+  "Piece_22": {
+    "bone": "Shin.R",
+    "label": "12 R · 小腿.001"
+  },
+  "Piece_23": {
+    "bone": "Foot.L",
+    "label": "13 左靴.001"
+  },
+  "Piece_24": {
+    "bone": "Foot.R",
+    "label": "14 右靴.001"
+  },
+  "Piece_25": {
+    "bone": "Pelvis",
+    "label": "15 腰带.001"
+  },
+  "Piece_26": {
+    "bone": "Pelvis",
+    "label": "16 腰包.001"
+  },
+  "Piece_27": {
+    "bone": "Pelvis",
+    "label": "17 尾根.001"
+  },
+  "Piece_28": {
+    "bone": "Tail",
+    "label": "18 背后环纹尾巴.001"
+  }
+}

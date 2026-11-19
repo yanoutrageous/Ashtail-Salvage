@@ -1,6 +1,8 @@
 extends Control
 class_name DeployMapSplitView
 
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
+
 const DeployPrepLayoutContractScript := preload("res://scripts/ui/deploy_prep/deploy_prep_layout_contract.gd")
 const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
 const Art10UISkinKitScript := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
@@ -794,7 +796,7 @@ func _add_panel(node_name: String, rect: Rect2, tone: StringName) -> Panel:
 	var panel := Panel.new()
 	panel.name = node_name
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", Art10UISkinKitScript.panel_style(tone))
+	panel.add_theme_stylebox_override("panel", StationSkin.panel(StationSkin.DEEP if tone == &"deep" else StationSkin.SURFACE))
 	_set_rect(panel, rect)
 	add_child(panel)
 	return panel
@@ -823,6 +825,7 @@ func _add_label(node_name: String, rect: Rect2, text: String, font_size: int, co
 	elif node_name.ends_with("Status") or node_name.ends_with("State") or node_name.ends_with("Role"):
 		composition_role = &"status"
 	Art10UISkinKitScript.apply_composition_label(label, composition_role, font_size, color)
+	StationSkin.apply_label(label, StationSkin.BRASS if composition_role == &"title" else StationSkin.INK)
 	label.set_meta("deploy_map_base_font_size", font_size)
 	label.set_meta("deploy_map_composition_role", composition_role)
 	label.set_meta("deploy_map_max_font_size", maxi(font_size, int(floor(rect.size.y - 4.0))))
@@ -857,30 +860,9 @@ func _add_button(node_name: String, rect: Rect2, text: String, tone: StringName,
 
 func _apply_map_choice_skin(button: Button, state: StringName, previewed: bool) -> void:
 	button.set_pressed_no_signal(previewed)
-	var plate_state := &"disabled" if state == &"locked" else state
-	var plate := Art10UISkinKitScript.style_box_from_asset_ref(
-		Art22DeployPrepAssetContractScript.control_ref(&"filter", plate_state), 8, 16
-	)
 	var left_margin := MAP_SCALE_PLATE_TEXT_MARGIN if button.has_meta("scale_id") else 12
 	var right_margin := 10 if button.has_meta("scale_id") else 12
-	plate.content_margin_left = left_margin
-	plate.content_margin_right = right_margin
-	plate.content_margin_top = 4
-	plate.content_margin_bottom = 4
-	button.add_theme_stylebox_override("normal", plate)
-	button.add_theme_stylebox_override("pressed", plate)
-	var hovered_plate := plate.duplicate() as StyleBoxTexture
-	hovered_plate.modulate_color = Color(1.08, 1.08, 1.08)
-	button.add_theme_stylebox_override("hover", hovered_plate)
-	button.add_theme_stylebox_override("hover_pressed", hovered_plate)
-	button.add_theme_stylebox_override("focus", _choice_rim(Color("326e68")))
-	var ink := Color("321f11")
-	if state == &"selected":
-		ink = Color("f5d48f")
-	elif state == &"locked":
-		ink = Color("101512")
-	for color_name in [&"font_color", &"font_hover_color", &"font_focus_color", &"font_pressed_color", &"font_hover_pressed_color"]:
-		button.add_theme_color_override(color_name, ink)
+	StationSkin.style_button(button, &"normal", state, left_margin, right_margin)
 	button.set_meta("deploy_map_text_bounds", button.size - Vector2(left_margin + right_margin, 0))
 	button.set_meta("deploy_map_text_padding", Vector2(0, 4))
 	_apply_scaled_control_font(button)
@@ -907,34 +889,9 @@ func _choice_rim(color: Color) -> StyleBoxFlat:
 func _apply_button_skin(button: Button, tone: StringName, token: StringName, control_id: StringName, state: StringName) -> void:
 	if button == null:
 		return
-	var normal_state := state if state in [&"normal", &"selected", &"disabled"] else &"disabled"
-	Art10UISkinKitScript.apply_image_button_ref(
-		button,
-		Art22DeployPrepAssetContractScript.control_ref(control_id, normal_state),
-		tone,
-		token,
-		&"button",
-		8,
-		16
-	)
+	StationSkin.style_button(button, tone, state, 8, 8)
 	button.set_meta("deploy_map_font_token", token)
 	_apply_scaled_control_font(button)
-	button.add_theme_stylebox_override("normal", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, normal_state), 8, 16))
-	button.add_theme_stylebox_override("hover", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, &"focused"), 8, 16))
-	button.add_theme_stylebox_override("focus", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, &"focused"), 8, 16))
-	button.add_theme_stylebox_override("pressed", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, &"pressed"), 8, 16))
-	button.add_theme_stylebox_override("hover_pressed", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, &"pressed"), 8, 16))
-	button.add_theme_stylebox_override("disabled", Art10UISkinKitScript.style_box_from_asset_ref(Art22DeployPrepAssetContractScript.control_ref(control_id, &"disabled"), 8, 16))
-	if control_id == &"filter":
-		# ART22 filter/focus plates are parchment-light; the generic tone applies
-		# pale text and loses contrast on the map scale/difficulty controls.
-		var ink := Color(0.20, 0.12, 0.07)
-		button.add_theme_color_override("font_color", ink)
-		button.add_theme_color_override("font_hover_color", ink.darkened(0.08))
-		button.add_theme_color_override("font_focus_color", ink.darkened(0.08))
-		button.add_theme_color_override("font_pressed_color", ink.darkened(0.12))
-		button.add_theme_color_override("font_hover_pressed_color", ink.darkened(0.12))
-		button.add_theme_color_override("font_disabled_color", Color(ink.r, ink.g, ink.b, 0.55))
 
 
 func _refresh_ui_scale_metrics() -> void:

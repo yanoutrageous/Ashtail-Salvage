@@ -1,0 +1,119 @@
+{
+  "code": "B24",
+  "event_id": "relief",
+  "title": "减压",
+  "render": "renders/B24_relief.png",
+  "blend": "blend/B24_relief_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B24_relief__main_station_BasinBase_wooddark",
+        "B24_relief__main_station_BasinSide_woodlight",
+        "B24_relief__main_station_BasinSide_wood",
+        "B24_relief__main_station_Water_blue",
+        "B24_relief__main_station_Seat_woodlight",
+        "B24_relief__main_station_SeatLegs_wooddark",
+        "B24_relief__main_station_ChairBack_wood",
+        "B24_relief__main_station_ChairBack_woodlight",
+        "B24_relief__main_station_TowelBench_woodlight",
+        "B24_relief__main_station_BenchFoot_wooddark",
+        "B24_relief__main_station_FoldedTowel_bone",
+        "B24_relief__main_station_Pipe_copper",
+        "B24_relief__main_station_PipeFlange_iron",
+        "B24_relief__main_station_PipeSupport_iron",
+        "B24_relief__main_station_Ring_copper"
+      ],
+      "bounds": [
+        [
+          -4.730000019073486,
+          0.5350000262260437,
+          0.05999999865889549
+        ],
+        [
+          -1.4499999284744263,
+          5.130000114440918,
+          1.9474999904632568
+        ]
+      ]
+    },
+    {
+      "id": "water",
+      "kind": "floor",
+      "objects": [
+        "B24_relief__water_reuse_Prop_Barrel_NW"
+      ],
+      "bounds": [
+        [
+          -6.500619888305664,
+          1.6811213493347168,
+          0.05999999865889549
+        ],
+        [
+          -5.699379920959473,
+          2.518878936767578,
+          0.9864161610603333
+        ]
+      ]
+    },
+    {
+      "id": "clean_linen",
+      "kind": "floor",
+      "objects": [
+        "B24_relief__clean_linen_ShelfUpright_wood",
+        "B24_relief__clean_linen_ShelfBack_wooddark",
+        "B24_relief__clean_linen_ShelfBoard_woodlight",
+        "B24_relief__clean_linen_FoldedCloth_bone",
+        "B24_relief__clean_linen_FoldedCloth_cloth"
+      ],
+      "bounds": [
+        [
+          -7.125,
+          4.059999942779541,
+          0.05999999865889549
+        ],
+        [
+          -4.875,
+          4.740000247955322,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "rest_bench",
+      "kind": "floor",
+      "objects": [
+        "B24_relief__rest_bench_TableTop_woodlight",
+        "B24_relief__rest_bench_TableTop_wood",
+        "B24_relief__rest_bench_TableBands_iron",
+        "B24_relief__rest_bench_TableRivets_copper",
+        "B24_relief__rest_bench_TableLegs_wooddark",
+        "B24_relief__rest_bench_TableRail_wood",
+        "B24_relief__rest_bench_Blanket_cloth",
+        "B24_relief__rest_bench_Cushion_bone"
+      ],
+      "bounds": [
+        [
+          -4.574999809265137,
+          -1.350000023841858,
+          0.05999999865889549
+        ],
+        [
+          -2.825000047683716,
+          -0.6349999904632568,
+          0.9200000166893005
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

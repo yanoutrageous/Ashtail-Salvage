@@ -1,0 +1,113 @@
+{
+  "code": "B27",
+  "event_id": "recycle",
+  "title": "回收",
+  "render": "renders/B27_recycle.png",
+  "blend": "blend/B27_recycle_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B27_recycle__main_station_TableTop_woodlight",
+        "B27_recycle__main_station_TableTop_wood",
+        "B27_recycle__main_station_TableBands_iron",
+        "B27_recycle__main_station_TableRivets_copper",
+        "B27_recycle__main_station_TableLegs_wooddark",
+        "B27_recycle__main_station_TableRail_wood",
+        "B27_recycle__main_station_Tray_iron",
+        "B27_recycle__main_station_TrayRim_edge",
+        "B27_recycle__main_station_Scrap_copper",
+        "B27_recycle__main_station_Scrap_edge",
+        "B27_recycle__main_station_BookCover_cloth",
+        "B27_recycle__main_station_BookPages_paper"
+      ],
+      "bounds": [
+        [
+          -4.25,
+          1.125,
+          0.05999999865889549
+        ],
+        [
+          -1.3499999046325684,
+          2.4749999046325684,
+          1.600000023841858
+        ]
+      ]
+    },
+    {
+      "id": "incoming",
+      "kind": "floor",
+      "objects": [
+        "B27_recycle__incoming_BinBase_wooddark",
+        "B27_recycle__incoming_BinSide_wood",
+        "B27_recycle__incoming_BinSide_woodlight",
+        "B27_recycle__incoming_SortedScrap_copper",
+        "B27_recycle__incoming_SortedScrap_iron"
+      ],
+      "bounds": [
+        [
+          -6.099999904632568,
+          1.6299998760223389,
+          0.05999999865889549
+        ],
+        [
+          -4.900000095367432,
+          2.569999933242798,
+          0.7149999737739563
+        ]
+      ]
+    },
+    {
+      "id": "sorted",
+      "kind": "floor",
+      "objects": [
+        "B27_recycle__sorted_BinBase_wooddark",
+        "B27_recycle__sorted_BinSide_wood",
+        "B27_recycle__sorted_BinSide_woodlight",
+        "B27_recycle__sorted_SortedScrap_copper",
+        "B27_recycle__sorted_SortedScrap_iron"
+      ],
+      "bounds": [
+        [
+          -1.0499999523162842,
+          1.6299998760223389,
+          0.05999999865889549
+        ],
+        [
+          0.15000000596046448,
+          2.569999933242798,
+          0.7149999737739563
+        ]
+      ]
+    },
+    {
+      "id": "stock",
+      "kind": "floor",
+      "objects": [
+        "B27_recycle__stock_reuse_Prop_Crate_NW_01"
+      ],
+      "bounds": [
+        [
+          -5.93987512588501,
+          3.958956241607666,
+          0.05999999865889549
+        ],
+        [
+          -5.06012487411499,
+          4.841043472290039,
+          1.013700008392334
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

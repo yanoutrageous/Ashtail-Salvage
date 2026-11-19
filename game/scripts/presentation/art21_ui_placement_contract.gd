@@ -7,6 +7,39 @@ class_name Art21UIPlacementContract
 const Art09ManifestAssetMappingScript := preload("res://scripts/presentation/art09_manifest_asset_mapping.gd")
 const Art21MainMenuAssetContractScript := preload("res://scripts/presentation/art21_main_menu_asset_contract.gd")
 
+const STATION_COMPONENTS := {
+	&"shared.panel.page_frame.normal": &"frame_panel",
+	&"shared.panel.card.normal": &"frame_status",
+	&"shared.panel.slot.normal": &"slot_normal",
+	&"shared.panel.status_card.normal": &"frame_status",
+	&"shared.panel.modal.normal": &"frame_panel",
+	&"shared.panel.tooltip.normal": &"frame_status",
+	&"shared.button.primary.normal": &"button_primary",
+	&"shared.button.primary.hover": &"button_hover",
+	&"shared.button.primary.pressed": &"button_selected",
+	&"shared.button.primary.disabled": &"button_disabled",
+	&"shared.button.secondary.normal": &"button_normal",
+	&"shared.button.secondary.selected": &"button_selected",
+	&"shared.tab.normal": &"button_normal",
+	&"shared.tab.selected": &"button_selected",
+	&"run.left_info_rail.frame": &"frame_rail",
+	&"run.status_card.frame": &"frame_status",
+	&"run.bottom_overlay.frame": &"frame_rail",
+	&"inventory.panel.frame": &"frame_rail",
+	&"ground_loot.panel.frame": &"frame_rail",
+	&"result.modal.frame": &"frame_panel",
+	&"art21r2.modal.inventory.frame": &"frame_rail",
+	&"art21r2.modal.ground_loot.frame": &"frame_rail",
+	&"art21r2.modal.result.frame": &"frame_panel",
+	&"art21r2.modal.title_plate": &"frame_status",
+	&"art21r2.modal.section.panel": &"frame_rail",
+	&"art21r2.modal.action_strip": &"frame_status",
+	&"art21r2.modal.item_row.normal": &"slot_normal",
+	&"art21r2.modal.button.primary": &"button_primary",
+	&"art21r2.modal.button.secondary": &"button_normal",
+	&"art21r2.modal.button.danger": &"button_danger",
+}
+
 const ART21_COMPONENT_BY_VISUAL_KEY := {
 	&"shared.panel.page_frame.normal": &"ui.art21.shared.panel.page_frame.normal",
 	&"shared.panel.card.normal": &"ui.art21.shared.panel.card.normal",
@@ -134,8 +167,12 @@ const MAP_VISUAL_KEY_BY_STATE := {
 
 
 static func component_ref(visual_key: StringName, fallback_asset_id: StringName = &"ui.art19.panel.terminal_main", role: StringName = &"art21_component") -> Dictionary:
+	var asset_id := StringName(ART21_COMPONENT_BY_VISUAL_KEY.get(visual_key, &""))
+	if STATION_COMPONENTS.has(visual_key):
+		fallback_asset_id = asset_id
+		asset_id = StringName("ui.run_vector.%s" % STATION_COMPONENTS[visual_key])
 	return Art09ManifestAssetMappingScript.asset_ref(
-		ART21_COMPONENT_BY_VISUAL_KEY.get(visual_key, &""),
+		asset_id,
 		fallback_asset_id,
 		role,
 		visual_key,
@@ -172,8 +209,8 @@ static func style_box_for_visual_key(visual_key: StringName, fallback_asset_id: 
 	var texture := texture_for_visual_key(visual_key, fallback_asset_id)
 	if texture == null:
 		return null
-	var slice_margin := maxi(texture_margin, 0)
-	var content_inset := maxi(maxi(padding, 0), slice_margin)
+	var content_inset := maxi(maxi(padding, 0), texture_margin)
+	var slice_margin := mini(content_inset, station_slice_limit(texture))
 	var style := StyleBoxTexture.new()
 	style.texture = texture
 	style.texture_margin_left = slice_margin
@@ -186,6 +223,12 @@ static func style_box_for_visual_key(visual_key: StringName, fallback_asset_id: 
 	style.content_margin_bottom = content_inset
 	style.draw_center = true
 	return style
+
+
+static func station_slice_limit(texture: Texture2D) -> int:
+	if not texture.resource_path.begins_with("res://assets/ui/run_vector/"):
+		return mini(texture.get_width(), texture.get_height()) / 2
+	return 9 if texture.get_height() <= 32 else 12
 
 
 static func main_menu_scene_ref(visual_key: StringName, role: StringName = &"main_menu_scene") -> Dictionary:

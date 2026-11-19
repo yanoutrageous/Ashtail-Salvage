@@ -33,7 +33,9 @@ func _run() -> void:
 			scene.set_process(false)
 			await process_frame
 			if _enter_relief_room(scene):
+				await _capture_room("B-main-exploration.png")
 				await _test_dialogue(main, scene)
+				await _capture_room("B-main-after-service.png")
 			elif _find_dialogue(main) == null:
 				_check(false, "main.tscn has no attached T15 EventDialogue")
 		await _release_main(main, scene)
@@ -395,3 +397,14 @@ func _check(condition: bool, message: String) -> bool:
 	if not condition:
 		failures.append(message)
 	return condition
+
+
+func _capture_room(file_name: String) -> void:
+	var directory := OS.get_environment("Z2_FORMAL_CAPTURE_DIR")
+	if directory.is_empty() or DisplayServer.get_name() == "headless":
+		return
+	DirAccess.make_dir_recursive_absolute(directory)
+	await create_timer(0.25).timeout
+	await RenderingServer.frame_post_draw
+	var image := root.get_texture().get_image()
+	_check(image != null and not image.is_empty() and image.save_png(directory.path_join(file_name)) == OK, "capture actual B room in production Main")

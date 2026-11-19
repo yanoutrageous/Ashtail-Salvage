@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="48" viewBox="0 0 72 48">
+  <defs><linearGradient id="metal" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#3b2a2a"/><stop offset="1" stop-color="#1c1720"/></linearGradient></defs>
+  <path id="housing" d="M7 1h58l6 6v34l-6 6H7l-6-6V7z" fill="url(#metal)" stroke="#9b5d50" stroke-width="1.3"/>
+  <path id="bevel" d="M8 4h56l4 4v32l-4 4H8l-4-4V8z" fill="none" stroke="#9b5d50" stroke-opacity=".65"/>
+  <path id="corner-lights" d="M1 11V7l6-6h5m48 46h5l6-6v-4" fill="none" stroke="#f4a77d" stroke-width="1.55"/>
+  <path id="edge-ribs" d="M9 7h2m-4 2v2m54 28h2m2-2v-2" fill="none" stroke="#f4a77d" stroke-opacity=".68"/>
+  <g id="rivets" fill="#f4a77d" fill-opacity=".72"><circle cx="65" cy="8" r="1.45"/><circle cx="7" cy="40" r="1.45"/></g>
+  <path id="gasket" d="M12 6h48M12 42h48" stroke="#9b5d50" stroke-opacity=".45" fill="none"/>
+</svg>

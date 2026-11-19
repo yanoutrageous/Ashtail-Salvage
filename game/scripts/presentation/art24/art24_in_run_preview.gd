@@ -292,7 +292,7 @@ func _draw_protocol(level: int) -> void:
 func _draw_bottom_bar(room_type: String, visual_state: String) -> void:
 	var prompt := "按 E 搜索周围物资"
 	if room_type == "monster":
-		prompt = "按 Space / J 清理当前威胁"
+		prompt = "按 J / 鼠标左键清理当前威胁"
 	elif room_type == "exit":
 		prompt = "按 E 请求撤离，按 T 查看撤离状态"
 	_draw_text(prompt, Vector2(392, 670), 14, Color("e3a747"), 500, HORIZONTAL_ALIGNMENT_CENTER)

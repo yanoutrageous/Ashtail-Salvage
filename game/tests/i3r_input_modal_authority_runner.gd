@@ -42,7 +42,7 @@ func _check_input_profile_and_router() -> void:
 		"keyboard interact did not route through InputMap"
 	)
 	_require(
-		RunSceneInputRouterScript.run_action(_key_event(KEY_SPACE)) == RunSceneInputRouterScript.ACTION_FIGHT,
+		RunSceneInputRouterScript.run_action(_key_event(KEY_J)) == RunSceneInputRouterScript.ACTION_FIGHT,
 		"keyboard attack did not route through InputMap"
 	)
 	_require(
@@ -85,6 +85,14 @@ func _check_input_profile_and_router() -> void:
 		RunSceneInputRouterScript.movement_direction(_joy_button(JOY_BUTTON_DPAD_RIGHT)) == Vector2.RIGHT,
 		"virtual D-pad did not route through the movement action"
 	)
+	_require(
+		RunSceneInputRouterScript.run_action(_key_event(KEY_SPACE)) == &"jump",
+		"Space did not route to the gameplay jump"
+	)
+	_require(
+		RuntimeInputProfileScript.event_pressed(_key_event(KEY_SHIFT), &"sprint"),
+		"Shift did not map to held sprint"
+	)
 	var attack_counts := {
 		"key": 0,
 		"mouse": 0,
@@ -98,8 +106,8 @@ func _check_input_profile_and_router() -> void:
 		elif event is InputEventJoypadButton:
 			attack_counts["gamepad"] += 1
 	_require(
-		attack_counts == {"key": 2, "mouse": 1, "gamepad": 1},
-		"attack bindings are not exactly Space/J, left mouse, and gamepad X: %s" % attack_counts
+		attack_counts == {"key": 1, "mouse": 1, "gamepad": 1},
+		"attack bindings are not exactly J, left mouse, and gamepad X: %s" % attack_counts
 	)
 
 	var interact_events := InputMap.action_get_events("interact").duplicate()
@@ -303,14 +311,16 @@ func _check_production_authority() -> void:
 	if in_run_runtime == null or not bool(in_run_runtime.call("has_active_combat")):
 		var facing_before_pointer: Vector2 = player.call("get_facing_vector") if player != null else Vector2.ZERO
 		var room_center := Vector2(640.0, 360.0)
+		var field_swing_allowed := bool(run_scene.call("_can_field_swing"))
 		_require(
-			not bool(run_scene.call("_handle_run_action_input", _mouse_button(MOUSE_BUTTON_LEFT, room_center))),
-			"non-combat room consumed a pointer attack"
+			bool(run_scene.call("_handle_run_action_input", _mouse_button(MOUSE_BUTTON_LEFT, room_center))) == field_swing_allowed,
+			"non-combat pointer routing ignored the free axe swing gate"
 		)
-		_require(
-			player == null or (player.call("get_facing_vector") as Vector2).is_equal_approx(facing_before_pointer),
-			"non-combat pointer attack turned the player"
-		)
+		if not field_swing_allowed:
+			_require(
+				player == null or (player.call("get_facing_vector") as Vector2).is_equal_approx(facing_before_pointer),
+				"gated non-combat pointer attack turned the player"
+			)
 	_require(bool(run_scene.call("_handle_run_action_input", _key_event(KEY_Q))), "production Q action was not consumed")
 	await _frames(2)
 	_require(inventory != null and inventory.visible, "production Q action did not open inventory")
@@ -318,6 +328,8 @@ func _check_production_authority() -> void:
 	if player != null:
 		_require(not bool(player.get("input_enabled")), "inventory modal left PlayerController polling movement")
 		var modal_facing: Vector2 = player.call("get_facing_vector")
+		_require(not bool(run_scene.call("_handle_run_action_input", _key_event(KEY_SPACE))), "inventory modal allowed a jump")
+		_require(float(player.call("locomotion_snapshot").get("visual_lift", -1.0)) == 0.0, "modal jump changed the player's lift")
 		Input.action_press("move_right")
 		player.call("_process", 0.20)
 		Input.action_release("move_right")

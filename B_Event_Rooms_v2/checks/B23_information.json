@@ -1,0 +1,129 @@
+{
+  "code": "B23",
+  "event_id": "information",
+  "title": "线报",
+  "render": "renders/B23_information.png",
+  "blend": "blend/B23_information_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B23_information__main_station_TableTop_woodlight",
+        "B23_information__main_station_TableTop_wood",
+        "B23_information__main_station_TableBands_iron",
+        "B23_information__main_station_TableRivets_copper",
+        "B23_information__main_station_TableLegs_wooddark",
+        "B23_information__main_station_TableRail_wood",
+        "B23_information__main_station_Paper_paper",
+        "B23_information__main_station_Ink_wooddark",
+        "B23_information__main_station_BookCover_red",
+        "B23_information__main_station_BookPages_paper",
+        "B23_information__main_station_MapBoard_wooddark",
+        "B23_information__main_station_Map_paper",
+        "B23_information__main_station_MapRooms_cloth",
+        "B23_information__main_station_MapPins_red"
+      ],
+      "bounds": [
+        [
+          -4.550000190734863,
+          0.925000011920929,
+          0.05999999865889549
+        ],
+        [
+          -1.4500000476837158,
+          2.2750000953674316,
+          2.859999895095825
+        ]
+      ]
+    },
+    {
+      "id": "archive",
+      "kind": "floor",
+      "objects": [
+        "B23_information__archive_ShelfUpright_wood",
+        "B23_information__archive_ShelfBack_wooddark",
+        "B23_information__archive_ShelfBoard_woodlight",
+        "B23_information__archive_BookCover_red",
+        "B23_information__archive_BookPages_paper",
+        "B23_information__archive_BookCover_cloth",
+        "B23_information__archive_BookCover_blue",
+        "B23_information__archive_BookCover_wooddark",
+        "B23_information__archive_Paper_paper",
+        "B23_information__archive_Ink_wooddark",
+        "B23_information__archive_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -6.724999904632568,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          -4.474999904632568,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "record_box",
+      "kind": "floor",
+      "objects": [
+        "B23_information__record_box_CratePlanks_wood",
+        "B23_information__record_box_CratePlanks_woodlight",
+        "B23_information__record_box_CratePlanks_wooddark",
+        "B23_information__record_box_CrateStrap_iron",
+        "B23_information__record_box_Rivet_copper",
+        "B23_information__record_box_BookCover_cloth",
+        "B23_information__record_box_BookPages_paper",
+        "B23_information__record_box_Paper_paper",
+        "B23_information__record_box_Ink_wooddark",
+        "B23_information__record_box_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -6.019000053405762,
+          1.3174999952316284,
+          0.0364999994635582
+        ],
+        [
+          -5.180999755859375,
+          2.25,
+          1.1545000076293945
+        ]
+      ]
+    },
+    {
+      "id": "reader",
+      "kind": "floor",
+      "objects": [
+        "B23_information__reader_Seat_woodlight",
+        "B23_information__reader_SeatLegs_wooddark",
+        "B23_information__reader_ChairBack_wood",
+        "B23_information__reader_ChairBack_woodlight"
+      ],
+      "bounds": [
+        [
+          -3.299999952316284,
+          -0.3499999940395355,
+          0.05999999865889549
+        ],
+        [
+          -2.700000047683716,
+          0.25,
+          1.4600000381469727
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

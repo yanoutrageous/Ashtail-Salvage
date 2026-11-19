@@ -1,0 +1,149 @@
+{
+  "code": "B43",
+  "event_id": "pawn",
+  "title": "预支",
+  "render": "renders/B43_pawn.png",
+  "blend": "blend/B43_pawn_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B43_pawn__main_station_CabinetBody_wooddark",
+        "B43_pawn__main_station_CabinetEdge_iron",
+        "B43_pawn__main_station_Rivets_copper",
+        "B43_pawn__main_station_TableTop_woodlight",
+        "B43_pawn__main_station_TableTop_wood",
+        "B43_pawn__main_station_TableBands_iron",
+        "B43_pawn__main_station_TableRivets_copper",
+        "B43_pawn__main_station_Tag_paper",
+        "B43_pawn__main_station_TagSeal_red",
+        "B43_pawn__main_station_BookCover_red",
+        "B43_pawn__main_station_BookPages_paper",
+        "B43_pawn__main_station_Paper_paper",
+        "B43_pawn__main_station_Ink_wooddark",
+        "B43_pawn__main_station_WaxSeal_red",
+        "B43_pawn__main_station_Stamp_iron",
+        "B43_pawn__main_station_StampGrip_wood",
+        "B43_pawn__main_station_ScaleFoot_iron",
+        "B43_pawn__main_station_ScalePost_copper",
+        "B43_pawn__main_station_ScaleBeam_copper",
+        "B43_pawn__main_station_ScaleHang_iron",
+        "B43_pawn__main_station_Tray_iron",
+        "B43_pawn__main_station_TrayRim_edge",
+        "B43_pawn__main_station_Weight_copper"
+      ],
+      "bounds": [
+        [
+          -1.75,
+          0.46000000834465027,
+          0.009999998845160007
+        ],
+        [
+          1.75,
+          2.0,
+          2.5
+        ]
+      ]
+    },
+    {
+      "id": "pledges_left",
+      "kind": "floor",
+      "objects": [
+        "B43_pawn__pledges_left_SecurePost_iron",
+        "B43_pawn__pledges_left_SecureShelf_wooddark",
+        "B43_pawn__pledges_left_SecureBars_edge",
+        "B43_pawn__pledges_left_CanvasBag_cloth",
+        "B43_pawn__pledges_left_BagTie_woodlight",
+        "B43_pawn__pledges_left_CratePlanks_wood",
+        "B43_pawn__pledges_left_CratePlanks_woodlight",
+        "B43_pawn__pledges_left_CratePlanks_wooddark",
+        "B43_pawn__pledges_left_CrateStrap_iron",
+        "B43_pawn__pledges_left_Rivet_copper",
+        "B43_pawn__pledges_left_Tag_paper",
+        "B43_pawn__pledges_left_TagSeal_red",
+        "B43_pawn__pledges_left_SecureLock_copper"
+      ],
+      "bounds": [
+        [
+          -5.830000400543213,
+          3.75,
+          0.05999999865889549
+        ],
+        [
+          -3.7700002193450928,
+          4.759999752044678,
+          2.2300000190734863
+        ]
+      ]
+    },
+    {
+      "id": "pledges_right",
+      "kind": "floor",
+      "objects": [
+        "B43_pawn__pledges_right_SecurePost_iron",
+        "B43_pawn__pledges_right_SecureShelf_wooddark",
+        "B43_pawn__pledges_right_SecureBars_edge",
+        "B43_pawn__pledges_right_CanvasBag_cloth",
+        "B43_pawn__pledges_right_BagTie_woodlight",
+        "B43_pawn__pledges_right_CratePlanks_wood",
+        "B43_pawn__pledges_right_CratePlanks_woodlight",
+        "B43_pawn__pledges_right_CratePlanks_wooddark",
+        "B43_pawn__pledges_right_CrateStrap_iron",
+        "B43_pawn__pledges_right_Rivet_copper",
+        "B43_pawn__pledges_right_Tag_paper",
+        "B43_pawn__pledges_right_TagSeal_red",
+        "B43_pawn__pledges_right_SecureLock_copper"
+      ],
+      "bounds": [
+        [
+          3.870000123977661,
+          3.75,
+          0.05999999865889549
+        ],
+        [
+          5.930000305175781,
+          4.759999752044678,
+          2.2300000190734863
+        ]
+      ]
+    },
+    {
+      "id": "contract_archive",
+      "kind": "floor",
+      "objects": [
+        "B43_pawn__contract_archive_CratePlanks_wood",
+        "B43_pawn__contract_archive_CratePlanks_woodlight",
+        "B43_pawn__contract_archive_CratePlanks_wooddark",
+        "B43_pawn__contract_archive_CrateStrap_iron",
+        "B43_pawn__contract_archive_Rivet_copper",
+        "B43_pawn__contract_archive_BookCover_cloth",
+        "B43_pawn__contract_archive_BookPages_paper",
+        "B43_pawn__contract_archive_Paper_paper",
+        "B43_pawn__contract_archive_Ink_wooddark",
+        "B43_pawn__contract_archive_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -5.219000339508057,
+          1.1175000667572021,
+          0.0364999994635582
+        ],
+        [
+          -4.38100004196167,
+          2.049999952316284,
+          1.1545000076293945
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

@@ -1,13 +1,8 @@
 [gd_resource type="Theme" format=3]
 
-[ext_resource type="FontFile" path="res://assets/fonts/FusionPixel.otf" id="1_pixel"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansCJKsc-Regular.otf" id="2_cjk"]
-[ext_resource type="Texture2D" path="res://assets/art24/ui/modal_frame.png" id="3_frame"]
-[ext_resource type="Texture2D" path="res://assets/art24/ui/toast_success.png" id="4_toast"]
-
-[sub_resource type="FontVariation" id="Font_graytail"]
-base_font = ExtResource("1_pixel")
-fallbacks = Array[Font]([ExtResource("2_cjk")])
+[ext_resource type="Texture2D" path="res://assets/ui/run_vector/frame_panel.svg" id="3_frame"]
+[ext_resource type="Texture2D" path="res://assets/ui/run_vector/frame_status.svg" id="4_toast"]
 
 [sub_resource type="StyleBoxTexture" id="Style_frame"]
 texture = ExtResource("3_frame")
@@ -111,7 +106,7 @@ content_margin_top = 6.0
 content_margin_bottom = 6.0
 
 [resource]
-default_font = SubResource("Font_graytail")
+default_font = ExtResource("2_cjk")
 default_font_size = 16
 Button/colors/font_color = Color(0.87, 0.92, 0.87, 1)
 Button/colors/font_disabled_color = Color(0.62, 0.69, 0.66, 1)

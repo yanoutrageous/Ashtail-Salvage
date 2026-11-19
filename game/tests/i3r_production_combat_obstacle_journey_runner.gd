@@ -55,6 +55,7 @@ func _run() -> void:
 	_require(await _wait_screen(&"run", 6.0), "real pointer input did not start the production run")
 	await _frames(8)
 	_require(int(run_scene.get("run_context").get("seed_value")) == FIXED_SEED, "fixed seed did not reach the authoritative run")
+	await _check_field_locomotion()
 	_require(await _transition_room(Vector2i.RIGHT, Vector2i(3, 6), &"Chest"), "real movement did not enter the chest room")
 	_require(await _transition_room(Vector2i.UP, Vector2i(3, 5), &"Event"), "real movement did not enter the event room")
 	_require(await _transition_room(Vector2i.UP, Vector2i(3, 4), &"Normal"), "real movement did not enter the normal room")
@@ -108,7 +109,19 @@ func _run() -> void:
 	# attacks. Enemy state is frozen only to keep this input measurement stable.
 	_arrange_single_enemy(simulation, &"bat", Vector2(0.84, 0.82), &"hurt", 50)
 	_place_player(simulation, Vector2(0.20, 0.50), Vector2.RIGHT)
-	await _hold_key_seconds(KEY_D, 0.85)
+	_parse_key(KEY_SHIFT, true)
+	_parse_key(KEY_D, true)
+	await _seconds(0.09)
+	_require(Vector2(simulation.player.velocity).length() > CombatSimulationScript.PLAYER_SPEED * 1.38, "held Shift did not speed up fixed-step combat movement")
+	_parse_key(KEY_SPACE, true, true)
+	await _seconds(0.11)
+	var combat_lift := _lift()
+	_require(combat_lift > 0.045, "Space+Shift did not lift the combat player")
+	_parse_key(KEY_SPACE, false, true)
+	await _seconds(0.65)
+	_parse_key(KEY_D, false)
+	_parse_key(KEY_SHIFT, false)
+	_require(_lift() == 0.0, "combat player did not land")
 	var altar: Rect2 = CombatSimulationScript.production_arena_obstacles()[0]
 	var blocked_x := _player_local_pos().x
 	_require(
@@ -187,7 +200,7 @@ func _run() -> void:
 	# authored facing until the pose ends.
 	_arrange_single_enemy(simulation, &"bat", Vector2(0.84, 0.20), &"hurt", 50)
 	_place_player(simulation, Vector2(0.20, 0.78), Vector2.RIGHT)
-	_parse_key(KEY_SPACE, true)
+	_parse_key(KEY_J, true)
 	_require(
 		await _wait_until(
 			func() -> bool:
@@ -201,7 +214,7 @@ func _run() -> void:
 		),
 		"production attack did not enter a visible right-facing windup"
 	)
-	_parse_key(KEY_SPACE, false)
+	_parse_key(KEY_J, false)
 	_parse_key(KEY_A, true)
 	var attack_phases_seen: Dictionary = {}
 	var recovery_start_x := INF
@@ -366,9 +379,9 @@ func _run() -> void:
 	_arrange_single_enemy(simulation, &"bat", Vector2(0.42, 0.33), &"hurt", 50)
 	_place_player(simulation, Vector2(0.285, 0.42), Vector2(0.135, -0.09))
 	var hp_before_blocked := int(simulation.enemies[0].get("hp", 0))
-	_parse_key(KEY_SPACE, true)
+	_parse_key(KEY_J, true)
 	await process_frame
-	_parse_key(KEY_SPACE, false)
+	_parse_key(KEY_J, false)
 	var clipped_visual_visible := await _wait_until(
 		func() -> bool:
 			var snapshot: Dictionary = view.call("build_read_only_snapshot") if view != null else {}
@@ -440,7 +453,7 @@ func _run() -> void:
 	var lethal_hp := maxi(1, int(simulation.player.get("power", 1)))
 	_arrange_single_enemy(simulation, &"bat", Vector2(0.72, 0.50), &"hurt", lethal_hp)
 	_place_player(simulation, Vector2(0.88, 0.50), Vector2.LEFT)
-	await _tap_key(KEY_SPACE)
+	await _tap_key(KEY_J)
 	var hit_event := await _wait_combat_event(runtime, &"player_attack_resolved", event_floor, 2.0)
 	_require(int(hit_event.get("hit_count", 0)) == 1, "unobstructed real-input player attack did not report one hit")
 	_require(
@@ -657,13 +670,57 @@ func _tap_key(keycode: int) -> void:
 	await _frames(3)
 
 
-func _parse_key(keycode: int, pressed: bool) -> void:
+func _check_field_locomotion() -> void:
+	var player = run_scene.get("player_controller")
+	var spawn := _player_local_pos()
+	var origin := Vector2(0.21, 0.32)
+	player.call("set_local_position", origin)
+	await _hold_key_seconds(KEY_D, 0.23)
+	var walk_distance := _player_local_pos().x - origin.x
+	player.set("local_velocity", Vector2.ZERO)
+	player.call("set_local_position", origin)
+	_parse_key(KEY_SHIFT, true)
+	await _hold_key_seconds(KEY_D, 0.23)
+	var sprint_distance := _player_local_pos().x - origin.x
+	_require(walk_distance > 0.03 and sprint_distance > walk_distance * 1.24, "held Shift did not speed up locomotion outside combat: %s / %s" % [walk_distance, sprint_distance])
+	_parse_key(KEY_SHIFT, false)
+	player.set("local_velocity", Vector2.ZERO)
+	player.call("set_local_position", origin)
+	_parse_key(KEY_SPACE, true)
+	await _seconds(0.19)
+	var lift := _lift()
+	_require(lift >= 0.073 and lift <= 0.09, "Space did not reach the expected jump height: %s" % lift)
+	_require(_player_local_pos().distance_to(origin) <= 0.002, "stationary jump changed floor position")
+	await _seconds(0.42)
+	_require(_lift() == 0.0, "held Space retriggered after landing or player failed to land")
+	_parse_key(KEY_SPACE, false)
+	var door := _door_for_direction(player.call("get_door_projections"), Vector2i.RIGHT)
+	if not door.is_empty():
+		var rect := Rect2(door["body_rect"])
+		player.call("set_local_position", Vector2(rect.position.x, rect.get_center().y))
+		_parse_key(KEY_SPACE, true)
+		await _frames(2)
+		_require(player.call("requested_transition", Vector2.RIGHT) == Vector2i.ZERO, "airborne player requested a room transition")
+		_parse_key(KEY_SPACE, false)
+		await _seconds(0.52)
+	player.call("set_local_position", spawn)
+	player.set("local_velocity", Vector2.ZERO)
+	print("LOCOMOTION field_walk=%.3f field_sprint=%.3f jump_lift=%.3f grounded_pos=PASS single_press=PASS air_door_guard=PASS" % [walk_distance, sprint_distance, lift])
+
+
+func _lift() -> float:
+	var player = run_scene.get("player_controller")
+	return float(player.call("locomotion_snapshot").get("visual_lift", 0.0))
+
+
+func _parse_key(keycode: int, pressed: bool, with_shift: bool = false) -> void:
 	var event := InputEventKey.new()
 	event.keycode = keycode
 	event.physical_keycode = keycode
 	event.unicode = keycode if keycode >= 32 and keycode <= 126 else 0
 	event.pressed = pressed
 	event.echo = false
+	event.shift_pressed = with_shift
 	Input.parse_input_event(event)
 	parsed_input_count += 1
 

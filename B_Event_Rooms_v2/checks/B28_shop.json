@@ -1,0 +1,128 @@
+{
+  "code": "B28",
+  "event_id": "shop",
+  "title": "补给商店",
+  "render": "renders/B28_shop.png",
+  "blend": "blend/B28_shop_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B28_shop__main_station_TableTop_woodlight",
+        "B28_shop__main_station_TableTop_wood",
+        "B28_shop__main_station_TableBands_iron",
+        "B28_shop__main_station_TableRivets_copper",
+        "B28_shop__main_station_TableLegs_wooddark",
+        "B28_shop__main_station_TableRail_wood",
+        "B28_shop__main_station_Tray_iron",
+        "B28_shop__main_station_TrayRim_edge",
+        "B28_shop__main_station_BlankTag_paper",
+        "B28_shop__main_station_Bandage_bone",
+        "B28_shop__main_station_Cylinder_cloth",
+        "B28_shop__main_station_Supply_red"
+      ],
+      "bounds": [
+        [
+          -4.550000190734863,
+          1.0,
+          0.05999999865889549
+        ],
+        [
+          -1.2500001192092896,
+          2.4000000953674316,
+          1.715000033378601
+        ]
+      ]
+    },
+    {
+      "id": "supply_shelves",
+      "kind": "floor",
+      "objects": [
+        "B28_shop__supply_shelves_ShelfUpright_wood",
+        "B28_shop__supply_shelves_ShelfBack_wooddark",
+        "B28_shop__supply_shelves_ShelfBoard_woodlight",
+        "B28_shop__supply_shelves_CratePlanks_wood",
+        "B28_shop__supply_shelves_CratePlanks_woodlight",
+        "B28_shop__supply_shelves_CratePlanks_wooddark",
+        "B28_shop__supply_shelves_CrateStrap_iron",
+        "B28_shop__supply_shelves_Rivet_copper",
+        "B28_shop__supply_shelves_Tag_paper",
+        "B28_shop__supply_shelves_TagSeal_red"
+      ],
+      "bounds": [
+        [
+          -6.625,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          -4.375,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "display_shelves",
+      "kind": "floor",
+      "objects": [
+        "B28_shop__display_shelves_ShelfUpright_wood",
+        "B28_shop__display_shelves_ShelfBack_wooddark",
+        "B28_shop__display_shelves_ShelfBoard_woodlight",
+        "B28_shop__display_shelves_MedicalPack_cloth",
+        "B28_shop__display_shelves_PackCross_red",
+        "B28_shop__display_shelves_MedicalPack_bone"
+      ],
+      "bounds": [
+        [
+          -3.924999952316284,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          -1.6749999523162842,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "restock",
+      "kind": "floor",
+      "objects": [
+        "B28_shop__restock_CartWheel_iron",
+        "B28_shop__restock_CartBed_woodlight",
+        "B28_shop__restock_CartHandle_iron",
+        "B28_shop__restock_CratePlanks_wood",
+        "B28_shop__restock_CratePlanks_woodlight",
+        "B28_shop__restock_CratePlanks_wooddark",
+        "B28_shop__restock_CrateStrap_iron",
+        "B28_shop__restock_Rivet_copper",
+        "B28_shop__restock_CanvasBag_cloth",
+        "B28_shop__restock_BagTie_woodlight"
+      ],
+      "bounds": [
+        [
+          -6.450000286102295,
+          1.100000023841858,
+          0.05999999865889549
+        ],
+        [
+          -5.150000095367432,
+          2.0999999046325684,
+          1.4700000286102295
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

@@ -1,0 +1,114 @@
+{
+  "code": "B44",
+  "event_id": "dice",
+  "title": "骰局",
+  "render": "renders/B44_dice.png",
+  "blend": "blend/B44_dice_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B44_dice__main_station_TableTop_woodlight",
+        "B44_dice__main_station_TableTop_wood",
+        "B44_dice__main_station_TableBands_iron",
+        "B44_dice__main_station_TableRivets_copper",
+        "B44_dice__main_station_TableLegs_wooddark",
+        "B44_dice__main_station_TableRail_wood",
+        "B44_dice__main_station_DiceFelt_cloth",
+        "B44_dice__main_station_Seat_woodlight",
+        "B44_dice__main_station_SeatLegs_wooddark",
+        "B44_dice__main_station_ChairBack_wood",
+        "B44_dice__main_station_ChairBack_woodlight",
+        "B44_dice__main_station_Cylinder_wooddark",
+        "B44_dice__main_station_Ring_copper",
+        "B44_dice__main_station_Die_bone",
+        "B44_dice__main_station_DiePip_black",
+        "B44_dice__main_station_Drawer_wood",
+        "B44_dice__main_station_DrawerFront_woodlight",
+        "B44_dice__main_station_DrawerHandle_copper",
+        "B44_dice__main_station_Paper_paper",
+        "B44_dice__main_station_Ink_wooddark",
+        "B44_dice__main_station_Coin_copper"
+      ],
+      "bounds": [
+        [
+          -1.399999976158142,
+          -1.100000023841858,
+          0.05999999865889549
+        ],
+        [
+          1.399999976158142,
+          2.1500000953674316,
+          1.75
+        ]
+      ]
+    },
+    {
+      "id": "stake_records",
+      "kind": "floor",
+      "objects": [
+        "B44_dice__stake_records_TableTop_woodlight",
+        "B44_dice__stake_records_TableTop_wood",
+        "B44_dice__stake_records_TableBands_iron",
+        "B44_dice__stake_records_TableRivets_copper",
+        "B44_dice__stake_records_TableLegs_wooddark",
+        "B44_dice__stake_records_TableRail_wood",
+        "B44_dice__stake_records_BookCover_red",
+        "B44_dice__stake_records_BookPages_paper",
+        "B44_dice__stake_records_Paper_paper",
+        "B44_dice__stake_records_Ink_wooddark",
+        "B44_dice__stake_records_WaxSeal_red",
+        "B44_dice__stake_records_Stamp_iron",
+        "B44_dice__stake_records_StampGrip_wood"
+      ],
+      "bounds": [
+        [
+          -5.324999809265137,
+          3.359999895095825,
+          0.05999999865889549
+        ],
+        [
+          -3.875,
+          4.239999771118164,
+          1.4450000524520874
+        ]
+      ]
+    },
+    {
+      "id": "visitors",
+      "kind": "floor",
+      "objects": [
+        "B44_dice__visitors_TableTop_woodlight",
+        "B44_dice__visitors_TableTop_wood",
+        "B44_dice__visitors_TableBands_iron",
+        "B44_dice__visitors_TableRivets_copper",
+        "B44_dice__visitors_TableLegs_wooddark",
+        "B44_dice__visitors_TableRail_wood",
+        "B44_dice__visitors_Blanket_cloth",
+        "B44_dice__visitors_Cushion_bone"
+      ],
+      "bounds": [
+        [
+          3.625,
+          3.450000047683716,
+          0.05999999865889549
+        ],
+        [
+          5.375,
+          4.164999961853027,
+          0.9200000166893005
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

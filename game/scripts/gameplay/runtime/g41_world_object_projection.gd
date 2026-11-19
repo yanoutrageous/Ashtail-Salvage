@@ -32,10 +32,14 @@ const ROOM_WALL_RECTS := [
 	Rect2(0.0, 0.15, 0.125, 0.22), Rect2(0.0, 0.63, 0.125, 0.24),
 	Rect2(0.875, 0.15, 0.125, 0.22), Rect2(0.875, 0.63, 0.125, 0.24),
 ]
-const NORMAL_PROP_RECTS := [
+const NORMAL_REAR_PROP_RECTS := [
 	Rect2(0.145, 0.18, 0.055, 0.035), Rect2(0.795, 0.19, 0.06, 0.04),
+]
+const NORMAL_FRONT_PROP_RECTS := [
 	Rect2(0.135, 0.81, 0.06, 0.04), Rect2(0.79, 0.80, 0.07, 0.05),
 ]
+# The raised voxel wall cap projects farther into the room than its floor footprint.
+const VOXEL_FRONT_PROP_INSET := 0.055
 const EVENT_PROP_RECTS := [
 	Rect2(0.36, 0.445, 0.28, 0.14),
 ]
@@ -77,7 +81,7 @@ static func build(snapshot: Dictionary, combat_snapshot: Dictionary = {}) -> Dic
 		"world_objects": world_objects,
 		"chest_contents": chest_contents,
 		"doors": _door_projections(snapshot, combat_snapshot, room_pos, room_key, not event_room.is_empty()),
-		"occluders": _occluder_projections(room_type, room_key, not event_room.is_empty()),
+		"occluders": [] if event_room.has("model_path") else _occluder_projections(room_type, room_key, not event_room.is_empty()),
 		"read_only": true,
 		"authority": &"public_snapshot_only",
 	}
@@ -133,6 +137,8 @@ static func _event_projection(snapshot: Dictionary, room_key: String, event_room
 	if event_room.is_empty():
 		return _descriptor(projection)
 	var room_pos: Vector2i = snapshot.get("position", snapshot.get("player_pos", Vector2i.ZERO))
+	if event_room.has("model_path"):
+		return _descriptor(preload("res://scripts/presentation/B/B_event_room_catalog.gd").project(snapshot, projection, event_room))
 	var state := EventRoomState.describe(event_type, event_state, room_pos)
 	var markers: Dictionary = state["markers"]
 	var use_open_art := bool(markers.get("cabinet_open", false)) or (event_type == &"z1_event_e24" and not bool(markers.get("cage_locked", false)))
@@ -372,17 +378,25 @@ static func room_floor_interior() -> Rect2:
 	return Rect2(top_left, bottom_right - top_left)
 
 
-static func room_solid_rects(room_type: StringName, event_type: StringName = &"") -> Array[Rect2]:
+static func room_solid_rects(
+	room_type: StringName, event_type: StringName = &"", generated_voxel: bool = false
+) -> Array[Rect2]:
 	var result: Array[Rect2] = []
 	match room_type:
 		&"Monster":
 			result.append(MONSTER_ALTAR_OCCLUDER_RECT)
 		&"Normal", &"Spawn", &"Chest":
-			result.assign(NORMAL_PROP_RECTS)
+			result.assign(NORMAL_REAR_PROP_RECTS)
+			for fixture: Rect2 in NORMAL_FRONT_PROP_RECTS:
+				if generated_voxel:
+					fixture.position.y -= VOXEL_FRONT_PROP_INSET
+				result.append(fixture)
 		&"Event":
 			var event_room := EventRoomCatalog.room(event_type)
 			if event_room.is_empty():
 				result.assign(EVENT_PROP_RECTS)
+			elif event_room.has("model_path"):
+				result.append_array(event_room.solids)
 			else:
 				result.append(Rect2(event_room["body_rect"]))
 	for wall: Rect2 in ROOM_WALL_RECTS:
@@ -452,7 +466,10 @@ static func _loot_position_for(instance_id: String, room_type: StringName, event
 	var solids := room_solid_rects(room_type)
 	if not event_room.is_empty():
 		solids.assign(ROOM_WALL_RECTS)
-		solids.append(Rect2(event_room["body_rect"]))
+		if event_room.has("model_path"):
+			solids.append_array(event_room.solids)
+		else:
+			solids.append(Rect2(event_room["body_rect"]))
 		var drop_anchor := Vector2(event_room["loot_anchor"])
 		var walkable_floor := room_floor_interior().grow(-G41RuntimeLayout.PLAYER_BODY_RADIUS)
 		for offset_y in [0.0, 0.067, -0.067]:

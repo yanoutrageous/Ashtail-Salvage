@@ -1,0 +1,86 @@
+{
+  "code": "B26",
+  "event_id": "altar",
+  "title": "祭坛",
+  "render": "renders/B26_altar.png",
+  "blend": "blend/B26_altar_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B26_altar__main_station_AltarSteps_stone",
+        "B26_altar__main_station_AltarTop_stonelight",
+        "B26_altar__main_station_AltarChannel_red",
+        "B26_altar__main_station_Tray_iron",
+        "B26_altar__main_station_TrayRim_edge",
+        "B26_altar__main_station_Offering_blue",
+        "B26_altar__main_station_CandleBase_iron",
+        "B26_altar__main_station_Wax_bone",
+        "B26_altar__main_station_Flame_amber"
+      ],
+      "bounds": [
+        [
+          -1.600000023841858,
+          -1.149999976158142,
+          0.05999999865889549
+        ],
+        [
+          1.600000023841858,
+          1.350000023841858,
+          1.8899999856948853
+        ]
+      ]
+    },
+    {
+      "id": "offering_pots",
+      "kind": "floor",
+      "objects": [
+        "B26_altar__offering_pots_reuse_Prop_Pottery_NE"
+      ],
+      "bounds": [
+        [
+          -3.9479498863220215,
+          0.6795499324798584,
+          0.05999999865889549
+        ],
+        [
+          -2.852050304412842,
+          1.3204500675201416,
+          0.5138624906539917
+        ]
+      ]
+    },
+    {
+      "id": "spent_wax",
+      "kind": "floor",
+      "objects": [
+        "B26_altar__spent_wax_CandleStone_stone",
+        "B26_altar__spent_wax_CandleBase_iron",
+        "B26_altar__spent_wax_Wax_bone",
+        "B26_altar__spent_wax_Flame_amber"
+      ],
+      "bounds": [
+        [
+          2.75,
+          0.45000001788139343,
+          0.05999999865889549
+        ],
+        [
+          3.6500000953674316,
+          1.149999976158142,
+          0.8999999761581421
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

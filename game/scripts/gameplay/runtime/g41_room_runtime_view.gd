@@ -18,6 +18,8 @@ const CombatSimulationScript := preload("res://scripts/gameplay/combat/g41_comba
 const Z1Events := preload("res://scripts/core/content/z1_event_catalog.gd")
 const TextureCache := preload("res://scripts/presentation/runtime_texture_cache.gd")
 const EventRoomDeviceView := preload("res://scripts/presentation/z1/z1_event_room_device_view.gd")
+const VoxelRoomBreakables := preload("res://scripts/gameplay/rooms/voxel_room_breakables.gd")
+const EventRoomCatalog := preload("res://scripts/presentation/z1/z1_event_room_catalog.gd")
 const EVENT_BADGE_TEXTURES := {
 	&"trader": preload("res://assets/ui/art25/content/long_term/event/trader.png"),
 	&"dice": preload("res://assets/ui/art25/content/long_term/event/dice.png"),
@@ -73,6 +75,8 @@ const SOUTH_DOOR_PROMPT_LIFT_LOCAL := 0.13
 # back onto the authoritative attack origin instead of subtracting it twice.
 const SLASH_SOURCE_ORIGIN := Vector2(131.0, 95.0)
 const SLASH_SOURCE_RADIUS := 113.0
+var b_room_view: Node2D
+var combat_art: Node2D
 var room_key: String = ""
 var projection_room_key: String = ""
 var room_type: StringName = &"Unknown"
@@ -143,6 +147,8 @@ func configure_room(snapshot: Dictionary) -> void:
 
 func advance(delta: float, player_local_pos: Vector2, next_combat_snapshot: Dictionary = {}) -> void:
 	last_player_local_pos = player_local_pos
+	if b_room_view != null and b_room_view.visible:
+		b_room_view.call("update_player_depth", player_local_pos)
 	if chest != null:
 		chest.advance(delta)
 	_advance_special_visuals(delta)
@@ -153,6 +159,8 @@ func advance(delta: float, player_local_pos: Vector2, next_combat_snapshot: Dict
 
 
 func set_context_ui_suppressed(suppressed: bool) -> void:
+	if context_ui_suppressed == suppressed:
+		return
 	context_ui_suppressed = suppressed
 	if context_ui_suppressed and context_popup != null:
 		context_popup.clear_context()
@@ -322,6 +330,17 @@ func get_door_projections() -> Array[Dictionary]:
 	return door_projections.duplicate(true)
 
 
+func breakable_props() -> Array[Dictionary]:
+	if b_room_view == null or not b_room_view.visible:
+		return []
+	return _dictionary_array(b_room_view.get("entry").get("breakables", []))
+
+
+func sync_breakable_props(hp_by_id: Dictionary, impacted_ids: Array = []) -> void:
+	if b_room_view != null and b_room_view.visible:
+		b_room_view.call("sync_breakable_props", hp_by_id, impacted_ids)
+
+
 func clear_runtime() -> void:
 	_sync_event_room_art({})
 	latest_room_snapshot.clear()
@@ -376,20 +395,70 @@ func _rebuild_world_projection() -> void:
 		focus_lost_elapsed = 0.0
 	world_projection = WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot)
 	_merge_room_entry_result_into_projection()
+	var runtime_objects := _dictionary_array(world_projection.get("world_objects", []))
+	var event_room: Dictionary = world_projection.get("event_room", {}).duplicate(true)
+	if combat_art != null and room_type != &"Unknown":
+		if not event_room.has("model_path"):
+			event_room = _voxel_room_entry(runtime_objects)
+		event_room["polished"] = true
+	if event_room.has("model_path") or bool(event_room.get("generated", false)):
+		if StringName(latest_room_snapshot.get("mode", &"")) != &"tutorial":
+			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot))
+		world_projection["event_room"] = event_room
 	_sync_event_room_art(world_projection.get("event_room", {}))
 	door_projections = _dictionary_array(world_projection.get("doors", []))
 	door_projection_revision += 1
 	_sync_door_visuals()
-	_sync_foreground_occluders(_dictionary_array(world_projection.get("occluders", [])))
-	var objects := _dictionary_array(world_projection.get("world_objects", []))
-	_sync_chest(objects)
-	_sync_ground_loot(objects, same_room)
-	_sync_special_objects(objects)
+	var occluders: Array[Dictionary] = []
+	if not _uses_generated_room():
+		occluders = _dictionary_array(world_projection.get("occluders", []))
+	_sync_foreground_occluders(occluders)
+	_sync_chest(runtime_objects)
+	_sync_ground_loot(runtime_objects, same_room)
+	_sync_special_objects(runtime_objects)
 	projection_room_key = room_key
 	_rebuild_obstacle_projection()
 
 
+func _voxel_room_entry(objects: Array[Dictionary]) -> Dictionary:
+	var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
+	var walls := WorldObjectProjectionScript.ROOM_WALL_RECTS
+	var props: Array[Rect2] = []
+	var units: Array[Dictionary] = []
+	for rect: Rect2 in WorldObjectProjectionScript.room_solid_rects(room_type, event_type, true):
+		if rect in walls:
+			continue
+		units.append({"id": "fixture_%d" % props.size(), "ground_y": rect.end.y})
+		props.append(rect)
+	var kind := StringName({&"Chest": &"chest", &"Event": &"event", &"Exit": &"exit", &"Mine": &"mine"}.get(room_type, &""))
+	var station := _first_projection(objects, kind)
+	var object_rect := Rect2(station.get("body_rect", Rect2()))
+	if room_type == &"Chest":
+		for piece in ["chest", "chest_lid"]:
+			units.append({"id": piece, "ground_y": object_rect.end.y})
+	return {"generated": true, "geometry_key": "%s/%s/%s" % [room_type, event_type, room_key],
+		"room_type": room_type, "event_type": event_type, "code": String(room_type),
+		"wall_rects": walls, "props": props, "units": units, "object_rect": object_rect,
+		"interaction_pos": station.get("local_pos", Vector2(0.5, 0.5))}
+
+
+func _uses_generated_room() -> bool:
+	return b_room_view != null and b_room_view.visible and bool(b_room_view.get("entry").get("generated", false))
+
+
 func _sync_event_room_art(room: Dictionary) -> void:
+	if room.has("model_path") or bool(room.get("generated", false)):
+		if b_room_view == null:
+			b_room_view = preload("res://scripts/presentation/B/B_event_room_view.gd").new()
+			b_room_view.name = "BModelRoom"
+			add_child(b_room_view)
+		b_room_view.call("configure", room)
+		var old_layer := get_node_or_null("EventRoomDecor") as CanvasItem
+		if old_layer != null:
+			old_layer.hide()
+		return
+	if b_room_view != null:
+		b_room_view.call("deactivate")
 	var layer := get_node_or_null("EventRoomDecor") as Node2D
 	if room.is_empty():
 		if layer != null:
@@ -449,6 +518,11 @@ func _sync_door_visuals() -> void:
 			get_node("DoorVisuals").add_child(sprite)
 			door_visuals[projection_id] = sprite
 		_apply_door_visual(sprite, door)
+		if b_room_view != null and b_room_view.visible:
+			sprite.hide()
+	if b_room_view != null and b_room_view.visible:
+		b_room_view.call("apply_snapshot", latest_room_snapshot, door_projections)
+		b_room_view.call("update_player_depth", last_player_local_pos)
 	for projection_id in door_visuals.keys():
 		if active_ids.has(projection_id):
 			continue
@@ -598,7 +672,8 @@ func _sync_player_attack_visual(snapshot: Dictionary) -> void:
 	if attack_fx == null or mask == null or slash == null:
 		return
 	var geometry: Dictionary = snapshot.get("player_attack_geometry", {})
-	if geometry.is_empty() or not bool(geometry.get("visible", false)):
+	slash.self_modulate.a = 0.0 if combat_art != null else 1.0
+	if geometry.is_empty() or geometry.get("shape") == &"rays" or not bool(geometry.get("visible", false)):
 		attack_fx.visible = false
 		return
 	var origin := ActorViewScript.local_to_world(Vector2(geometry.get("origin", Vector2.ZERO)))
@@ -663,6 +738,9 @@ func _update_visual_depths(player_local_pos: Vector2) -> void:
 func _apply_actor_depth(actor: CanvasItem, local_pos: Vector2) -> void:
 	if actor == null:
 		return
+	if actor is Node2D:
+		var layer := get_parent() as Node2D
+		(actor as Node2D).scale.x = layer.scale.y / maxf(0.001, layer.scale.x) if layer != null else 1.0
 	# The mine grate and exit beacon are floor effects. Preserve their shared
 	# floor ordering; upright props and combat actors use the same foot depth.
 	actor.z_index = 0 if room_type in [&"Mine", &"Exit"] else PresentationDescriptor.ground_depth(local_pos.y)
@@ -698,6 +776,10 @@ func _sync_chest(objects: Array[Dictionary]) -> void:
 		chest.name = "ChestInteractable"
 		get_node("WorldInteractables").add_child(chest)
 	chest.configure_chest(chest_projection)
+	if _uses_generated_room():
+		var visual := chest.get_node_or_null("VisualRoot/ArtVisual") as CanvasItem
+		if visual != null:
+			visual.hide()
 
 
 func _sync_ground_loot(objects: Array[Dictionary], same_room: bool) -> void:
@@ -790,6 +872,16 @@ func _apply_special_art(entity, projection: Dictionary) -> void:
 		visual_root.add_child(sprite)
 	var kind := StringName(projection.get("interaction_kind", &""))
 	var payload: Dictionary = projection.get("payload", {})
+	var room_supplies_visual := payload.has("B_model_path") or _uses_generated_room()
+	if room_supplies_visual:
+		sprite.hide()
+		entity.set_room_supplies_visual(true)
+		var old_readout := visual_root.get_node_or_null("DeviceReadout")
+		if old_readout != null:
+			old_readout.queue_free()
+		_apply_special_prompt_visibility(entity)
+		return
+	sprite.show()
 	var texture: Texture2D
 	var uses_projected_geometry := false
 	match kind:
@@ -822,9 +914,7 @@ func _apply_special_art(entity, projection: Dictionary) -> void:
 		device.call("configure", projection)
 	elif device != null:
 		device.queue_free()
-	var placeholder := visual_root.get_node_or_null("ProgramPlaceholder") as Polygon2D
-	if placeholder != null:
-		placeholder.visible = texture == null
+	entity.set_room_supplies_visual(false)
 	_apply_special_focus_visual(entity)
 
 
@@ -1429,6 +1519,21 @@ func _remove_missing_views(views: Dictionary, active_ids: Dictionary) -> void:
 func _rebuild_obstacle_projection() -> void:
 	obstacle_descriptors.clear()
 	logical_obstacles.clear()
+	if b_room_view != null and b_room_view.visible:
+		var b_room: Dictionary = world_projection.get("event_room", {})
+		var generated_voxel := _uses_generated_room()
+		var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
+		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel)
+		if generated_voxel and room_type == &"Chest":
+			rects.append(Rect2(b_room.get("object_rect", Rect2())))
+		var resolved := bool(b_room_view.call("debug_snapshot").get("model_loaded", false))
+		for i in rects.size():
+			var solid: Rect2 = rects[i]
+			obstacle_descriptors.append({"obstacle_id": "B:%s:%d" % [room_key, i], "body_rect": solid, "visual_footprint": solid, "collision_enabled": resolved, "visual_visible": resolved, "model_resolved": resolved, "resolved_model_path": b_room.get("model_path", ""), "disable_reason": &"none" if resolved else &"model_unresolved"})
+			if resolved:
+				logical_obstacles.append(solid)
+		world_projection["obstacle_descriptors"] = obstacle_descriptors.duplicate(true)
+		return
 	if room_type == &"Event" and not (world_projection.get("event_room", {}) as Dictionary).is_empty():
 		var station = special_entities.get("event:%s" % room_key)
 		if station != null:
@@ -1590,6 +1695,8 @@ func _draw() -> void:
 	_draw_z1_hazards()
 	_draw_player_attack_geometry()
 	for raw_laser in (combat_snapshot.get("lasers", []) as Array):
+		if combat_art != null and combat_art.beams.has(String(raw_laser.get("owner_id", ""))):
+			continue
 		if not (raw_laser is Dictionary):
 			continue
 		var laser := raw_laser as Dictionary

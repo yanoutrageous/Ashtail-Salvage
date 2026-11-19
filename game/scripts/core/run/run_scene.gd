@@ -42,6 +42,10 @@ const PlayerAppearanceConfigScript := preload("res://scripts/core/content/player
 const RunSceneModalControllerScript := preload("res://scripts/core/run/run_scene_modal_controller.gd")
 const RunScenePersistenceControllerScript := preload("res://scripts/core/run/run_scene_persistence_controller.gd")
 const SettingsPanelScript := preload("res://scripts/ui/settings/settings_panel.gd")
+const CombatArt := preload("res://scripts/presentation/voxel_a1/voxel_combat_overlay.gd")
+const BossArrival := preload("res://scripts/presentation/voxel_a1/voxel_boss_arrival.gd")
+const BreakableCombat := preload("res://scripts/gameplay/combat/voxel_breakable_combat.gd")
+const FieldWeapons := preload("res://scripts/gameplay/combat/field_weapons.gd")
 const G41RoomRuntimeViewScript := preload("res://scripts/gameplay/runtime/g41_room_runtime_view.gd")
 const G41RuntimeLayoutScript := preload("res://scripts/gameplay/runtime/g41_runtime_layout.gd")
 const Art25GameplayBackdropScript := preload("res://scripts/presentation/art25_gameplay_backdrop.gd")
@@ -146,6 +150,10 @@ var tutorial_popup_panel: TutorialPopupPanel
 var room_controller: RoomSceneController
 var player_controller: PlayerController
 var room_runtime_view
+var combat_art: CombatArt
+var boss_arrival: BossArrival
+var _breakable_room := ""
+var _displayed_prop_health := {}
 var gameplay_backdrop: Art25GameplayBackdrop
 var screen_state: StringName = SCREEN_MAIN_MENU
 var current_layout_profile_id: StringName = &"desktop"
@@ -192,6 +200,7 @@ func _ready() -> void:
 	meta_progress_adapter = MetaProgressAdapterScript.new()
 	save_manager.configure_meta_adapter(meta_progress_adapter)
 	runtime_controller = RunRuntimeControllerScript.new()
+	runtime_controller.background_axe_checkpoints = DisplayServer.get_name() != "headless"
 	runtime_controller.bind_meta_progress_adapter(meta_progress_adapter)
 	runtime_controller.initialize_z2_session(save_manager)
 	run_context = runtime_controller.context
@@ -244,6 +253,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	# Release the scene's existing runtime bindings without advancing or saving it.
+	if runtime_controller != null:
+		runtime_controller.finish_pending_combat_save(true, false)
 	if in_run_runtime != null:
 		in_run_runtime.bind(null)
 	if command_bus != null:
@@ -288,8 +299,15 @@ func _on_app_shell_ui_scale_changed(value: float) -> void:
 func _process(delta: float) -> void:
 	if player_controller == null or command_bus == null or run_context == null:
 		return
+	if runtime_controller.has_pending_combat_save():
+		runtime_controller.finish_pending_combat_save()
+		if runtime_controller.has_pending_combat_save():
+			_update_combat_art(delta, in_run_runtime.build_read_only_snapshot())
+			return
 	_sync_player_input_enabled()
-	if persistence_controller.present_error() or not run_context.run_active:
+	# A restored encounter starts advancing only after the player returns to it.
+	# In particular, a boss saved on its first tick must still be able to announce.
+	if persistence_controller.present_error() or not run_context.run_active or screen_state != SCREEN_RUN:
 		return
 	var input_blocked := _gameplay_input_blocked()
 	if room_runtime_view != null:
@@ -297,14 +315,21 @@ func _process(delta: float) -> void:
 	if in_run_runtime != null:
 		in_run_runtime.sync_room(player_controller.get_local_position())
 		in_run_runtime.set_paused(false)
+	if _advance_boss_arrival(delta, input_blocked):
+		return
 	var move_vector := Vector2.ZERO if input_blocked else player_controller.get_move_vector()
+	player_controller.advance_locomotion(delta, move_vector)
 	_advance_transition_rejection_debounce(delta, move_vector)
 	if in_run_runtime != null and in_run_runtime.has_active_combat():
 		var combat_aim := move_vector if move_vector.length_squared() > 0.0001 else player_controller.get_facing_vector()
-		var combat_snapshot: Dictionary = in_run_runtime.advance_frame(delta, move_vector, combat_aim)
+		var combat_snapshot: Dictionary = in_run_runtime.advance_frame(delta, move_vector, combat_aim, player_controller.move_speed_multiplier())
+		if runtime_controller.has_pending_combat_save():
+			_update_combat_art(delta, combat_snapshot)
+			return
 		_route_combat_domain_feedback(combat_snapshot)
 		if run_surface != null and run_surface.has_method("apply_combat_attack_state"):
 			run_surface.call("apply_combat_attack_state", combat_snapshot.get("attack_input", {}))
+			run_surface.apply_field_weapon_snapshot(combat_snapshot)
 		player_controller.set_local_position(in_run_runtime.get_player_local_position(player_controller.get_local_position()))
 		var combat_player: Dictionary = combat_snapshot.get("player", {})
 		var combat_player_state := StringName(combat_player.get("state", &"idle"))
@@ -317,6 +342,7 @@ func _process(delta: float) -> void:
 			return
 		if room_runtime_view != null:
 			room_runtime_view.advance(delta, player_controller.get_local_position(), combat_snapshot)
+		_update_combat_art(delta, combat_snapshot)
 		if not input_blocked and run_context.run_active:
 			var combat_transition := player_controller.requested_transition(move_vector)
 			if combat_transition != Vector2i.ZERO:
@@ -333,11 +359,79 @@ func _process(delta: float) -> void:
 		runtime_controller.advance_idle_frame(delta)
 	if persistence_controller.present_error():
 		return
+	var snapshot: Dictionary = in_run_runtime.build_read_only_snapshot() if in_run_runtime != null else {}
 	if room_runtime_view != null:
-		room_runtime_view.advance(delta, player_controller.get_local_position(), in_run_runtime.build_read_only_snapshot() if in_run_runtime != null else {})
+		room_runtime_view.advance(delta, player_controller.get_local_position(), snapshot)
+	if run_surface != null:
+		run_surface.apply_field_weapon_snapshot(snapshot)
+	_update_combat_art(delta, snapshot)
+
+
+func _advance_boss_arrival(delta: float, input_blocked: bool) -> bool:
+	if boss_arrival == null or in_run_runtime == null:
+		return false
+	if boss_arrival.is_active() and (screen_state != SCREEN_RUN or not in_run_runtime.has_active_combat()):
+		boss_arrival.cancel()
+	var started := false
+	if not boss_arrival.is_active():
+		if input_blocked or not in_run_runtime.has_active_combat() or in_run_runtime.simulation.tick_index != 0:
+			return false
+		if not boss_arrival.try_begin(in_run_runtime.build_read_only_snapshot()):
+			return false
+		started = true
+	player_controller.set_input_enabled(false)
+	boss_arrival.advance(delta)
+	var snapshot: Dictionary = in_run_runtime.build_read_only_snapshot()
+	if room_runtime_view != null:
+		room_runtime_view.advance(delta, player_controller.get_local_position(), snapshot)
+	_update_combat_art(delta, snapshot)
+	if started and combat_art != null:
+		combat_art.present_boss_arrival(snapshot)
+	return true
+
+
+func _update_combat_art(delta: float, snapshot: Dictionary) -> void:
+	if combat_art == null:
+		return
+	combat_art.advance(
+		delta, player_controller.get_local_position(), player_controller.get_facing_vector(),
+		snapshot, player_controller.locomotion_snapshot()
+	)
+	var field_contact: Dictionary = combat_art.take_field_swing_contact()
+	if not field_contact.is_empty():
+		runtime_controller.commit_field_attack(field_contact)
+	_sync_breakable_props()
+	for id in room_runtime_view.enemy_views:
+		var view = room_runtime_view.enemy_views[id]
+		if is_instance_valid(view.art_sprite):
+			var fallback_art: bool = id not in combat_art.enemies or view.hp <= 0
+			view.art_sprite.self_modulate.a = 1.0 if fallback_art else 0.0
+	for id in room_runtime_view.projectile_views:
+		var view := room_runtime_view.projectile_views[id] as CanvasItem
+		view.modulate.a = 0.0 if combat_art.bolts.has(id) else 1.0
+
+
+func _sync_breakable_props() -> void:
+	if not room_runtime_view.has_method("sync_breakable_props"):
+		return
+	var room := "%s/%s" % [run_context.run_id, run_context.cell_key(run_context.get_current_pos())]
+	var current := BreakableCombat.room_health(run_context)
+	if room == _breakable_room and current == _displayed_prop_health:
+		return
+	var impacted: Array = []
+	if room == _breakable_room:
+		for id in current:
+			if int(current[id]) < int(_displayed_prop_health.get(id, 1000)):
+				impacted.append(id)
+	_breakable_room = room
+	_displayed_prop_health = current.duplicate()
+	room_runtime_view.call("sync_breakable_props", current, impacted)
 
 
 func _input(event: InputEvent) -> void:
+	if (runtime_controller != null and runtime_controller.has_pending_combat_save()) or (boss_arrival != null and boss_arrival.is_active()):
+		get_viewport().set_input_as_handled()
+		return
 	if RuntimeInputProfileScript.observe_input_event(event):
 		call_deferred("_refresh_input_device_hints")
 	if player_feedback_service != null and (event is InputEventJoypadButton or event is InputEventJoypadMotion):
@@ -416,18 +510,25 @@ func _handle_run_action_input(event: InputEvent) -> bool:
 		return false
 	if map_overlay_panel != null and map_overlay_panel.visible:
 		return false
+	if _handle_field_weapon_input(event):
+		return true
 	var step_direction := _direction_from_input_event(event)
 	if step_direction != Vector2.ZERO and player_controller != null:
 		player_controller.play_step(step_direction)
 		return true
 
 	match run_action:
+		RunSceneInputRouterScript.ACTION_JUMP:
+			if _gameplay_input_blocked():
+				return false
+			player_controller.start_jump()
+			return true
 		RunSceneInputRouterScript.ACTION_INTERACT:
 			_handle_interact_pressed()
 			return true
 		RunSceneInputRouterScript.ACTION_FIGHT:
 			if event is InputEventMouseButton:
-				if in_run_runtime == null or not in_run_runtime.has_active_combat():
+				if in_run_runtime == null or (not in_run_runtime.has_active_combat() and not _can_field_swing()):
 					return false
 				if not _pointer_targets_playfield(event as InputEventMouseButton):
 					return false
@@ -455,6 +556,57 @@ func _handle_run_action_input(event: InputEvent) -> bool:
 			return true
 		_:
 			return false
+
+
+func _handle_field_weapon_input(event: InputEvent) -> bool:
+	if in_run_runtime == null or not run_context.run_active:
+		return false
+	if RunSceneInputRouterScript.is_weapon_skill(event):
+		if _gameplay_input_blocked() or run_context.mode == &"tutorial":
+			return false
+		if event is InputEventMouseButton and not _pointer_targets_playfield(event as InputEventMouseButton):
+			return false
+		var aim := _pointer_attack_aim(event as InputEventMouseButton) if event is InputEventMouseButton else player_controller.get_facing_vector()
+		var result: Dictionary
+		if in_run_runtime.has_active_combat():
+			result = in_run_runtime.request_weapon_skill(aim)
+		elif combat_art != null:
+			result = in_run_runtime.request_field_attack(player_controller.get_local_position(), aim, room_runtime_view.get_logical_obstacles(), true)
+			if bool(result.get("ok", false)):
+				combat_art.call("present_field_shot", result["field_attack"])
+		else:
+			return false
+		if bool(result.get("ok", false)):
+			player_controller.set_facing_vector(aim)
+		_show_command_feedback(result)
+		return true
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return false
+	var physical_key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	match physical_key:
+		KEY_1:
+			_request_field_weapon(FieldWeapons.AXE)
+		KEY_2:
+			_request_field_weapon(FieldWeapons.RIFLE)
+		KEY_3:
+			_request_field_weapon(FieldWeapons.SCATTER)
+		KEY_R:
+			if in_run_runtime.field_weapons["selected"] == FieldWeapons.AXE:
+				return false
+			_request_field_reload()
+		_:
+			return false
+	return true
+
+
+func _request_field_weapon(weapon: StringName) -> void:
+	if in_run_runtime != null and not _gameplay_input_blocked():
+		_show_command_feedback(in_run_runtime.equip_field_weapon(weapon))
+
+
+func _request_field_reload() -> void:
+	if in_run_runtime != null and not _gameplay_input_blocked():
+		_show_command_feedback(in_run_runtime.reload_field_weapon())
 
 
 func _is_primary_pointer_attack(event: InputEvent) -> bool:
@@ -520,6 +672,13 @@ func _build_playfield_visuals() -> void:
 	player_controller = PlayerScene.instantiate() as PlayerController
 	player_controller.name = "PlayerController"
 	player_layer.add_child(player_controller)
+	if not OS.get_cmdline_user_args().has("--classic-2d"):
+		combat_art = CombatArt.new()
+		combat_art.name = "VoxelCombatArt"
+		room_runtime_view.add_child(combat_art)
+		room_runtime_view.combat_art = combat_art
+		var sprite := player_controller.get_node("Sprite") as Sprite2D
+		sprite.self_modulate.a = 0.0
 	_suppress_runtime_scene_labels()
 
 
@@ -562,6 +721,8 @@ func _build_run_overlay() -> void:
 	run_surface = RunSurfaceScript.new()
 	run_surface.name = "RunSurface"
 	run_surface.build()
+	run_surface.field_weapon_requested.connect(_request_field_weapon)
+	run_surface.field_reload_requested.connect(_request_field_reload)
 	run_surface.interact_requested.connect(_handle_interact_pressed)
 	run_surface.inventory_requested.connect(_show_inventory_panel)
 	run_surface.ground_loot_requested.connect(_activate_world_context_primary)
@@ -571,6 +732,10 @@ func _build_run_overlay() -> void:
 	run_surface.pause_requested.connect(_show_pause_panel)
 	run_surface.encounter_option_selected.connect(_on_encounter_option_selected)
 	run_overlay_root.add_child(run_surface)
+	boss_arrival = BossArrival.new()
+	boss_arrival.name = "BossArrival"
+	boss_arrival.z_index = 250
+	run_overlay_root.add_child(boss_arrival)
 
 	hud = run_surface.get_hud()
 	minimap_panel = run_surface.get_minimap_panel()
@@ -1403,8 +1568,13 @@ func _search_and_show_loot() -> void:
 		)
 
 
+func _can_field_swing() -> bool:
+	return (combat_art != null and run_context.run_active and run_context.mode != &"tutorial"
+		and in_run_runtime != null and in_run_runtime.field_weapons["selected"] == FieldWeapons.AXE)
+
+
 func _fight_and_show_result(requested_facing: Vector2 = Vector2.ZERO) -> void:
-	if _is_runtime_modal_open():
+	if _gameplay_input_blocked():
 		return
 	if in_run_runtime != null and in_run_runtime.has_active_combat():
 		var attack_result: Dictionary = in_run_runtime.request_attack(requested_facing)
@@ -1419,6 +1589,19 @@ func _fight_and_show_result(requested_facing: Vector2 = Vector2.ZERO) -> void:
 				)
 			return
 		_show_command_feedback(attack_result)
+		return
+	if _can_field_swing() and not _gameplay_input_blocked():
+		var facing := requested_facing.normalized() if requested_facing.length_squared() > 0.0001 else player_controller.get_facing_vector()
+		if combat_art.request_field_swing(room_runtime_view.get_logical_obstacles(), facing):
+			player_controller.set_facing_vector(facing)
+		return
+	if combat_art != null and in_run_runtime != null and in_run_runtime.field_weapons["selected"] != FieldWeapons.AXE:
+		var facing := requested_facing.normalized() if requested_facing.length_squared() > 0.0001 else player_controller.get_facing_vector()
+		var fired: Dictionary = in_run_runtime.request_field_attack(player_controller.get_local_position(), facing, room_runtime_view.get_logical_obstacles())
+		if fired.get("ok", false):
+			player_controller.set_facing_vector(facing)
+			combat_art.present_field_shot(fired["field_attack"])
+		_show_command_feedback(fired)
 		return
 	var result := _dispatch_command(&"fight_current_enemy", {}, true, false)
 	var snapshot := run_context.get_status_snapshot()
@@ -2113,6 +2296,7 @@ func _gameplay_input_blocked() -> bool:
 		or persistence_controller.is_blocked()
 		or _is_runtime_modal_open()
 		or (map_overlay_panel != null and map_overlay_panel.visible)
+		or (boss_arrival != null and boss_arrival.is_active())
 		or run_context.has_blocking_tutorial_popup()
 	)
 
@@ -2330,6 +2514,10 @@ func _apply_full_view_models() -> void:
 	if room_runtime_view != null:
 		room_runtime_view.configure_room(snapshot)
 		room_runtime_view.apply_combat_snapshot(in_run_runtime.build_read_only_snapshot() if in_run_runtime != null else {})
+		var voxel_room: CanvasItem = room_runtime_view.b_room_view
+		var room_background := room_controller.get_node_or_null("Background") as CanvasItem if room_controller != null else null
+		if room_background != null:
+			room_background.visible = voxel_room == null or not voxel_room.visible
 		if player_controller != null:
 			player_controller.set_logical_obstacles(room_runtime_view.get_logical_obstacles())
 			player_controller.set_door_projections(room_runtime_view.get_door_projections())
@@ -2436,9 +2624,17 @@ func _apply_game_stage_layout(layout_profile: Dictionary) -> void:
 			room_visual_center = background_sprite.position
 			if background_sprite.texture != null:
 				room_visual_size = background_sprite.texture.get_size() * background_sprite.scale.abs()
+	var b_aspect := 1.0
+	if room_runtime_view != null and room_runtime_view.b_room_view != null and room_runtime_view.b_room_view.visible:
+		b_aspect = 1.55
+		room_visual_size = Vector2(560.0 * b_aspect, 560.0 * 1.16)
+		room_visual_center = G41RuntimeLayoutScript.local_to_world(Vector2(0.5, 0.42))
 	# HUD and tutorial share the same side rails; showing a lesson must not
 	# change the world-to-screen allocation of the center room.
 	var stage_rect: Rect2 = RunSurfaceModel.layout_geometry(layout_profile).room_stage_rect
+	if boss_arrival != null:
+		boss_arrival.position = stage_rect.position
+		boss_arrival.size = stage_rect.size
 	var scale_value: float = minf(
 		stage_rect.size.x / maxf(1.0, room_visual_size.x),
 		stage_rect.size.y / maxf(1.0, room_visual_size.y)
@@ -2446,11 +2642,12 @@ func _apply_game_stage_layout(layout_profile: Dictionary) -> void:
 	# Keep the existing uniform mapping for room art, player and logical bodies.
 	scale_value = clampf(scale_value, 0.32, 1.82)
 	var gameplay_center := stage_rect.get_center()
-	var origin := gameplay_center - room_visual_center * scale_value
+	var b_scale := Vector2(scale_value * b_aspect, scale_value)
+	var origin := gameplay_center - room_visual_center * b_scale
 	room_layer.position = origin
 	player_layer.position = origin
-	room_layer.scale = Vector2(scale_value, scale_value)
-	player_layer.scale = Vector2(scale_value, scale_value)
+	room_layer.scale = b_scale
+	player_layer.scale = b_scale
 
 
 func _suppress_runtime_scene_labels() -> void:
@@ -2761,8 +2958,7 @@ func _attempt_room_transition(direction: Vector2i) -> void:
 		_show_command_feedback(result)
 		pending_combat_flee_direction = Vector2i.ZERO
 		_reset_transition_rejection_debounce()
-		player_controller.local_velocity = Vector2.ZERO
-		player_controller.step_preview_remaining = 0.0
+		player_controller.reset_locomotion()
 		player_controller.set_facing_vector(Vector2(direction))
 		player_controller.set_runtime_visual_state(&"idle")
 		player_controller.set_local_position(runtime_controller.get_restored_local_position(entry_position))

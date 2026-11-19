@@ -16,6 +16,9 @@ const FALLBACK_LABELS := {
 	&"move_right": "向右移动",
 	&"interact": "交互",
 	&"attack": "攻击",
+	&"weapon_skill": "武器技能",
+	&"jump": "跳跃",
+	&"sprint": "加速",
 	&"open_map": "地图",
 	&"open_inventory": "背包",
 	&"open_ground_loot": "拾取",
@@ -53,6 +56,7 @@ const JOYPAD_AXIS_LABELS := {
 const KEY_LABELS := {
 	KEY_ESCAPE: "Esc",
 	KEY_SPACE: "空格",
+	KEY_SHIFT: "Shift",
 	KEY_TAB: "Tab",
 	KEY_ENTER: "Enter",
 	KEY_KP_ENTER: "小键盘 Enter",
@@ -152,7 +156,7 @@ static func descriptor(action_id: StringName, preferred_device: StringName = DEV
 				keyboard_labels.append(label)
 	if action_id == RuntimeInputProfileScript.ACTION_ATTACK and keyboard_labels.has("鼠标左键"):
 		# The production combat path treats pointer attack as the primary PC
-		# gesture while Space/J remain accessibility alternatives.
+		# gesture, with J as the keyboard alternative.
 		keyboard_labels.erase("鼠标左键")
 		keyboard_labels.push_front("鼠标左键")
 	var keyboard_label := " / ".join(keyboard_labels)

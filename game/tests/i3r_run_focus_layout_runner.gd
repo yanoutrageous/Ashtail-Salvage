@@ -84,17 +84,17 @@ func _check_footer_and_mine_risk(resolution_id: StringName) -> void:
 			+ flat_backpack.border_width_right + flat_backpack.border_width_bottom == 0,
 			"%s backpack section retained a complete inner outline" % resolution_id
 		)
-	# The current rail is modal_frame.png, not the retired authored left-rail skin.
+	# The scanner rail uses the SVG frame with 12 px fixed corner slices.
 	# Its 18px corner slices and real GPU title bounds are recorded in the audit.
 	var rail := surface.left_rail_art
 	var rail_texture := rail.texture
 	_check(
-		rail_texture != null and rail_texture.resource_path == "res://assets/art24/ui/modal_frame.png"
-		and FileAccess.get_sha256(rail_texture.resource_path).to_upper() == "F8D164AF4FF4C3E0C03CFB86D2E6B621FF8BE2F2C9429D2DDDB154F7579F38E4",
+		rail_texture != null and rail_texture.resource_path == "res://assets/ui/run_vector/frame_rail.svg"
+		and FileAccess.get_sha256(rail_texture.resource_path).to_upper() == "BD8F384B860463BA8F3D153EA254A904E7F78CCFF6C0FFAA5297F250CA408414",
 		"%s scanner rail asset changed; its reviewed ornament clearance must be revalidated" % resolution_id
 	)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-		_check(rail.get_patch_margin(side) == 18, "%s scanner rail lost its reviewed fixed corner slices" % resolution_id)
+		_check(rail.get_patch_margin(side) == 12, "%s scanner rail lost its reviewed fixed corner slices" % resolution_id)
 	var rail_inset := Vector2(rail.get_patch_margin(SIDE_LEFT), rail.get_patch_margin(SIDE_TOP))
 	var rail_tail := Vector2(rail.get_patch_margin(SIDE_RIGHT), rail.get_patch_margin(SIDE_BOTTOM))
 	var scanner_safe := Rect2(rail_rect.position + rail_inset, rail_rect.size - rail_inset - rail_tail)

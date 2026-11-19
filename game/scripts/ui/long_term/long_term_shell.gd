@@ -12,6 +12,9 @@ const Art23LongTermAssetContractScript := preload("res://scripts/presentation/ar
 const Art25ContentAssetContractScript := preload("res://scripts/presentation/art25_content_asset_contract.gd")
 const LongTermContentCardViewScript := preload("res://scripts/ui/long_term/long_term_content_card_view.gd")
 const CharacterPresentationCatalogScript := preload("res://scripts/presentation/character/character_presentation_catalog.gd")
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
+const StationCharacterFrames := preload("res://scripts/ui/shell/station_character_frames.gd")
+const MODULE_ICONS := preload("res://assets/ui/station/station_module_icons.svg")
 const MetaActionRequestIdScript := preload("res://scripts/core/progression/meta_action_request_id.gd")
 const M7ContentCatalogScript := preload("res://scripts/core/content/m7_content_catalog.gd")
 
@@ -85,7 +88,7 @@ var module_group: Control
 var furniture_texture: TextureRect
 var secondary_scroll: ScrollContainer
 var secondary_row: HBoxContainer
-var content_panel_texture: TextureRect
+var content_panel_texture: NinePatchRect
 var content_detail_title_label: Label
 var content_detail_body_label: Label
 var content_detail_meta_label: Label
@@ -136,9 +139,7 @@ var character_actor_id: StringName = CharacterPresentationCatalogScript.DEFAULT_
 var character_appearance_id: StringName = CharacterPresentationCatalogScript.DEFAULT_APPEARANCE_ID
 var character_clip_descriptors: Dictionary = {}
 var character_clip_frames: Dictionary = {}
-var lever_texture: TextureRect
 var lever_button: Button
-var lever_label: Label
 
 var transition_state: StringName = STATE_OPEN
 var requested_module_id: StringName = &"task_archive"
@@ -586,7 +587,7 @@ func _handle_cancel_focus_step() -> StringName:
 
 func _build_background() -> void:
 	_add_color_rect(self, "LongTermBackdrop", Rect2(0, 0, 1280, 720), Color(0.01, 0.01, 0.01, 1.0))
-	_add_texture(self, "LongTermSceneCleanPlate", Rect2(0, 0, 1280, 720), _texture(&"long_term.scene.background.clean_plate"), false)
+	_add_texture(self, "LongTermSceneCleanPlate", Rect2(0, 0, 1280, 720), preload("res://assets/ui/station/deploy_station.png"), false)
 
 
 func _build_ambient_motion() -> void:
@@ -597,13 +598,12 @@ func _build_ambient_motion() -> void:
 
 
 func _build_navigation() -> void:
-	_add_texture(self, "LongTermNavChain", LongTermLayoutContractScript.NAV_CHAIN, _texture(&"long_term.decoration.chain"), false)
 	_add_image_button(self, "LongTermNavMainButton", LongTermLayoutContractScript.NAV_MAIN, "主菜单", &"nav", _request_back_to_main, 17)
 	_add_image_button(self, "LongTermNavDeployButton", LongTermLayoutContractScript.NAV_DEPLOY, "出发探索", &"nav", _request_deploy, 17)
 
 
 func _build_module_rail() -> void:
-	_add_texture(self, "LongTermModuleRail", LongTermLayoutContractScript.MODULE_RAIL, _texture(&"long_term.decoration.rail"), false)
+	StationSkin.add_trim(self, &"fascia", StationSkin.JADE, LongTermLayoutContractScript.MODULE_RAIL.grow(-2.0))
 	tab_buttons.clear()
 	tab_button_order.clear()
 	for index in range(MODULE_IDS.size()):
@@ -619,6 +619,11 @@ func _build_module_rail() -> void:
 		button.pressed.connect(Callable(self, "_on_module_tab_pressed").bind(module_id))
 		_apply_module_button_surface(button, module_id, false)
 		add_child(button)
+		var emblem := AtlasTexture.new()
+		emblem.atlas = MODULE_ICONS
+		emblem.region = Rect2(index * 48, 0, 48, 48)
+		emblem.filter_clip = true
+		_add_texture(button, "LongTermModuleEmblem", Rect2(42, 8, 42, 42), emblem, false)
 		tab_buttons[module_id] = button
 		tab_button_order.append(button)
 	_wire_long_term_tab_focus()
@@ -650,23 +655,22 @@ func _build_module_group() -> void:
 	secondary_row.add_theme_constant_override("separation", 6)
 	secondary_scroll.add_child(secondary_row)
 
-	content_panel_texture = _add_texture(module_group, "LongTermContentDetailBlock", LongTermLayoutContractScript.CONTENT_PANEL, _texture(&"long_term.panel.content"), false)
-	# The audited parchment is the workspace surface here, not a thumbnail. Fill
-	# the expanded contract rect so its readable region covers both list/detail.
-	content_panel_texture.stretch_mode = TextureRect.STRETCH_SCALE
-	content_detail_title_label = _add_label(module_group, "LongTermContentDetailTitle", LongTermLayoutContractScript.CONTENT_TITLE, "", 18, Color(0.26, 0.12, 0.05), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
-	content_detail_body_label = _add_label(module_group, "LongTermContentDetailBody", LongTermLayoutContractScript.CONTENT_SUMMARY, "", 16, Color(0.23, 0.14, 0.08), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_panel_texture = StationSkin.add_plate(module_group, "LongTermContentDetailBlock", LongTermLayoutContractScript.CONTENT_PANEL)
+	StationSkin.add_trim(content_panel_texture, &"fascia", StationSkin.JADE, Rect2(20, 92, 732, 14))
+	_add_color_rect(content_panel_texture, "LongTermDetailDivider", Rect2(361, 138, 1, 315), StationSkin.EDGE)
+	content_detail_title_label = _add_label(module_group, "LongTermContentDetailTitle", LongTermLayoutContractScript.CONTENT_TITLE, "", 18, StationSkin.BRASS, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_detail_body_label = _add_label(module_group, "LongTermContentDetailBody", LongTermLayoutContractScript.CONTENT_SUMMARY, "", 16, StationSkin.INK, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
 	content_detail_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content_detail_body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	content_detail_meta_label = _add_label(module_group, "LongTermContentDetailMeta", LongTermLayoutContractScript.CONTENT_META, "", 12, Color(0.35, 0.22, 0.12), HORIZONTAL_ALIGNMENT_RIGHT, &"readable")
-	content_list_header_label = _add_label(module_group, "LongTermContentListHeader", LongTermLayoutContractScript.CONTENT_LIST_HEADER, "档案条目", 14, Color(0.42, 0.24, 0.10), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
-	content_detail_header_label = _add_label(module_group, "LongTermContentRecordHeader", LongTermLayoutContractScript.CONTENT_DETAIL_HEADER, "档案详情", 14, Color(0.42, 0.24, 0.10), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
-	content_record_title_label = _add_label(module_group, "LongTermContentRecordTitle", LongTermLayoutContractScript.CONTENT_RECORD_TITLE, "", 19, Color(0.22, 0.12, 0.05), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
-	content_record_state_label = _add_label(module_group, "LongTermContentRecordState", LongTermLayoutContractScript.CONTENT_RECORD_STATE, "", 12, Color(0.34, 0.20, 0.10), HORIZONTAL_ALIGNMENT_RIGHT, &"readable")
-	content_record_body_label = _add_label(module_group, "LongTermContentRecordBody", LongTermLayoutContractScript.CONTENT_RECORD_BODY, "", 14, Color(0.24, 0.15, 0.08), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_detail_meta_label = _add_label(module_group, "LongTermContentDetailMeta", LongTermLayoutContractScript.CONTENT_META, "", 12, StationSkin.MUTED, HORIZONTAL_ALIGNMENT_RIGHT, &"readable")
+	content_list_header_label = _add_label(module_group, "LongTermContentListHeader", LongTermLayoutContractScript.CONTENT_LIST_HEADER, "档案条目", 14, StationSkin.JADE, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_detail_header_label = _add_label(module_group, "LongTermContentRecordHeader", LongTermLayoutContractScript.CONTENT_DETAIL_HEADER, "档案详情", 14, StationSkin.JADE, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_record_title_label = _add_label(module_group, "LongTermContentRecordTitle", LongTermLayoutContractScript.CONTENT_RECORD_TITLE, "", 19, StationSkin.BRASS, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_record_state_label = _add_label(module_group, "LongTermContentRecordState", LongTermLayoutContractScript.CONTENT_RECORD_STATE, "", 12, StationSkin.JADE, HORIZONTAL_ALIGNMENT_RIGHT, &"readable")
+	content_record_body_label = _add_label(module_group, "LongTermContentRecordBody", LongTermLayoutContractScript.CONTENT_RECORD_BODY, "", 14, StationSkin.INK, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
 	content_record_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content_record_body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	content_record_facts_label = _add_label(module_group, "LongTermContentRecordFacts", LongTermLayoutContractScript.CONTENT_RECORD_FACTS, "", 13, Color(0.31, 0.20, 0.11), HORIZONTAL_ALIGNMENT_LEFT, &"readable")
+	content_record_facts_label = _add_label(module_group, "LongTermContentRecordFacts", LongTermLayoutContractScript.CONTENT_RECORD_FACTS, "", 13, StationSkin.MUTED, HORIZONTAL_ALIGNMENT_LEFT, &"readable")
 	content_record_facts_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content_record_facts_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_clear_label_shadow(content_detail_title_label)
@@ -725,7 +729,9 @@ func _build_module_group() -> void:
 
 
 func _build_profile_column() -> void:
-	_add_texture(self, "LongTermProfileFrame", LongTermLayoutContractScript.PROFILE_FRAME, _texture(&"long_term.panel.profile"), false)
+	var plate := StationSkin.add_plate(self, "LongTermProfileFrame", LongTermLayoutContractScript.PROFILE_FRAME, StationSkin.RAIL)
+	StationSkin.add_trim(plate, &"fascia", StationSkin.BRASS, Rect2(19, 65, 220, 14))
+	StationSkin.add_trim(plate, &"fascia", StationSkin.JADE, Rect2(19, 303, 220, 14))
 	_add_label(self, "LongTermProfileHeading", LongTermLayoutContractScript.PROFILE_HEADER, "角色档案", 23, Color(0.96, 0.75, 0.34), HORIZONTAL_ALIGNMENT_CENTER)
 	character_frames.clear()
 	character_clip_descriptors.clear()
@@ -760,23 +766,7 @@ func _build_profile_column() -> void:
 
 
 func _build_archive_lever() -> void:
-	lever_texture = _add_texture(self, "LongTermArchiveLeverTexture", LongTermLayoutContractScript.LEVER, null, false)
-	lever_button = Button.new()
-	lever_button.name = "LongTermArchiveLever"
-	lever_button.text = ""
-	lever_button.position = LongTermLayoutContractScript.LEVER.position
-	lever_button.size = LongTermLayoutContractScript.LEVER.size
-	lever_button.focus_mode = Control.FOCUS_ALL
-	lever_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_apply_transparent_button(lever_button, 13)
-	lever_button.pressed.connect(func() -> void: set_archive_collapsed(not archive_collapsed))
-	lever_button.focus_entered.connect(func() -> void: _set_lever_highlight(true))
-	lever_button.focus_exited.connect(func() -> void: _set_lever_highlight(lever_button.is_hovered()))
-	lever_button.mouse_entered.connect(func() -> void: _set_lever_highlight(true))
-	lever_button.mouse_exited.connect(func() -> void: _set_lever_highlight(lever_button.has_focus()))
-	add_child(lever_button)
-	lever_label = _add_label(self, "LongTermArchiveLeverLabel", LongTermLayoutContractScript.LEVER_LABEL, "收起档案", 12, Color(0.97, 0.78, 0.38), HORIZONTAL_ALIGNMENT_CENTER)
-	_clear_label_shadow(lever_label)
+	lever_button = _add_image_button(self, "LongTermArchiveLever", Rect2(12, 652, 142, 44), "收起档案", &"nav", func() -> void: set_archive_collapsed(not archive_collapsed), 14)
 	_update_lever()
 
 
@@ -1116,17 +1106,8 @@ func _request_appearance_settings() -> void:
 
 
 func _update_lever() -> void:
-	if lever_texture == null or lever_button == null:
-		return
-	lever_texture.texture = _texture(&"long_term.control.lever.collapsed" if archive_collapsed else &"long_term.control.lever.expanded")
-	lever_label.text = "展开档案" if archive_collapsed else "收起档案"
-
-
-func _set_lever_highlight(active: bool) -> void:
-	if lever_texture != null:
-		lever_texture.modulate = Color(1.12, 1.05, 0.78, 1.0) if active else Color.WHITE
-	if lever_label != null:
-		lever_label.modulate = Color(0.48, 1.0, 0.96, 1.0) if active else Color.WHITE
+	if lever_button != null:
+		lever_button.text = "展开档案" if archive_collapsed else "收起档案"
 
 
 func _content_transition_nodes() -> Array[CanvasItem]:
@@ -1191,7 +1172,7 @@ func _load_character_clip(clip_id: StringName) -> void:
 		clip_id
 	)
 	character_clip_descriptors[clip_id] = descriptor
-	character_clip_frames[clip_id] = CharacterPresentationCatalogScript.load_frames(descriptor)
+	character_clip_frames[clip_id] = CharacterPresentationCatalogScript.load_frames(descriptor, StationCharacterFrames.deploy_frame)
 
 
 func _apply_character_clip_pose(clip_id: StringName, step: int = 0) -> bool:
@@ -1732,25 +1713,13 @@ func _grab_long_term_initial_focus() -> void:
 
 func _apply_module_button_surface(button: Button, module_id: StringName, selected: bool) -> void:
 	var base_state := &"selected" if selected else (&"locked" if LOCKED_MODULES.has(module_id) else &"normal")
-	var focus_state := &"selected" if selected else &"focused"
-	_apply_texture_style(button, Art23LongTermAssetContractScript.texture(StringName("long_term.control.module.%s.%s" % [String(module_id), String(base_state)])), "normal")
-	_apply_texture_style(button, Art23LongTermAssetContractScript.texture(StringName("long_term.control.module.%s.%s" % [String(module_id), String(focus_state)])), "hover")
-	_apply_texture_style(button, Art23LongTermAssetContractScript.texture(StringName("long_term.control.module.%s.%s" % [String(module_id), String(focus_state)])), "focus")
-	var pressed_state := &"selected" if selected else &"pressed"
-	_apply_texture_style(button, Art23LongTermAssetContractScript.texture(StringName("long_term.control.module.%s.%s" % [String(module_id), String(pressed_state)])), "pressed")
-	var text_color := Color(0.44, 1.0, 0.96) if selected else Color(0.98, 0.80, 0.39)
-	_apply_module_button_copy(button, text_color)
+	StationSkin.style_button(button, &"normal", base_state)
+	_apply_module_button_copy(button, StationSkin.JADE if selected else StationSkin.INK)
 
 
 func _apply_generic_button_surface(button: Button, control_id: StringName, state: StringName, font_size: int) -> void:
-	var focus_state := &"selected" if state == &"selected" else &"focused"
-	_apply_texture_style(button, _texture(StringName("long_term.control.%s.%s" % [String(control_id), String(state)])), "normal")
-	_apply_texture_style(button, _texture(StringName("long_term.control.%s.%s" % [String(control_id), String(focus_state)])), "hover")
-	_apply_texture_style(button, _texture(StringName("long_term.control.%s.%s" % [String(control_id), String(focus_state)])), "focus")
-	var pressed_state := &"selected" if state == &"selected" else &"pressed"
-	_apply_texture_style(button, _texture(StringName("long_term.control.%s.%s" % [String(control_id), String(pressed_state)])), "pressed")
-	_apply_texture_style(button, _texture(StringName("long_term.control.%s.locked" % String(control_id))), "disabled")
-	var text_color := Color(0.42, 1.0, 0.96) if state == &"selected" else Color(0.96, 0.80, 0.48)
+	StationSkin.style_button(button, &"normal", state, 5 if control_id == &"card" else 10)
+	var text_color := StationSkin.JADE if state == &"selected" else StationSkin.INK
 	_apply_button_text(button, font_size, text_color)
 	if state == &"selected":
 		_apply_selected_text_colors(button, text_color)
@@ -1777,18 +1746,8 @@ func _add_image_button(parent: Control, node_name: String, rect: Rect2, text: St
 	return button
 
 
-func _apply_texture_style(button: Button, texture: Texture2D, state: String) -> void:
-	if texture == null:
-		return
-	var style := StyleBoxTexture.new()
-	style.texture = texture
-	button.add_theme_stylebox_override(state, style)
-
-
 func _apply_button_text(button: Button, font_size: int, color: Color) -> void:
-	var font := _pixel_font_safe()
-	if font is Font:
-		button.add_theme_font_override("font", font as Font)
+	button.add_theme_font_override("font", StationSkin.FONT)
 	button.set_meta("long_term_base_font_size", font_size)
 	_apply_scaled_button_font(button)
 	button.add_theme_color_override("font_color", color)
@@ -1807,11 +1766,7 @@ func _apply_module_button_copy(button: Button, color: Color) -> void:
 		copy_band.position = Vector2(4, 56)
 		copy_band.size = Vector2(118, 28)
 		copy_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var band_style := StyleBoxFlat.new()
-		band_style.bg_color = Color(0.025, 0.055, 0.05, 0.84)
-		band_style.border_color = Color(0.65, 0.43, 0.15, 0.56)
-		band_style.set_border_width_all(1)
-		copy_band.add_theme_stylebox_override("panel", band_style)
+		copy_band.add_theme_stylebox_override("panel", StationSkin.panel(StationSkin.DEEP))
 		button.add_child(copy_band)
 		label = Label.new()
 		label.name = "LongTermModuleButtonLabel"
@@ -1821,9 +1776,7 @@ func _apply_module_button_copy(button: Button, color: Color) -> void:
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.clip_text = true
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var font := _pixel_font_safe()
-		if font is Font:
-			label.add_theme_font_override("font", font as Font)
+		label.add_theme_font_override("font", StationSkin.FONT)
 		label.set_meta("long_term_base_font_size", 16)
 		label.set_meta("long_term_max_font_size", 18)
 		label.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02, 0.94))
@@ -1845,20 +1798,13 @@ func _apply_selected_text_colors(button: Button, color: Color) -> void:
 	button.add_theme_color_override("font_pressed_color", color)
 
 
-func _apply_transparent_button(button: Button, font_size: int) -> void:
-	var empty := StyleBoxEmpty.new()
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		button.add_theme_stylebox_override(state, empty)
-	_apply_button_text(button, font_size, Color(0.97, 0.78, 0.38))
-
-
 func _add_texture(parent: Control, node_name: String, rect: Rect2, texture: Texture2D, nearest: bool) -> TextureRect:
 	var texture_rect := TextureRect.new()
 	texture_rect.name = node_name
+	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	texture_rect.texture = texture
 	texture_rect.position = rect.position
 	texture_rect.size = rect.size
-	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED if rect.size != Vector2(1280, 720) else TextureRect.STRETCH_SCALE
 	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if nearest else CanvasItem.TEXTURE_FILTER_LINEAR
 	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2009,12 +1955,6 @@ func _texture(visual_key: StringName) -> Texture2D:
 	var texture := Art23LongTermAssetContractScript.texture(visual_key)
 	texture_cache[visual_key] = texture
 	return texture
-
-
-func _pixel_font_safe() -> Font:
-	if get_node_or_null("/root/ContentDB") == null:
-		return null
-	return Art10UISkinKitScript.pixel_font()
 
 
 func _state_label(state: StringName) -> String:

@@ -14,8 +14,9 @@ static func layout_geometry(profile: Dictionary) -> Dictionary:
 	var left_width := clampf(viewport.x * 0.20, 240.0, 360.0) + 32.0 * scale_step
 	var right_width := clampf(viewport.x * 0.22, 280.0, 400.0) + 32.0 * scale_step
 	var protocol := Rect2(margin, margin, left_width, 148.0 + 42.0 * scale_step)
-	var title := Rect2(margin, protocol.end.y + 8.0, left_width, 34.0 + 16.0 * scale_step)
-	var description_height := minf(viewport.y - title.end.y - 32.0, viewport.y * 5.0 / 12.0 + 64.0 * scale_step)
+	var weapon := Rect2(margin, protocol.end.y + 8.0, left_width, 122.0 + 44.0 * scale_step)
+	var title := Rect2(margin, weapon.end.y + 8.0, left_width, 34.0 + 16.0 * scale_step)
+	var description_height := minf(viewport.y - title.end.y - 32.0, viewport.y * 5.0 / 12.0 + 64.0 * scale_step - weapon.size.y - 8.0)
 	var description := Rect2(margin, title.end.y + 8.0, left_width, maxf(120.0, description_height))
 	var right_rail := Rect2(viewport.x - right_width - margin, margin, right_width, viewport.y - margin * 2.0)
 	var center_left := protocol.end.x + margin
@@ -25,6 +26,7 @@ static func layout_geometry(profile: Dictionary) -> Dictionary:
 	return {
 		"viewport_size": viewport,
 		"protocol_rect": protocol,
+		"weapon_rect": weapon,
 		"room_title_rect": title,
 		"description_rect": description,
 		"scanner_rail_rect": right_rail,
@@ -64,18 +66,24 @@ static func build(snapshot: Dictionary, minimap_view_model: MiniMapViewModel, la
 	var last_message := String(snapshot.get("last_message", ""))
 	var visible_last_message := event_result_feedback_text(reward) if _is_event_result(reward) else RunUIViewModel.player_message(last_message, event_state)
 	var action_data := _action_buttons(snapshot, search_data, event_state, room_type)
+	var cage_active := _is_cage_active(snapshot, event_state)
+	var room_title := _room_label(room_type)
+	if cage_active:
+		room_title = "围笼 · 封门"
+	elif room_type == &"Event":
+		room_title = String(event_state.get("player_title", room_title))
 	var status_lines := _status_lines(snapshot, room_type, adjacent_mines, search_data, current_room_detail, return_eligibility, run_flow_snapshot, rule_effect_summary, content_delivery_summary)
 	var commission_line := _commission_progress_line(snapshot)
 	if commission_line != "":
 		status_lines.push_front(commission_line)
 
 	return {
-		"room_title": _room_label(room_type),
+		"room_title": room_title,
 		"room_type": room_type,
 		"room_position": position,
 		"room_coordinate": "(%d,%d)" % [position.x, position.y],
 		"room_summary": _room_summary(snapshot, room_type, adjacent_mines),
-		"current_objective": _objective_for_room(room_type, search_data, event_state),
+		"current_objective": "清理围笼内的目标，完成后开门。" if cage_active else _objective_for_room(room_type, search_data, event_state),
 		"commission_text": commission_line,
 		"protocol_level": snapshot.get("protocol_level", 5),
 		"protocol_title": protocol_title_for_level(snapshot.get("protocol_level", 5)),
@@ -92,7 +100,10 @@ static func build(snapshot: Dictionary, minimap_view_model: MiniMapViewModel, la
 		"equipment_used": snapshot.get("equipment_used", 0),
 		"equipment_capacity": snapshot.get("equipment_capacity", 100),
 		"resource_summary": _resource_summary(snapshot),
-		"vitals_text": "生命 %s/%s\n强度 %s" % [snapshot.get("hp", 0), snapshot.get("max_hp", 0), snapshot.get("power", 0)],
+		"hp": snapshot.get("hp", 0),
+		"max_hp": snapshot.get("max_hp", 0),
+		"power": snapshot.get("power", 0),
+		"run_id": snapshot.get("run_id", ""),
 		"currency_text": "黑币 %s · 金币 %s" % [snapshot.get("black_coin", 0), snapshot.get("gold_coin", 0)],
 		"has_tutorial_popup": not _dict_from(snapshot, "tutorial_popup").is_empty(),
 		"mine_risk": mine_risk_descriptor(adjacent_mines),
@@ -576,22 +587,31 @@ static func _reason_label(reason: String) -> String:
 			return "当前条件不满足"
 
 
+static func _is_cage_active(snapshot: Dictionary, event_state: Dictionary) -> bool:
+	if StringName(snapshot.get("current_room", &"")) != &"Event":
+		return false
+	if bool(_dict_from(snapshot, "combat_runtime").get("cage_active", false)):
+		return true
+	return StringName(event_state.get("event_type", &"")) == &"cage" and not bool(event_state.get("completed", false)) and not _dict_from(event_state, "combat_request").is_empty()
+
+
 static func _action_buttons(snapshot: Dictionary, search_data: Dictionary, event_state: Dictionary, room_type: StringName) -> Array[Dictionary]:
 	var run_active := bool(snapshot.get("run_active", false))
 	var phase := StringName(snapshot.get("phase", &"idle"))
 	var combat_runtime: Dictionary = _dict_from(snapshot, "combat_runtime")
 	var combat_flee_available := room_type == &"Monster" and (bool(combat_runtime.get("active", false)) or bool(combat_runtime.get("flee_authorized", false)))
+	var cage_active := _is_cage_active(snapshot, event_state)
 	var has_event := not event_state.is_empty()
 	var can_search := bool(search_data.get("can_search", false))
 	var floor_count := int(snapshot.get("room_floor_item_count", 0))
 	var interact_hint := SemanticActionHintScript.current_display_label(&"interact")
 	var extract_hint := SemanticActionHintScript.current_display_label(&"request_extract")
 	var actions: Array[Dictionary] = [
-		_action(&"interact", "搜索/交互", run_active and (can_search or has_event or room_type == &"Exit"), _interact_hint(room_type, search_data, has_event)),
+		_action(&"interact", "搜索/交互", run_active and not cage_active and (can_search or has_event or room_type == &"Exit"), _interact_hint(room_type, search_data, has_event)),
 		_action(&"inventory", "背包", run_active, "查看背包和装备摘要。"),
 		_action(&"ground_loot", "地面物品", run_active and floor_count > 0, "查看当前房间地面物品。"),
 		_action(&"map", "扫描图", run_active, "打开大地图扫描视图。"),
-		_action(&"combat", "攻击", run_active and room_type == &"Monster", "当前房间存在可攻击目标时可用。"),
+		_action(&"combat", "攻击", run_active and (room_type == &"Monster" or cage_active), "当前房间存在可攻击目标时可用。"),
 		_action(&"extract", "撤离", run_active and (room_type == &"Exit" or phase == &"confirm_extract" or combat_flee_available), "靠近可通行的门后使用 %s 或点击此处，确认逃离战斗。" % extract_hint if combat_flee_available else "在撤离点请求或确认撤离；也可使用 %s 通过搜索/交互进入确认。" % interact_hint),
 		_action(&"pause", "菜单", run_active, "打开菜单和设置入口。"),
 	]

@@ -187,10 +187,8 @@ func _ensure_backdrop() -> void:
 		result_modal_art.name = "ResultModalFrame"
 		result_modal_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		result_modal_art.modulate = Color(1.0, 1.0, 1.0, 0.96)
-		result_modal_art.patch_margin_left = 16
-		result_modal_art.patch_margin_top = 16
-		result_modal_art.patch_margin_right = 16
-		result_modal_art.patch_margin_bottom = 16
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			result_modal_art.set_patch_margin(side, 12)
 		result_modal_art.draw_center = true
 		add_child(result_modal_art)
 	result_modal_art.z_index = 2
@@ -1074,13 +1072,13 @@ func _ensure_modal_patch(node_name: StringName, visual_key: StringName, margin: 
 		patch = NinePatchRect.new()
 		patch.name = String(node_name)
 		patch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		patch.patch_margin_left = margin
-		patch.patch_margin_top = margin
-		patch.patch_margin_right = margin
-		patch.patch_margin_bottom = margin
 		patch.draw_center = true
 		add_child(patch)
 	patch.texture = Art21UIPlacementContractScript.texture_for_visual_key(visual_key, &"ui.art19.panel.terminal_main")
+	if patch.texture != null:
+		var slice := mini(margin, Art21UIPlacementContractScript.station_slice_limit(patch.texture))
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			patch.set_patch_margin(side, slice)
 	patch.modulate = Color(1.0, 1.0, 1.0, alpha)
 	patch.z_index = 1
 	return patch

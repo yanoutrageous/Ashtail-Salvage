@@ -41,6 +41,11 @@ func _apply_visuals() -> void:
 		fallback.visible = background == null or background.texture == null
 		fallback.set_meta("requested_asset_id", background_asset)
 		fallback.set_meta("fallback_reason", &"background_texture_unresolved" if fallback.visible else &"none")
+	if bool(room_data.get("B_model_room", false)):
+		if background != null:
+			background.hide()
+		if fallback != null:
+			fallback.hide()
 	if title != null:
 		title.text = "%s\n%s" % [String(room_data.get("title", "Room")), String(room_data.get("hint", ""))]
 		title.add_theme_color_override("font_color", PresentationTheme.color_for_key(StringName(room_data.get("risk_key", &"ui.text"))))

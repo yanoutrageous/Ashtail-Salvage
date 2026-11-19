@@ -179,6 +179,7 @@ static func room_visual_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	return {
 		"room_type": room_type,
 		"background_asset_id": background,
+		"B_model_room": EventRoomCatalog.from_snapshot(snapshot).has("model_path"),
 		"prop_asset_id": prop_asset_for_room(room_type),
 		"theme_key": ROOM_THEME_KEY.get(room_type, &"mini.normal"),
 		"title": _room_type_label(room_type),

@@ -103,6 +103,7 @@ func _pose(raw_progress: float) -> Dictionary:
 		"scene_offset": Vector2.ZERO,
 		"overlay_color": Color(0.018, 0.024, 0.032, 0.0),
 		"overlay_alpha": 0.0,
+		"station_gate_lift": 0.0,
 		"cave_activation_alpha": 0.0,
 		"company_activation_alpha": 0.0,
 		"character_pose": &"idle",
@@ -115,17 +116,18 @@ func _pose(raw_progress: float) -> Dictionary:
 	}
 	match _profile:
 		PROFILE_ENTER_CAVE:
-			var travel_progress := smoothstep(0.0, 0.88, progress)
-			var fade_progress := smoothstep(0.30, 0.90, progress)
-			pose["overlay_alpha"] = eased
+			var travel_progress := smoothstep(0.17, 0.86, progress)
+			var fade_progress := smoothstep(0.39, 0.90, progress)
+			pose["station_gate_lift"] = smoothstep(0.03, 0.68, progress)
+			pose["overlay_alpha"] = smoothstep(0.53, 1.0, progress)
 			pose["cave_activation_alpha"] = lerpf(0.30, 0.66, 1.0 - absf(progress * 2.0 - 1.0))
 			pose["character_pose"] = &"walk_dungeon"
-			pose["character_clip_step"] = int(floor(progress * 6.0))
+			pose["character_clip_step"] = int(floor(smoothstep(0.17, 0.90, progress) * 6.0))
 			pose["character_transition_active"] = true
 			pose["character_travel_progress"] = travel_progress
 			pose["character_scale_factor"] = lerpf(1.0, CAVE_CHARACTER_SCALE, travel_progress)
-			pose["character_alpha"] = 1.0 - fade_progress
-			pose["shadow_alpha"] = 1.0 - smoothstep(0.05, 0.85, progress)
+			pose["character_alpha"] = 1.0 - fade_progress * fade_progress
+			pose["shadow_alpha"] = 1.0 - smoothstep(0.28, 0.85, progress)
 		PROFILE_DESCEND:
 			pose["scene_offset"] = Vector2(0.0, round(DESCEND_DISTANCE * eased))
 			pose["overlay_color"] = Color(0.13, 0.075, 0.025, 0.0)

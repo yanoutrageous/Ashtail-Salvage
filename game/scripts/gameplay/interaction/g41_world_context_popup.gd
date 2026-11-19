@@ -187,7 +187,7 @@ func _apply_event_feedback() -> void:
 	var event_type := StringName(payload.get("event_type", &""))
 	var result: Dictionary = payload.get("last_result", {})
 	var copy := EventRooms.result_text(event_type, result)
-	var ok := bool(result.get("ok", false))
+	var ok := EventRooms.result_succeeded(result)
 	if copy.is_empty() and _event_feedback_matches_context():
 		copy = String(event_feedback.get("text", ""))
 		ok = bool(event_feedback.get("ok", false))
@@ -829,7 +829,7 @@ func _context_signature(context: Dictionary) -> String:
 		String(last_result.get("rule_request_id", "")),
 		String(last_result.get("option_id", "")),
 		String(last_result.get("message", "")),
-		str(last_result.get("ok", false)),
+		str(EventRooms.result_succeeded(last_result)),
 	]
 	if context_kind == &"event":
 		parts.append(str(Art10UISkinKitScript.runtime_ui_scale_factor()))

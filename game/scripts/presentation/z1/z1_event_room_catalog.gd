@@ -22,6 +22,9 @@ static func from_snapshot(snapshot: Dictionary) -> Dictionary:
 
 
 static func room(event_type: StringName) -> Dictionary:
+	var b_room := preload("res://scripts/presentation/B/B_event_room_catalog.gd").room(event_type)
+	if not b_room.is_empty():
+		return b_room
 	if not _loaded:
 		_load_rooms()
 	return (_rooms.get(event_type, {}) as Dictionary).duplicate(true)

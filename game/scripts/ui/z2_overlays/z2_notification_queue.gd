@@ -6,6 +6,8 @@ signal notification_shown(notice: Dictionary)
 signal notification_finished(notice: Dictionary)
 
 const DEFAULT_ICON := preload("res://assets/ui/art25/content/long_term/task/task_first_survey.png")
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
 const HOLD_SECONDS := 3.4
 const TOP := 14.0
 const REFERENCE_WIDTH := 616.0 / 1920.0
@@ -24,14 +26,7 @@ var _slide_progress := 0.0
 
 
 func _ready() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.075, 0.08, 0.98)
-	style.border_color = Color(0.40, 0.46, 0.36)
-	style.set_border_width_all(1)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 10.0
-	style.content_margin_bottom = 10.0
+	var style := RunVectorSkin.frame(RunVectorSkin.STATUS, Vector4(12, 10, 14, 10))
 	_card.add_theme_stylebox_override(&"panel", style)
 	_kind = Label.new()
 	_kind.name = "NotificationKind"
@@ -42,6 +37,7 @@ func _ready() -> void:
 	_title.get_parent().move_child(_kind, 0)
 	_kind.hide()
 	for label in [_title, _body]:
+		label.add_theme_font_override("font", StationSkin.FONT)
 		label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		label.max_lines_visible = -1
 	resized.connect(_fit_card)

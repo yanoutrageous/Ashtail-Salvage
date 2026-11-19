@@ -3,17 +3,17 @@ class_name DeployPrepLayoutContract
 
 const LOGICAL_SIZE := Vector2(1280, 720)
 
-const NAV_MAIN := Rect2(38, 36, 176, 46)
-const NAV_LONG_TERM := Rect2(38, 126, 176, 46)
+const NAV_MAIN := Rect2(28, 40, 113, 39)
+const NAV_LONG_TERM := Rect2(147, 40, 92, 39)
 const NAV_CHAIN_TOP := Rect2(178, 0, 24, 38)
 const NAV_CHAIN_MIDDLE := Rect2(50, 80, 24, 48)
 
-const CHARACTER_SHADOW := Rect2(26, 606, 210, 28)
-const CHARACTER := Rect2(34, 392, 190, 216)
-const APPEARANCE_BUTTON := Rect2(24, 646, 104, 40)
-const CHARACTER_BUTTON := Rect2(136, 646, 104, 40)
+const CHARACTER_SHADOW := Rect2(64, 554, 146, 31)
+const CHARACTER := Rect2(12, 295, 250, 282)
+const APPEARANCE_BUTTON := Rect2(31, 588, 92, 37)
+const CHARACTER_BUTTON := Rect2(132, 588, 92, 37)
 
-const PARCHMENT := Rect2(254, 14, 688, 692)
+const PARCHMENT := Rect2(266, 39, 664, 620)
 const PRIMARY_TABS := Rect2(286, 48, 624, 44)
 const SPLIT_WORKSPACE := Rect2(282, 104, 632, 554)
 const SELECTION_PANE := Rect2(282, 104, 310, 554)
@@ -48,7 +48,7 @@ const DETAIL_FACT_RECTS := [
 const DETAIL_FEEDBACK := Rect2(612, 530, 294, 28)
 const DETAIL_PRIMARY_ACTION := Rect2(612, 566, 184, 40)
 const DETAIL_SECONDARY_ACTION := Rect2(804, 566, 102, 40)
-const COLLAPSE_HANDLE := Rect2(520, 670, 156, 32)
+const COLLAPSE_HANDLE := Rect2(546, 670, 156, 32)
 const COLLAPSED_OFFSET := Vector2(0, -706)
 
 # The map tab keeps scale, difficulty and detail inside the existing center
@@ -94,7 +94,7 @@ const SUMMARY_ROW_RECTS := [
 const SUMMARY_MESSAGE_PANEL := Rect2(998, 470, 224, 54)
 const SUMMARY_MESSAGE := Rect2(1008, 480, 204, 34)
 
-const PRIMARY_ACTION := Rect2(984, 572, 252, 82)
+const PRIMARY_ACTION := Rect2(984, 574, 252, 72)
 const CANCEL_ACTION := Rect2(998, 662, 224, 44)
 
 const MODAL_BOARD := Rect2(380, 220, 520, 268)

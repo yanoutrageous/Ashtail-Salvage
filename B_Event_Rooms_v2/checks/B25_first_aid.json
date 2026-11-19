@@ -1,0 +1,95 @@
+{
+  "code": "B25",
+  "event_id": "first_aid",
+  "title": "急救柜",
+  "render": "renders/B25_first_aid.png",
+  "blend": "blend/B25_first_aid_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B25_first_aid__main_station_CabinetBody_wooddark",
+        "B25_first_aid__main_station_CabinetEdge_iron",
+        "B25_first_aid__main_station_Rivets_copper",
+        "B25_first_aid__main_station_ScreenFrame_iron",
+        "B25_first_aid__main_station_Screen_black",
+        "B25_first_aid__main_station_ScreenPixels_mint",
+        "B25_first_aid__main_station_Cross_bone",
+        "B25_first_aid__main_station_DispensingPort_black",
+        "B25_first_aid__main_station_Tray_iron",
+        "B25_first_aid__main_station_TrayRim_edge",
+        "B25_first_aid__main_station_Bandage_bone",
+        "B25_first_aid__main_station_EmergencyLamp_red"
+      ],
+      "bounds": [
+        [
+          2.2849998474121094,
+          0.5649999380111694,
+          0.009999998845160007
+        ],
+        [
+          4.315000057220459,
+          2.3499999046325684,
+          2.7100000381469727
+        ]
+      ]
+    },
+    {
+      "id": "stock",
+      "kind": "floor",
+      "objects": [
+        "B25_first_aid__stock_ShelfUpright_wood",
+        "B25_first_aid__stock_ShelfBack_wooddark",
+        "B25_first_aid__stock_ShelfBoard_woodlight",
+        "B25_first_aid__stock_MedicalPack_cloth",
+        "B25_first_aid__stock_PackCross_red",
+        "B25_first_aid__stock_MedicalPack_bone"
+      ],
+      "bounds": [
+        [
+          4.375,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          6.625,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "service_cart",
+      "kind": "floor",
+      "objects": [
+        "B25_first_aid__service_cart_CartWheel_iron",
+        "B25_first_aid__service_cart_CartBed_woodlight",
+        "B25_first_aid__service_cart_CartHandle_iron",
+        "B25_first_aid__service_cart_MedicalCase_bone",
+        "B25_first_aid__service_cart_MedicalCross_red"
+      ],
+      "bounds": [
+        [
+          5.150000095367432,
+          1.2000000476837158,
+          0.05999999865889549
+        ],
+        [
+          6.450000286102295,
+          2.200000047683716,
+          1.4700000286102295
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

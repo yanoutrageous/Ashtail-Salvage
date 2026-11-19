@@ -12,6 +12,9 @@ const ACTION_MOVE_LEFT := &"move_left"
 const ACTION_MOVE_RIGHT := &"move_right"
 const ACTION_INTERACT := &"interact"
 const ACTION_ATTACK := &"attack"
+const ACTION_WEAPON_SKILL := &"weapon_skill"
+const ACTION_JUMP := &"jump"
+const ACTION_SPRINT := &"sprint"
 const ACTION_OPEN_MAP := &"open_map"
 const ACTION_OPEN_INVENTORY := &"open_inventory"
 const ACTION_OPEN_GROUND_LOOT := &"open_ground_loot"
@@ -29,7 +32,10 @@ const KEY_BINDINGS := {
 	"move_left": [KEY_A, KEY_LEFT],
 	"move_right": [KEY_D, KEY_RIGHT],
 	"interact": [KEY_E],
-	"attack": [KEY_SPACE, KEY_J],
+	"attack": [KEY_J],
+	"weapon_skill": [KEY_K],
+	"jump": [KEY_SPACE],
+	"sprint": [KEY_SHIFT],
 	"open_map": [KEY_M, KEY_TAB],
 	"open_inventory": [KEY_Q],
 	"open_ground_loot": [KEY_G],
@@ -44,6 +50,7 @@ const KEY_BINDINGS := {
 
 const MOUSE_BUTTON_BINDINGS := {
 	"attack": MOUSE_BUTTON_LEFT,
+	"weapon_skill": MOUSE_BUTTON_RIGHT,
 }
 
 const BUTTON_BINDINGS := {
@@ -137,6 +144,7 @@ static func semantic_profile() -> Dictionary:
 		"b": PackedStringArray(["cancel", "ui_cancel"]),
 		"x": PackedStringArray(["attack"]),
 		"mouse_primary": PackedStringArray(["attack"]),
+		"mouse_secondary": PackedStringArray(["weapon_skill"]),
 		"y": PackedStringArray(["open_map"]),
 		"lb": PackedStringArray(["open_inventory"]),
 		"rb": PackedStringArray(["flag_cell"]),

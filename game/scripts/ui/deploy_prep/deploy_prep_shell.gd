@@ -18,7 +18,23 @@ const Art21MainMenuAssetContractScript := preload("res://scripts/presentation/ar
 const Art21UIPlacementContractScript := preload("res://scripts/presentation/art21_ui_placement_contract.gd")
 const Art22DeployPrepAssetContractScript := preload("res://scripts/presentation/art22_deploy_prep_asset_contract.gd")
 const Art25ContentAssetContractScript := preload("res://scripts/presentation/art25_content_asset_contract.gd")
-const CharacterPresentationCatalogScript := preload("res://scripts/presentation/character/character_presentation_catalog.gd")
+const StationCharacterFrames := preload("res://scripts/ui/shell/station_character_frames.gd")
+
+const StationSkin := preload("res://scripts/ui/shell/station_ui_skin.gd")
+const ItemArt := preload("res://scripts/presentation/art24/art24_item_visual_catalog.gd")
+const EQUIPMENT_SLOTS := {
+	"head": "头部", "armor": "护甲", "gear": "护具",
+	"tool": "工具", "rig": "背具", "device": "装置",
+}
+
+const EQUIPMENT_SLOT_ART := {
+	"head": preload("res://assets/ui/art20/deploy/icons/deploy_equipment_slot_item_equipment_goggles.png"),
+	"armor": preload("res://assets/ui/art20/deploy/icons/deploy_equipment_slot_ui_icon_armor.png"),
+	"gear": preload("res://assets/items/z1/eq_insulated_sleeve.png"),
+	"tool": preload("res://assets/ui/run_vector/icon_axe.svg"),
+	"rig": preload("res://assets/ui/art20/deploy/icons/deploy_equipment_slot_ui_icon_backpack.png"),
+	"device": preload("res://assets/ui/art20/deploy/icons/deploy_equipment_slot_item_equipment_flashlight.png"),
+}
 
 signal deploy_start_intent_requested(intent: Dictionary)
 signal navigation_intent_requested(intent: Dictionary)
@@ -30,8 +46,6 @@ const SUMMARY_PAGES := [
 	{"id": &"effect", "label": "本局"},
 	{"id": &"objective", "label": "目标"},
 ]
-const CHARACTER_FIRST_LOOK_SECONDS := 5.0
-const CHARACTER_LOOK_INTERVAL_SECONDS := 10.0
 const META_DETAIL_ACTION_IDS := [&"purchase", &"sell", &"confirm_batch_sell", &"claim_initial_supplies", &"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip"]
 const SUMMARY_INITIAL_ROWS := 8
 
@@ -84,6 +98,8 @@ var meta_request_sequence := 0
 var result_hint_panel: Panel
 var result_hint_label: Label
 var collapse_button: Button
+var equipment_tiles: Dictionary = {}
+var equipment_heading: Label
 var primary_action_button: Button
 var cancel_action_button: Button
 var summary_body_label: Label
@@ -100,10 +116,6 @@ var warehouse_batch_modal_cancel_button: Button
 var warehouse_batch_modal_confirm_button: Button
 var character_texture: TextureRect
 var character_frames: Array[Texture2D] = []
-var character_actor_id: StringName = CharacterPresentationCatalogScript.DEFAULT_ACTOR_ID
-var character_appearance_id: StringName = CharacterPresentationCatalogScript.DEFAULT_APPEARANCE_ID
-var character_clip_descriptors: Dictionary = {}
-var character_clip_frames: Dictionary = {}
 var ambient_animations: Array[Dictionary] = []
 var ambient_particles: Array[CPUParticles2D] = []
 var summary_chain_bases: Dictionary = {}
@@ -114,10 +126,6 @@ var parchment_collapsed := false
 var reduced_motion := false
 var ui_scale_factor := 1.0
 var scene_elapsed := 0.0
-var character_elapsed := 0.0
-var character_frame_index := 0
-var character_look_index := -1
-var next_character_look := CHARACTER_FIRST_LOOK_SECONDS
 var collapse_tween: Tween
 var page_active := true
 var warehouse_batch_active := false
@@ -138,13 +146,13 @@ func build(model: Dictionary = {}, initial_snapshot: Dictionary = {}) -> void:
 	reduced_motion = Art10UISkinKitScript.reduce_motion_enabled()
 	_create_layer_roots()
 	_build_background()
-	_build_decorations()
 	_build_ambient_motion()
 	_build_character()
 	_build_navigation()
 	_build_parchment_content()
 	_build_summary_board()
 	_build_primary_actions()
+	_build_equipment_strip()
 	_build_cancel_modal()
 	_build_warehouse_batch_confirm_modal()
 	_refresh_all(true)
@@ -365,11 +373,9 @@ func _clear_children() -> void:
 	filter_buttons.clear()
 	card_views.clear()
 	summary_buttons.clear()
+	equipment_tiles.clear()
+	equipment_heading = null
 	character_frames.clear()
-	character_clip_descriptors.clear()
-	character_clip_frames.clear()
-	character_actor_id = CharacterPresentationCatalogScript.DEFAULT_ACTOR_ID
-	character_appearance_id = CharacterPresentationCatalogScript.DEFAULT_APPEARANCE_ID
 	ambient_animations.clear()
 	ambient_particles.clear()
 	summary_chain_bases.clear()
@@ -420,10 +426,6 @@ func _clear_children() -> void:
 	warehouse_batch_feedback = ""
 	character_texture = null
 	scene_elapsed = 0.0
-	character_elapsed = 0.0
-	character_frame_index = 0
-	character_look_index = -1
-	next_character_look = CHARACTER_FIRST_LOOK_SECONDS
 
 
 func _create_layer_roots() -> void:
@@ -443,7 +445,10 @@ func _root(root_name: StringName) -> Control:
 func _build_background() -> void:
 	var root := _root(&"BackgroundRoot")
 	_add_color_rect(root, "DeployPrepBackdrop", Rect2(Vector2.ZERO, DeployPrepLayoutContractScript.LOGICAL_SIZE), Color(0.025, 0.035, 0.04, 1.0))
-	_add_texture(root, "DeployPrepSceneCleanPlate", Rect2(Vector2.ZERO, DeployPrepLayoutContractScript.LOGICAL_SIZE), &"deploy_prep.scene.background.clean_plate", 0, false)
+	_add_texture_from_texture(
+		root, "DeployPrepSceneCleanPlate", Rect2(Vector2.ZERO, DeployPrepLayoutContractScript.LOGICAL_SIZE),
+		load("res://assets/ui/station/deploy_station.png") as Texture2D, 0, false
+	)
 	_add_color_rect(root, "DeployPrepReadableVignette", Rect2(0, 0, 1280, 720), Color(0.01, 0.015, 0.02, 0.055))
 
 
@@ -461,32 +466,16 @@ func _build_decorations() -> void:
 
 func _build_ambient_motion() -> void:
 	var root := _root(&"DecorationRoot")
-	_register_art21_loop(root, "DeployLeftLanternFlame", Rect2(400, 307, 24, 30), "main_menu.scene.fx.lantern_flame", [0, 1, 2, 3, 2, 1], 0.22, Color(1.0, 0.72, 0.34), 0.36)
-	_register_art21_loop(root, "DeployLeftTableFlame", Rect2(184, 448, 20, 24), "main_menu.scene.fx.lantern_flame", [1, 2, 3, 2, 1, 0], 0.24, Color(1.0, 0.67, 0.28), 0.30)
-	_register_art21_loop(root, "DeployRightLanternFlame", Rect2(939, 357, 22, 28), "main_menu.scene.fx.lantern_flame", [2, 3, 2, 1, 0, 1], 0.20, Color(1.0, 0.62, 0.24), 0.32)
-	_register_art21_loop(root, "DeployFarLanternFlame", Rect2(1252, 188, 20, 26), "main_menu.scene.fx.lantern_flame", [0, 1, 2, 3, 2, 1], 0.26, Color(1.0, 0.58, 0.22), 0.26)
-	_register_art21_loop(root, "DeployBlueWispNear", Rect2(565, 158, 18, 26), "main_menu.scene.fx.lantern_flame", [0, 1, 2, 3, 2, 1], 0.28, Color(0.28, 0.82, 1.0), 0.22)
-	_register_art21_loop(root, "DeployBlueWispFar", Rect2(793, 158, 18, 26), "main_menu.scene.fx.lantern_flame", [2, 3, 2, 1, 0, 1], 0.31, Color(0.22, 0.72, 1.0), 0.20)
-	_register_art21_loop(root, "DeployBlueGroundFlame", Rect2(568, 460, 20, 25), "main_menu.scene.fx.lantern_flame", [1, 2, 3, 2, 1, 0], 0.25, Color(0.20, 0.78, 1.0), 0.24)
-	_register_art21_loop(root, "DeployWorkshopSmoke", Rect2(170, 382, 54, 68), "main_menu.scene.fx.smoke", [0, 1, 2, 3], 0.64, Color(0.72, 0.76, 0.78), 0.08)
-	_add_ambient_particles(root, "DeployBlueDust", Vector2(680, 386), Vector2(250, 170), 18, Color(0.28, 0.78, 0.95, 0.42), Vector2(0, -7), 5.4)
-	_add_ambient_particles(root, "DeployWarmEmbers", Vector2(205, 438), Vector2(82, 72), 10, Color(1.0, 0.52, 0.20, 0.48), Vector2(5, -18), 3.6)
+	_add_ambient_particles(root, "DeployBlueDust", Vector2(104, 442), Vector2(82, 125), 12, Color(0.28, 0.78, 0.95, 0.25), Vector2(0, -7), 5.4)
+	_add_ambient_particles(root, "DeployWarmEmbers", Vector2(226, 274), Vector2(34, 38), 8, Color(1.0, 0.52, 0.20, 0.32), Vector2(5, -18), 3.6)
 
 
 func _build_character() -> void:
 	var root := _root(&"CharacterRoot")
-	_add_art21_texture(root, "DeployCharacterShadow", DeployPrepLayoutContractScript.CHARACTER_SHADOW, &"main_menu.scene.character.shadow", 0)
-	var presentation := _dictionary_from(current_model.get("character_presentation", {}))
-	character_actor_id = StringName(presentation.get("actor_id", CharacterPresentationCatalogScript.DEFAULT_ACTOR_ID))
-	character_appearance_id = StringName(presentation.get("appearance_id", CharacterPresentationCatalogScript.DEFAULT_APPEARANCE_ID))
-	_load_character_clip(&"idle")
-	_load_character_clip(&"look")
-	character_frames.assign(character_clip_frames.get(&"idle", []) as Array)
-	var initial := CharacterPresentationCatalogScript.frame_at(
-		character_frames,
-		_dictionary_from(character_clip_descriptors.get(&"idle", {})),
-		0
-	)
+	var shadow := _add_texture_from_texture(root, "DeployCharacterShadow", DeployPrepLayoutContractScript.CHARACTER_SHADOW, StationCharacterFrames.floor_shadow(), 0, false)
+	shadow.modulate.a = 0.68
+	character_frames = StationCharacterFrames.lobby_frames(false)
+	var initial := character_frames[StationCharacterFrames.lobby_frame_index(0.0)]
 	character_texture = _add_texture_from_texture(root, "DeployCharacter", DeployPrepLayoutContractScript.CHARACTER, initial, 1, true)
 
 
@@ -505,7 +494,9 @@ func _build_parchment_content() -> void:
 	parchment_group.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	parchment_group.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(parchment_group)
-	_add_texture(parchment_group, "DeployParchment", DeployPrepLayoutContractScript.PARCHMENT, &"deploy_prep.panel.parchment", 0)
+	var surface := _add_image_panel(parchment_group, "DeployWorkspaceSurface", DeployPrepLayoutContractScript.PARCHMENT, &"surface", &"normal", 0)
+	StationSkin.add_trim(surface, &"fascia", StationSkin.JADE, Rect2(18, 599, 628, 14))
+	_add_color_rect(parchment_group, "DeployWorkspaceTabRule", Rect2(282, 97, 632, 1), StationSkin.EDGE).z_index = 1
 	_build_primary_tabs()
 	_build_filter_row()
 	_build_card_list()
@@ -530,6 +521,7 @@ func _build_primary_tabs() -> void:
 		var button := _add_image_button(parchment_group, "DeployTab_%s" % String(tab_id), rect, String(tab.get("label", tab_id)), &"tab", func() -> void: show_tab(captured), 16)
 		button.toggle_mode = true
 		button.button_group = primary_tab_button_group
+		StationSkin.add_trim(button, &"tab", StationSkin.BRASS)
 		tab_buttons[tab_id] = button
 
 
@@ -689,7 +681,8 @@ func _build_detail_panel() -> void:
 func _build_summary_board() -> void:
 	var root := _root(&"SideStatusRoot")
 	summary_button_group.allow_unpress = false
-	_add_texture(root, "DeploySummaryBoard", DeployPrepLayoutContractScript.SUMMARY_BOARD, &"deploy_prep.panel.summary_board", 0)
+	var surface := _add_image_panel(root, "DeploySummarySurface", DeployPrepLayoutContractScript.SUMMARY_BOARD, &"surface", &"normal", 0)
+	StationSkin.add_trim(surface, &"fascia", StationSkin.BRASS, Rect2(10, 470, 232, 14))
 	_add_label(root, "DeploySummaryTitle", Rect2(1006, 64, 208, 34), "出发摘要", 21, Color(0.96, 0.77, 0.38), HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 1)
 	var tab_rect := DeployPrepLayoutContractScript.SUMMARY_TABS
 	var width := tab_rect.size.x / float(SUMMARY_PAGES.size())
@@ -727,8 +720,71 @@ func _build_summary_board() -> void:
 func _build_primary_actions() -> void:
 	var root := _root(&"PrimaryActionRoot")
 	primary_action_button = _add_image_button(root, "DeployPrimaryAction", DeployPrepLayoutContractScript.PRIMARY_ACTION, "确认出发", &"action", _on_primary_action_pressed, 22)
+	StationSkin.add_trim(primary_action_button, &"launch", Color("#50391f"))
 	cancel_action_button = _add_image_button(root, "DeployCancelAction", DeployPrepLayoutContractScript.CANCEL_ACTION, "取消当前探索", &"danger", _show_cancel_modal, 16)
 	cancel_action_button.visible = false
+
+
+func _build_equipment_strip() -> void:
+	equipment_tiles.clear()
+	var host := _root(&"PrimaryActionRoot")
+	var dock := _add_image_panel(host, "DeployEquipmentDock", Rect2(24, 642, 471, 59), &"surface", &"normal", 1)
+	dock.add_theme_stylebox_override("panel", Art10UISkinKitScript.panel_style(&"summary"))
+	_add_color_rect(host, "DeployEquipmentDivider", Rect2(147, 653, 1, 36), StationSkin.EDGE).z_index = 2
+	equipment_heading = _add_label(host, "DeployEquipmentHeading", Rect2(36, 649, 116, 44), "装备", 15, StationSkin.BRASS, HORIZONTAL_ALIGNMENT_LEFT, VERTICAL_ALIGNMENT_CENTER, 2)
+	var index := 0
+	for slot: String in EQUIPMENT_SLOTS:
+		var tile := PanelContainer.new()
+		tile.name = "DeployEquipment_%s" % slot
+		tile.z_index = 2
+		tile.mouse_filter = Control.MOUSE_FILTER_PASS
+		tile.add_theme_stylebox_override("panel", StationSkin.panel(StationSkin.DEEP))
+		_set_rect(tile, Rect2(158 + index * 54, 649, 48, 44))
+		host.add_child(tile)
+		var label := Label.new()
+		label.text = EQUIPMENT_SLOTS[slot]
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		StationSkin.apply_label(label, StationSkin.MUTED)
+		label.add_theme_font_size_override("font_size", 12)
+		tile.add_child(label)
+		var icon := TextureRect.new()
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon.hide()
+		tile.add_child(icon)
+		equipment_tiles[slot] = {"tile": tile, "label": label, "icon": icon}
+		index += 1
+
+
+func _refresh_equipment_strip() -> void:
+	if equipment_heading == null:
+		return
+	var config := _dictionary_from(current_model.get("config", {}))
+	var projection := _dictionary_from(current_model.get("map_projection", {}))
+	var map_detail := _dictionary_from(projection.get("selected_detail", {}))
+	var tutorial := bool(map_detail.get("tutorial_map", false)) and not _has_active_run()
+	equipment_heading.text = "训练装备" if tutorial else "装备"
+	var selected := {}
+	if not tutorial:
+		for raw in config.get("selected_equipment_items", []):
+			var item := _dictionary_from(raw)
+			selected[str(item.get("equipment_slot", ""))] = item
+	for slot: String in EQUIPMENT_SLOTS:
+		var nodes: Dictionary = equipment_tiles[slot]
+		var tile: PanelContainer = nodes.tile
+		var label: Label = nodes.label
+		var icon: TextureRect = nodes.icon
+		var item := _dictionary_from(selected.get(slot, {}))
+		var occupied := not item.is_empty()
+		icon.texture = ItemArt.texture_for(item) if occupied else EQUIPMENT_SLOT_ART.get(slot)
+		icon.modulate = Color.WHITE if occupied else Color(0.76, 0.88, 0.89, 0.47)
+		icon.visible = icon.texture != null
+		label.visible = not icon.visible
+		label.text = EQUIPMENT_SLOTS[slot]
+		label.add_theme_font_size_override("font_size", mini(15, Art10UISkinKitScript.scaled_font_size(12, ui_scale_factor)))
+		tile.tooltip_text = str(item.get("display_name", EQUIPMENT_SLOTS[slot])) if occupied else ("由教程预设" if tutorial else "%s · 未装备" % EQUIPMENT_SLOTS[slot])
 
 
 func _build_cancel_modal() -> void:
@@ -740,7 +796,7 @@ func _build_cancel_modal() -> void:
 	root.add_child(modal_layer)
 	var scrim := _add_color_rect(modal_layer, "DeployCancelModalScrim", Rect2(0, 0, 1280, 720), Color(0.01, 0.015, 0.02, 0.76))
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	_add_texture(modal_layer, "DeployCancelModalBoard", DeployPrepLayoutContractScript.MODAL_BOARD, &"deploy_prep.panel.modal_board", 1)
+	_add_image_panel(modal_layer, "DeployCancelModalBoard", DeployPrepLayoutContractScript.MODAL_BOARD, &"surface", &"normal", 1)
 	_add_label(modal_layer, "DeployCancelModalTitle", DeployPrepLayoutContractScript.MODAL_TITLE, "取消当前探索", 26, Color(0.97, 0.72, 0.38), HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 2)
 	var body := _add_label(modal_layer, "DeployCancelModalBody", DeployPrepLayoutContractScript.MODAL_BODY, "放弃后，本局黑色资源与全部物品都会失去；已直接获得的金色资源保留。\n该操作不可撤销。", 16, Color(0.94, 0.88, 0.76), HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 2)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -764,7 +820,7 @@ func _build_warehouse_batch_confirm_modal() -> void:
 		Color(0.01, 0.015, 0.02, 0.76)
 	)
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	_add_texture(warehouse_batch_modal_layer, "DeployWarehouseBatchSellBoard", DeployPrepLayoutContractScript.MODAL_BOARD, &"deploy_prep.panel.modal_board", 1)
+	_add_image_panel(warehouse_batch_modal_layer, "DeployWarehouseBatchSellBoard", DeployPrepLayoutContractScript.MODAL_BOARD, &"surface", &"normal", 1)
 	_add_label(warehouse_batch_modal_layer, "DeployWarehouseBatchSellTitle", DeployPrepLayoutContractScript.MODAL_TITLE, "确认批量售卖", 26, Color(0.97, 0.72, 0.38), HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 2)
 	warehouse_batch_modal_body = _add_label(
 		warehouse_batch_modal_layer,
@@ -818,6 +874,7 @@ func _refresh_all(rebuild_lists: bool) -> void:
 	_refresh_detail_projection()
 	_refresh_workspace_visibility(map_active)
 	_refresh_summary()
+	_refresh_equipment_strip()
 	_refresh_actions()
 	_refresh_modal_state()
 	_wire_focus_neighbors()
@@ -1474,8 +1531,8 @@ func _refresh_summary() -> void:
 		if row_panel != null:
 			row_panel.visible = show_row
 		_apply_scaled_control_font(row_label)
-		_resize_scroll_label(row_label, 34.0, 18)
-		var label_height := row_label.custom_minimum_size.y
+		var label_height := maxf(34.0, row_label.get_line_height() * row_label.get_line_count())
+		row_label.custom_minimum_size.y = label_height
 		_set_rect(row_label, Rect2(8, 6, 192, label_height))
 		if row_panel is Control:
 			(row_panel as Control).custom_minimum_size = Vector2(208, label_height + 12.0)
@@ -1536,6 +1593,7 @@ func _on_filter_pressed(filter_id: StringName) -> void:
 	_refresh_filter_buttons()
 	_rebuild_cards()
 	_refresh_summary()
+	_refresh_equipment_strip()
 	_refresh_actions()
 	_refresh_modal_state()
 	_wire_focus_neighbors()
@@ -2062,61 +2120,16 @@ func _process(delta: float) -> void:
 		_freeze_motion()
 		return
 	scene_elapsed += delta
-	_update_character_motion(delta)
+	_apply_lobby_frame(scene_elapsed)
 	_update_ambient_animations(delta)
-	_update_summary_sway()
 
 
-func _update_character_motion(delta: float) -> void:
+func _apply_lobby_frame(elapsed: float) -> void:
 	if character_texture == null or character_frames.is_empty():
 		return
-	if character_look_index < 0 and scene_elapsed >= next_character_look:
-		character_look_index = 0
-		character_elapsed = 0.0
-	character_elapsed += delta
-	var active_clip_id := &"look" if character_look_index >= 0 else &"idle"
-	var active_descriptor := _dictionary_from(character_clip_descriptors.get(active_clip_id, {}))
-	var frame_seconds := maxf(0.01, float(active_descriptor.get("frame_seconds", 0.32)))
-	if character_elapsed < frame_seconds:
-		return
-	character_elapsed = fmod(character_elapsed, frame_seconds)
-	if character_look_index >= 0:
-		_apply_character_clip_pose(&"look", character_look_index)
-		character_look_index += 1
-		var look_sequence := active_descriptor.get("sequence", []) as Array
-		if look_sequence.is_empty() or character_look_index >= look_sequence.size():
-			character_look_index = -1
-			character_frame_index = 0
-			next_character_look = scene_elapsed + CHARACTER_LOOK_INTERVAL_SECONDS
-		return
-	var idle_sequence := active_descriptor.get("sequence", []) as Array
-	if idle_sequence.is_empty():
-		return
-	character_frame_index = (character_frame_index + 1) % idle_sequence.size()
-	_apply_character_clip_pose(&"idle", character_frame_index)
-
-
-func _load_character_clip(clip_id: StringName) -> void:
-	var descriptor := CharacterPresentationCatalogScript.resolve_descriptor(
-		character_actor_id,
-		character_appearance_id,
-		clip_id
-	)
-	character_clip_descriptors[clip_id] = descriptor
-	character_clip_frames[clip_id] = CharacterPresentationCatalogScript.load_frames(descriptor)
-
-
-func _apply_character_clip_pose(clip_id: StringName, step: int = 0) -> bool:
-	if character_texture == null:
-		return false
-	var descriptor := _dictionary_from(character_clip_descriptors.get(clip_id, {}))
-	var frames := character_clip_frames.get(clip_id, []) as Array
-	var frame := CharacterPresentationCatalogScript.frame_at(frames, descriptor, step)
-	if frame == null:
-		return false
-	character_texture.texture = frame
-	character_texture.flip_h = bool(descriptor.get("flip_h", false))
-	return true
+	var frame := character_frames[StationCharacterFrames.lobby_frame_index(elapsed)]
+	if character_texture.texture != frame:
+		character_texture.texture = frame
 
 
 func _register_art21_loop(parent: Control, node_name: String, rect: Rect2, prefix: String, sequence: Array, frame_seconds: float, tint: Color, base_alpha: float) -> void:
@@ -2210,8 +2223,7 @@ func _update_summary_sway() -> void:
 
 
 func _freeze_motion() -> void:
-	if character_texture != null and not character_frames.is_empty():
-		_apply_character_clip_pose(&"idle", 0)
+	_apply_lobby_frame(0.0)
 	for group in ambient_animations:
 		var node := group.get("node") as TextureRect
 		var frames := group.get("frames", []) as Array
@@ -2272,14 +2284,7 @@ func _append_summary_row(index: int) -> void:
 	var row_panel := Panel.new()
 	row_panel.name = "DeploySummaryRowPanel%d" % index
 	row_panel.custom_minimum_size = Vector2(208, 46)
-	row_panel.add_theme_stylebox_override(
-		"panel",
-		Art10UISkinKitScript.style_box_from_asset_ref_with_insets(
-			Art22DeployPrepAssetContractScript.control_ref(&"slot", &"normal"),
-			Vector4.ZERO,
-			Vector4(4, 4, 4, 4)
-		)
-	)
+	row_panel.add_theme_stylebox_override("panel", StationSkin.panel(StationSkin.SURFACE, Color("#2e454d")))
 	summary_scroll_content.add_child(row_panel)
 	var row_label := _add_label(
 		row_panel,
@@ -2563,44 +2568,8 @@ func _add_container_image_button(parent: Container, node_name: String, minimum_s
 func _apply_image_button_surface(button: Button, control_id: StringName, normal_state: StringName) -> void:
 	if button == null:
 		return
-	var normal := normal_state
-	if button.disabled:
-		normal = &"disabled"
-	button.add_theme_stylebox_override("normal", _button_style(control_id, normal))
-	var focused_state := &"selected" if normal_state == &"selected" else &"focused"
-	button.add_theme_stylebox_override("hover", _button_style(control_id, focused_state))
-	button.add_theme_stylebox_override("focus", _button_style(control_id, focused_state))
-	var pressed_state := &"selected" if normal_state == &"selected" else &"pressed"
-	button.add_theme_stylebox_override("pressed", _button_style(control_id, pressed_state))
-	button.add_theme_stylebox_override("hover_pressed", _button_style(control_id, pressed_state))
-	button.add_theme_stylebox_override("disabled", _button_style(control_id, &"disabled"))
-	var dark_text := control_id in [&"tab", &"filter", &"handle"] and normal_state != &"selected"
-	var color := Color(0.20, 0.12, 0.07) if dark_text else Color(0.98, 0.86, 0.58)
-	var light_surface_text := Color(0.20, 0.12, 0.07) if control_id in [&"tab", &"filter", &"handle"] and normal_state != &"selected" else color.lightened(0.12)
-	button.add_theme_color_override("font_color", color)
-	button.add_theme_color_override("font_hover_color", light_surface_text)
-	button.add_theme_color_override("font_focus_color", light_surface_text)
-	button.add_theme_color_override("font_pressed_color", color if normal_state == &"selected" else color.darkened(0.12))
-	button.add_theme_color_override("font_disabled_color", Color(color.r, color.g, color.b, 0.46))
-
-
-func _button_style(control_id: StringName, state: StringName) -> StyleBox:
-	var content_inset := 6
-	var texture_margin := 12
-	match control_id:
-		&"nav": texture_margin = 18
-		&"action": texture_margin = 24
-		&"danger": texture_margin = 18
-		&"tab": texture_margin = 12
-		&"filter": texture_margin = 10
-		&"handle":
-			content_inset = 4
-			texture_margin = 12
-	return Art10UISkinKitScript.style_box_from_asset_ref_with_insets(
-		Art22DeployPrepAssetContractScript.control_ref(control_id, state),
-		Vector4(content_inset, content_inset, content_inset, content_inset),
-		Vector4(texture_margin, texture_margin, texture_margin, texture_margin)
-	)
+	var emphasis := &"primary" if control_id == &"action" else (&"danger" if control_id == &"danger" else &"normal")
+	StationSkin.style_button(button, emphasis, normal_state, 6, 6)
 
 
 func _add_texture(parent: Control, node_name: String, rect: Rect2, visual_key: StringName, local_z: int, nearest: bool = true) -> TextureRect:
@@ -2657,6 +2626,7 @@ func _add_label(parent: Control, node_name: String, rect: Rect2, text: String, f
 	elif node_name.ends_with("Badge") or node_name.ends_with("Badges") or node_name.ends_with("Hint") or node_name.ends_with("Feedback"):
 		composition_role = &"status"
 	Art10UISkinKitScript.apply_composition_label(label, composition_role, font_size, color)
+	StationSkin.apply_label(label, StationSkin.BRASS if composition_role == &"title" else StationSkin.INK)
 	label.set_meta("deploy_base_font_size", font_size)
 	label.set_meta("deploy_composition_role", composition_role)
 	label.set_meta("deploy_max_font_size", maxi(font_size, int(floor(rect.size.y - 4.0))))
@@ -2856,11 +2826,8 @@ func _add_image_panel(parent: Control, node_name: String, rect: Rect2, control_i
 	panel.name = node_name
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.z_index = local_z
-	panel.add_theme_stylebox_override("panel", Art10UISkinKitScript.style_box_from_asset_ref(
-		Art22DeployPrepAssetContractScript.control_ref(control_id, state),
-		7,
-		12
-	))
+	var tone := &"deep" if control_id == &"surface" else &"slot"
+	panel.add_theme_stylebox_override("panel", Art10UISkinKitScript.panel_style(tone))
 	_set_rect(panel, rect)
 	parent.add_child(panel)
 	return panel

@@ -1,0 +1,200 @@
+{
+  "code": "B42",
+  "event_id": "seal",
+  "title": "封条柜",
+  "render": "renders/B42_seal.png",
+  "blend": "blend/B42_seal_preview.blend",
+  "version": "v2",
+  "units": [
+    {
+      "id": "main_station",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__main_station_TableTop_woodlight",
+        "B42_seal__main_station_TableTop_wood",
+        "B42_seal__main_station_TableBands_iron",
+        "B42_seal__main_station_TableRivets_copper",
+        "B42_seal__main_station_TableLegs_wooddark",
+        "B42_seal__main_station_TableRail_wood",
+        "B42_seal__main_station_Paper_paper",
+        "B42_seal__main_station_Ink_wooddark",
+        "B42_seal__main_station_WaxSeal_red",
+        "B42_seal__main_station_Stamp_iron",
+        "B42_seal__main_station_StampGrip_wood",
+        "B42_seal__main_station_BookCover_red",
+        "B42_seal__main_station_BookPages_paper",
+        "B42_seal__main_station_Drawer_wood",
+        "B42_seal__main_station_DrawerFront_woodlight",
+        "B42_seal__main_station_DrawerHandle_copper",
+        "B42_seal__main_station_SealDisplay_wooddark",
+        "B42_seal__main_station_Tag_paper",
+        "B42_seal__main_station_TagSeal_red"
+      ],
+      "bounds": [
+        [
+          -1.5,
+          -0.05000002309679985,
+          0.05999999865889549
+        ],
+        [
+          1.5,
+          1.350000023841858,
+          1.6200000047683716
+        ]
+      ]
+    },
+    {
+      "id": "archive_NW",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__archive_NW_ShelfUpright_wood",
+        "B42_seal__archive_NW_ShelfBack_wooddark",
+        "B42_seal__archive_NW_ShelfBoard_woodlight",
+        "B42_seal__archive_NW_BookCover_red",
+        "B42_seal__archive_NW_BookPages_paper",
+        "B42_seal__archive_NW_BookCover_cloth",
+        "B42_seal__archive_NW_BookCover_blue",
+        "B42_seal__archive_NW_BookCover_wooddark",
+        "B42_seal__archive_NW_Paper_paper",
+        "B42_seal__archive_NW_Ink_wooddark",
+        "B42_seal__archive_NW_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -6.625,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          -4.375,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "archive_N",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__archive_N_ShelfUpright_wood",
+        "B42_seal__archive_N_ShelfBack_wooddark",
+        "B42_seal__archive_N_ShelfBoard_woodlight",
+        "B42_seal__archive_N_BookCover_red",
+        "B42_seal__archive_N_BookPages_paper",
+        "B42_seal__archive_N_BookCover_cloth",
+        "B42_seal__archive_N_BookCover_blue",
+        "B42_seal__archive_N_BookCover_wooddark",
+        "B42_seal__archive_N_Paper_paper",
+        "B42_seal__archive_N_Ink_wooddark",
+        "B42_seal__archive_N_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -3.924999952316284,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          -1.6749999523162842,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "archive_NE",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__archive_NE_ShelfUpright_wood",
+        "B42_seal__archive_NE_ShelfBack_wooddark",
+        "B42_seal__archive_NE_ShelfBoard_woodlight",
+        "B42_seal__archive_NE_BookCover_red",
+        "B42_seal__archive_NE_BookPages_paper",
+        "B42_seal__archive_NE_BookCover_cloth",
+        "B42_seal__archive_NE_BookCover_blue",
+        "B42_seal__archive_NE_BookCover_wooddark",
+        "B42_seal__archive_NE_Paper_paper",
+        "B42_seal__archive_NE_Ink_wooddark",
+        "B42_seal__archive_NE_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          4.375,
+          4.009999752044678,
+          0.05999999865889549
+        ],
+        [
+          6.625,
+          4.690000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "archive_W",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__archive_W_ShelfUpright_wood",
+        "B42_seal__archive_W_ShelfBack_wooddark",
+        "B42_seal__archive_W_ShelfBoard_woodlight",
+        "B42_seal__archive_W_BookCover_red",
+        "B42_seal__archive_W_BookPages_paper",
+        "B42_seal__archive_W_BookCover_cloth",
+        "B42_seal__archive_W_BookCover_blue",
+        "B42_seal__archive_W_BookCover_wooddark",
+        "B42_seal__archive_W_Paper_paper",
+        "B42_seal__archive_W_Ink_wooddark",
+        "B42_seal__archive_W_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          -6.625,
+          1.2599999904632568,
+          0.05999999865889549
+        ],
+        [
+          -4.375,
+          1.940000057220459,
+          2.4200000762939453
+        ]
+      ]
+    },
+    {
+      "id": "archive_E",
+      "kind": "floor",
+      "objects": [
+        "B42_seal__archive_E_ShelfUpright_wood",
+        "B42_seal__archive_E_ShelfBack_wooddark",
+        "B42_seal__archive_E_ShelfBoard_woodlight",
+        "B42_seal__archive_E_BookCover_red",
+        "B42_seal__archive_E_BookPages_paper",
+        "B42_seal__archive_E_BookCover_cloth",
+        "B42_seal__archive_E_BookCover_blue",
+        "B42_seal__archive_E_BookCover_wooddark",
+        "B42_seal__archive_E_Paper_paper",
+        "B42_seal__archive_E_Ink_wooddark",
+        "B42_seal__archive_E_WaxSeal_red"
+      ],
+      "bounds": [
+        [
+          4.375,
+          1.2599999904632568,
+          0.05999999865889549
+        ],
+        [
+          6.625,
+          1.940000057220459,
+          2.4200000762939453
+        ]
+      ]
+    }
+  ],
+  "assembly_aabb_candidates": [],
+  "architecture_aabb_candidates": [],
+  "resolution": [
+    1920,
+    1200
+  ],
+  "runtime_integrated": false,
+  "scope": "Static assembly AABB screening; does not certify all internal contacts or runtime motion."
+}

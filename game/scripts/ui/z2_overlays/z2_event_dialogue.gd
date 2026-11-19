@@ -4,6 +4,7 @@ extends Control
 signal choice_requested(request: Dictionary)
 signal dismissed(context: Dictionary)
 
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
 const REFERENCE_SIZE := Vector2(1920.0, 1080.0)
 const NORMAL_TEXT := Color(0.89, 0.93, 0.88)
 const MUTED_TEXT := Color(0.65, 0.74, 0.71)
@@ -34,7 +35,7 @@ var _pending_by_room := {}
 var _attempt_id := 0
 var _previous_focus: Control
 var _choices_heading: Label
-var _frame_style: StyleBoxFlat
+var _frame_style: StyleBoxTexture
 var _laying_out := false
 
 
@@ -51,6 +52,10 @@ func _ready() -> void:
 	_frame_style = _panel_style(22.0, 24.0, 22.0, 12.0)
 	_dialogue_frame.add_theme_stylebox_override(&"panel", _frame_style)
 	_choices.add_theme_stylebox_override(&"panel", _panel_style(10.0, 10.0, 10.0, 10.0))
+	_nameplate.add_theme_stylebox_override(&"panel", RunVectorSkin.frame(RunVectorSkin.STATUS, Vector4(12, 5, 12, 5)))
+	RunVectorSkin.apply_button(_close, Vector4(10, 4, 10, 4))
+	RunVectorSkin.set_icon(_close, RunVectorSkin.CLOSE)
+	_close.custom_minimum_size = Vector2(112, 36)
 	var scroll: ScrollContainer = %OptionsScroll
 	var contents := VBoxContainer.new()
 	contents.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -76,16 +81,8 @@ func _ready() -> void:
 	_layout()
 
 
-func _panel_style(left: float, top: float, right: float, bottom: float) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.035, 0.075, 0.08, 0.98)
-	style.border_color = Color(0.40, 0.46, 0.36)
-	style.set_border_width_all(1)
-	style.content_margin_left = left
-	style.content_margin_top = top
-	style.content_margin_right = right
-	style.content_margin_bottom = bottom
-	return style
+func _panel_style(left: float, top: float, right: float, bottom: float) -> StyleBoxTexture:
+	return RunVectorSkin.frame(RunVectorSkin.PANEL, Vector4(left, top, right, bottom))
 
 
 ## Call after ready with {room_id, phase_id, revision: int, speaker?, lines?, options?}.
@@ -292,6 +289,7 @@ func _build_options() -> void:
 		button.name = "Option_%d" % index
 		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if _enabled(option) else Control.CURSOR_ARROW
 		button.accessibility_name = str(option.label)
+		RunVectorSkin.apply_button(button, Vector4.ZERO)
 		button.pressed.connect(_request_option.bind(index))
 		button.focus_entered.connect(func() -> void: _selected = index)
 		button.mouse_entered.connect(func() -> void:

@@ -7,6 +7,12 @@ const MonsterCatalogScript := preload("res://scripts/gameplay/combat/g41_monster
 const Z2Talents := preload("res://scripts/core/progression/z2_talent_runtime.gd")
 const Supplies := preload("res://scripts/core/run/z2_supply_runtime.gd")
 const Opening := preload("res://scripts/core/run/z2_opening_runtime.gd")
+const FieldWeapons := preload("res://scripts/gameplay/combat/field_weapons.gd")
+const PRESENTATION_EVENTS := [
+	&"melee_warning_started", &"ranged_aim_started", &"ranged_fired",
+	&"projectile_hit", &"projectile_blocked", &"projectile_despawned", &"projectile_returned",
+	&"z1_attack_started", &"hazard_activated", &"hazard_ended", &"laser_started", &"laser_ended",
+]
 
 var runtime_controller
 var context: RunContext
@@ -16,6 +22,8 @@ var current_room_key: String = ""
 var encounter_ordinals: Dictionary = {}
 var recent_domain_events: Array[Dictionary] = []
 var paused: bool = false
+var field_weapons := FieldWeapons.initial_state()
+var _attack_start_changed_supply := false
 var _flee_authorized: bool = false
 var flee_authorized: bool:
 	get:
@@ -35,6 +43,7 @@ func export_transaction_state() -> Dictionary:
 		"recent_domain_events": recent_domain_events.duplicate(true),
 		"paused": paused,
 		"flee_authorized": flee_authorized,
+		"field_weapons": field_weapons.duplicate(true),
 	}
 
 
@@ -43,6 +52,7 @@ func import_transaction_state(state: Dictionary) -> void:
 	encounter_ordinals = state.get("encounter_ordinals", {}).duplicate(true)
 	recent_domain_events.assign(state.get("recent_domain_events", []).duplicate(true))
 	paused = bool(state.get("paused", false))
+	field_weapons = state.get("field_weapons", FieldWeapons.initial_state()).duplicate(true)
 	# Context already contains the saved statuses; installation is not a retreat.
 	_flee_authorized = bool(state.get("flee_authorized", false))
 	if state.get("simulation") == null:
@@ -56,6 +66,10 @@ func import_transaction_state(state: Dictionary) -> void:
 
 func validate_transaction_state(state: Dictionary) -> bool:
 	var required := {"simulation": TYPE_DICTIONARY, "current_room_key": TYPE_STRING, "encounter_ordinals": TYPE_DICTIONARY, "recent_domain_events": TYPE_ARRAY, "paused": TYPE_BOOL, "flee_authorized": TYPE_BOOL}
+	if state.has("field_weapons"):
+		required["field_weapons"] = TYPE_DICTIONARY
+		if not FieldWeapons.valid(state["field_weapons"]):
+			return false
 	if state.size() != required.size() or not CombatSimulationScript.valid_transaction_value(state):
 		return false
 	for field in required:
@@ -91,6 +105,7 @@ func reset() -> void:
 	encounter_ordinals.clear()
 	recent_domain_events.clear()
 	paused = false
+	field_weapons = FieldWeapons.initial_state()
 	flee_authorized = false
 
 
@@ -125,8 +140,10 @@ func set_paused(next_paused: bool) -> void:
 		simulation.set_paused(next_paused)
 
 
-func advance_frame(delta: float, move_input: Vector2, aim_input: Vector2) -> Dictionary:
+func advance_frame(delta: float, move_input: Vector2, aim_input: Vector2, speed_multiplier: float = 1.0) -> Dictionary:
 	if simulation == null:
+		return build_read_only_snapshot()
+	if runtime_controller != null and runtime_controller.has_pending_combat_save():
 		return build_read_only_snapshot()
 	# Storage failures freeze inputs and accumulated wall time until the parent
 	# clears its persistence barrier. Retained pre-step debt can then be retried.
@@ -135,7 +152,7 @@ func advance_frame(delta: float, move_input: Vector2, aim_input: Vector2) -> Dic
 		blocked["step_result"] = {"ok": false, "reason": "persistence_retry_required"}
 		return blocked
 	simulation.set_paused(paused)
-	simulation.set_player_input(move_input, aim_input)
+	simulation.set_player_input(move_input, aim_input, speed_multiplier)
 	var stepping := simulation
 	var outcome := {}
 	stepping.advance_frame(delta, func() -> Dictionary:
@@ -153,6 +170,8 @@ func advance_frame(delta: float, move_input: Vector2, aim_input: Vector2) -> Dic
 func _commit_fixed_step(stepping: G41CombatSimulation) -> Dictionary:
 	if simulation != stepping or runtime_controller == null:
 		return {"ok": false, "reason": "combat_runtime_unavailable"}
+	if runtime_controller.has_pending_combat_save():
+		return {"ok": false, "status": &"checkpoint_pending"}
 	var next_tick := stepping.tick_index + 1
 	var payload := {
 		"encounter_id": stepping.encounter_id,
@@ -161,17 +180,63 @@ func _commit_fixed_step(stepping: G41CombatSimulation) -> Dictionary:
 		"durability_required": false,
 	}
 	var action_id := "combat:%s:tick:%d" % [stepping.encounter_id, next_tick]
+	if next_tick > 1 and not stepping.attack_queued and not runtime_controller.action_receipts.has(action_id):
+		if runtime_controller.can_advance_transient_combat_time(stepping.FIXED_STEP):
+			var transient := _advance_transient_step(stepping)
+			if not transient.is_empty():
+				transient["revision"] = runtime_controller.transaction_revision
+				transient["action_id"] = action_id
+				return transient
 	return runtime_controller.execute_atomic_operation(
 		&"combat_fixed_step", payload, Callable(self, "_run_fixed_step").bind(stepping, payload), action_id
 	)
 
 
+func _advance_transient_step(stepping: G41CombatSimulation) -> Dictionary:
+	# A movement or presentation step owns only combat state. If it reaches a
+	# hit or another durable fact, rewind it and run the original transaction.
+	var before := stepping.export_transaction_state()
+	var hit_resolver := stepping.hit_resolver
+	stepping.hit_resolver = _defer_transient_hit
+	stepping.sync_player_durable_stats(context.hp, context.max_hp, context.power, _context_shield())
+	var advanced := stepping.advance_pending_step()
+	stepping.hit_resolver = hit_resolver
+	if not bool(advanced.get("ok", false)) or _requires_durability(stepping.pending_events):
+		stepping.import_transaction_state(before)
+		return {}
+	advance_field_reload(stepping.FIXED_STEP)
+	runtime_controller.advance_transient_combat_time(stepping.FIXED_STEP)
+	var facts := stepping.drain_events()
+	var result := _consume_domain_events(facts)
+	result["facts"] = facts
+	result["durability_required"] = false
+	return result
+
+
+func _defer_transient_hit(_packet: Dictionary) -> Dictionary:
+	return {"ok": false, "reason": "combat_hit_requires_transaction"}
+
+
+func _requires_durability(events: Array[Dictionary], allow_transient_windup := false) -> bool:
+	for event in events:
+		var type := StringName(event.get("event_type", &""))
+		if type == &"player_attack_started" and allow_transient_windup:
+			continue
+		if type not in PRESENTATION_EVENTS:
+			return true
+	return false
+
+
 func _run_fixed_step(stepping: G41CombatSimulation, payload: Dictionary) -> Dictionary:
+	_attack_start_changed_supply = false
 	var advanced := stepping.advance_pending_step(Callable(self, "_advance_step_time").bind(stepping, payload))
 	if not bool(advanced.get("ok", false)):
 		return advanced
 	var events := stepping.drain_events()
-	payload["durability_required"] = bool(payload.get("durability_required", false)) or not events.is_empty()
+	# Animation cues and projectile lifetime events are still published every
+	# step. The periodic checkpoint covers them without blocking the frame.
+	var windup_only := stepping.tick_index > 1 and not _attack_start_changed_supply
+	payload["durability_required"] = bool(payload["durability_required"]) or _requires_durability(events, windup_only)
 	var consumed := _consume_domain_events(events)
 	consumed["facts"] = events
 	consumed["durability_required"] = payload["durability_required"]
@@ -179,6 +244,7 @@ func _run_fixed_step(stepping: G41CombatSimulation, payload: Dictionary) -> Dict
 
 
 func _advance_step_time(stepping: G41CombatSimulation, payload: Dictionary) -> Dictionary:
+	advance_field_reload(stepping.FIXED_STEP)
 	if stepping.tick_index == 1:
 		var supply_started := _supply_lifecycle("combat_started")
 		if not bool(supply_started.get("ok", false)):
@@ -226,7 +292,9 @@ func _supply_lifecycle(kind: String) -> Dictionary:
 
 
 func _on_actual_attack_started() -> Dictionary:
-	return _supply_lifecycle("first_attack")
+	var result := _supply_lifecycle("first_attack")
+	_attack_start_changed_supply = bool(result.get("durability_required", false))
+	return result
 
 
 func _opening_attack_allowed() -> bool:
@@ -248,11 +316,177 @@ func _context_shield() -> int:
 	return 0 if value == null else int(value)
 
 
+func equip_field_weapon(weapon: StringName) -> Dictionary:
+	if weapon not in [FieldWeapons.AXE, FieldWeapons.RIFLE, FieldWeapons.SCATTER] or _weapon_busy():
+		return {"ok": false, "message": "当前无法切换武器。"}
+	if weapon == field_weapons["selected"]:
+		return {"ok": true, "message": "当前 · " + ("战斧" if weapon == FieldWeapons.AXE else _ammo_label(weapon))}
+	return runtime_controller.execute_atomic_operation(&"field_weapon_equip", {"weapon": weapon}, func() -> Dictionary:
+		field_weapons["selected"] = weapon
+		var label := "战斧" if weapon == FieldWeapons.AXE else _ammo_label(weapon)
+		return {"ok": true, "message": "已切换 · " + label}
+	)
+
+
+func reload_field_weapon() -> Dictionary:
+	var weapon := StringName(field_weapons["selected"])
+	if weapon == FieldWeapons.AXE or _weapon_busy():
+		return {"ok": false, "message": "当前无法装填。"}
+	var profile: Dictionary = FieldWeapons.PROFILES[weapon]
+	var key := String(weapon)
+	var remaining := int(field_weapons["magazines"][key])
+	var count := mini(int(profile["magazine"]) - remaining, int(field_weapons["reserve"]))
+	if count <= 0:
+		return {"ok": false, "message": "弹匣已满或备用弹不足。"}
+	var multiplier := float(FieldWeapons.passive(weapon).get("reload_multiplier", 1.0)) if remaining > 0 else 1.0
+	return runtime_controller.execute_atomic_operation(&"field_weapon_reload", {"weapon": weapon}, func() -> Dictionary:
+		field_weapons["magazines"][key] += count
+		field_weapons["reserve"] -= count
+		field_weapons["reload"] = float(profile["reload"]) * multiplier
+		return {"ok": true, "message": "装填 · " + _ammo_label(weapon)}
+	)
+
+
+func _weapon_busy() -> bool:
+	return float(field_weapons["reload"]) > 0.0 or (has_active_combat()
+		and (simulation.attack_queued or simulation.player.get("state") not in [&"idle", &"move"]))
+
+
+func _ammo_label(weapon: StringName) -> String:
+	var profile: Dictionary = FieldWeapons.PROFILES[weapon]
+	return "%s %d/%d  备用 %d" % [profile["name"], field_weapons["magazines"][String(weapon)],
+		profile["magazine"], field_weapons["reserve"]]
+
+
+func advance_field_reload(delta: float) -> void:
+	field_weapons["reload"] = maxf(0.0, float(field_weapons["reload"]) - delta)
+	if field_weapons.has("field_attack_cooldown"):
+		field_weapons["field_attack_cooldown"] = maxf(0.0, float(field_weapons["field_attack_cooldown"]) - delta)
+	var cooldowns: Dictionary = field_weapons.get("skill_cooldowns", {})
+	for weapon in cooldowns.keys():
+		var remaining := float(cooldowns[weapon]) - delta
+		if remaining > CombatSimulationScript.EPSILON:
+			cooldowns[weapon] = remaining
+		else:
+			cooldowns.erase(weapon)
+
+
+func request_weapon_skill(requested_facing: Vector2 = Vector2.ZERO) -> Dictionary:
+	if not has_active_combat():
+		return {"ok": false, "reason": &"combat_not_active"}
+	var weapon := StringName(field_weapons["selected"])
+	var rejected := _weapon_shot_rejection(weapon, true)
+	if not rejected.is_empty():
+		return rejected
+	if _weapon_busy() or not simulation.queue_player_weapon_skill(weapon, requested_facing):
+		return _weapon_rejection(&"weapon_attack_busy", "当前动作结束后可释放武器技能。")
+	return {
+		"ok": true, "status": &"attack_queued", "skill_id": FieldWeapons.skill(weapon)["id"],
+		"authority": &"G41CombatSimulation",
+	}
+
+
+func request_field_attack(origin: Vector2, facing: Vector2, obstacles: Array, use_skill: bool = false) -> Dictionary:
+	if runtime_controller == null or context == null or not context.run_active or has_active_combat():
+		return _weapon_rejection(&"field_attack_unavailable", "当前无法进行房间攻击。")
+	if not origin.is_finite() or not facing.is_finite() or facing.length_squared() <= CombatSimulationScript.EPSILON:
+		return _weapon_rejection(&"invalid_attack_direction", "请先确定攻击方向。")
+	var weapon := StringName(field_weapons["selected"])
+	var rejected := _weapon_shot_rejection(weapon, use_skill)
+	if not rejected.is_empty():
+		return rejected
+	if not FieldWeapons.PROFILES.has(weapon):
+		return _weapon_rejection(&"field_firearm_required", "当前装备的是近战武器。")
+	var shot := FieldWeapons.shot_profile(weapon, use_skill)
+	var geometry := FieldWeapons.ray_contract(weapon, use_skill)
+	var direction := facing.normalized()
+	var endpoints: Array[Vector2] = []
+	var wall_contacts: Array[Vector2] = []
+	for angle: float in shot["rays"]:
+		var finish := _field_ray_endpoint(origin, direction.rotated(angle), float(shot["range"]))
+		var limit := CombatSimulationScript.first_rect_hit_fraction(origin, finish, obstacles)
+		var endpoint := origin.lerp(finish, minf(1.0, limit))
+		endpoints.append(endpoint)
+		if limit < 1.0:
+			wall_contacts.append(endpoint)
+	geometry.merge({
+		"attack_id": "field_attack_%04d" % (runtime_controller.transaction_revision + 1),
+		"origin": origin, "facing": direction, "shot_endpoints": endpoints,
+		"shot_obstacle_endpoints": wall_contacts, "blocked_count": wall_contacts.size(),
+		"hit_enemy_ids": [], "hit_count": 0,
+	})
+	var result: Dictionary = runtime_controller.commit_field_attack(geometry, func() -> void:
+		_settle_weapon_shot(weapon, use_skill)
+		field_weapons["field_attack_cooldown"] = float(FieldWeapons.PROFILES[weapon]["cooldown"])
+	)
+	if bool(result.get("ok", false)):
+		result["field_attack"] = geometry
+	return result
+
+
+func _field_ray_endpoint(origin: Vector2, direction: Vector2, attack_range: float) -> Vector2:
+	var length := attack_range
+	if absf(direction.x) > CombatSimulationScript.EPSILON:
+		var boundary := 1.0 if direction.x > 0.0 else 0.0
+		length = minf(length, (boundary - origin.x) / direction.x)
+	if absf(direction.y) > CombatSimulationScript.EPSILON:
+		var boundary := 1.0 if direction.y > 0.0 else 0.0
+		length = minf(length, (boundary - origin.y) / direction.y)
+	return origin + direction * maxf(0.0, length)
+
+
+func _weapon_shot_rejection(weapon: StringName, use_skill: bool) -> Dictionary:
+	var ability := FieldWeapons.skill(weapon) if use_skill else {}
+	if use_skill and ability.is_empty():
+		return _weapon_rejection(&"weapon_has_no_skill", "当前武器没有主动技能。")
+	if paused or not _opening_attack_allowed():
+		return _weapon_rejection(&"opening_attack_blocked", "当前无法攻击。")
+	var skill_cooldown := _skill_cooldown(weapon)
+	if use_skill and skill_cooldown > CombatSimulationScript.EPSILON:
+		return _weapon_rejection(&"weapon_skill_cooling_down", "武器技能尚需 %.1f 秒。" % (ceilf(skill_cooldown * 10.0) / 10.0))
+	if float(field_weapons["reload"]) > 0.0:
+		return _weapon_rejection(&"weapon_reloading", "正在装填。")
+	if float(field_weapons.get("field_attack_cooldown", 0.0)) > CombatSimulationScript.EPSILON:
+		return _weapon_rejection(&"weapon_attack_busy", "当前武器正在恢复。")
+	var ammo_cost := int(ability.get("ammo_cost", 1))
+	if weapon != FieldWeapons.AXE and _magazine_rounds(weapon) < ammo_cost:
+		var message := "武器技能需要 %d 发弹药，按 R 装填。" % ammo_cost if use_skill else "弹匣已空，按 R 装填。"
+		return _weapon_rejection(&"magazine_empty", message)
+	return {}
+
+
+func _weapon_rejection(reason: StringName, message: String) -> Dictionary:
+	return {"ok": false, "status": &"attack_blocked", "reason": reason, "message": message}
+
+
+func _skill_cooldown(weapon: StringName) -> float:
+	return float(field_weapons.get("skill_cooldowns", {}).get(String(weapon), 0.0))
+
+
+func _magazine_rounds(weapon: StringName) -> int:
+	return int(field_weapons["magazines"].get(String(weapon), 0))
+
+
+func _settle_weapon_shot(weapon: StringName, use_skill: bool) -> void:
+	var ability := FieldWeapons.skill(weapon) if use_skill else {}
+	var key := String(weapon)
+	field_weapons["magazines"][key] = _magazine_rounds(weapon) - int(ability.get("ammo_cost", 1))
+	if use_skill:
+		if not field_weapons.has("skill_cooldowns"):
+			field_weapons["skill_cooldowns"] = {}
+		field_weapons["skill_cooldowns"][key] = ability["cooldown_seconds"]
+
+
 func request_attack(requested_facing: Vector2 = Vector2.ZERO) -> Dictionary:
 	if simulation == null or not simulation.active:
 		return {"ok": false, "reason": &"combat_not_active"}
 	if not _opening_attack_allowed():
 		return {"ok": false, "reason": &"opening_attack_blocked", "status": &"attack_blocked", "message": "避战蓄势期间无法攻击，请先结束蓄势。"}
+	var selected := StringName(field_weapons["selected"])
+	if float(field_weapons["reload"]) > 0.0:
+		return {"ok": false, "status": &"attack_blocked", "reason": &"weapon_reloading", "message": "正在装填。"}
+	if selected != FieldWeapons.AXE and int(field_weapons["magazines"][String(selected)]) <= 0:
+		return {"ok": false, "status": &"attack_blocked", "reason": &"magazine_empty", "message": "弹匣已空，按 R 装填。"}
 	var player_state := StringName(simulation.player.get("state", &"idle"))
 	var cooldown_before := float(simulation.player.get("attack_cooldown", 0.0))
 	var immediate := player_state in [&"idle", &"move"] and cooldown_before <= simulation.EPSILON
@@ -263,6 +497,7 @@ func request_attack(requested_facing: Vector2 = Vector2.ZERO) -> Dictionary:
 	var queued := simulation.queue_player_attack(requested_facing)
 	var status := &"attack_blocked"
 	if queued:
+		simulation.player["field_weapon"] = selected
 		status = &"attack_queued" if immediate else &"attack_buffered"
 	elif (
 		player_state not in [&"hurt", &"dead"]
@@ -341,7 +576,35 @@ func build_read_only_snapshot() -> Dictionary:
 	combat["authority"] = &"G41CombatSimulation"
 	combat["fixed_hz"] = 60
 	combat["recent_events"] = recent_domain_events.duplicate(true)
+	combat["encounter_id"] = simulation.encounter_id if simulation != null else ""
+	var selected := StringName(field_weapons["selected"])
+	var input: Dictionary = combat.get("attack_input", {})
+	if not input.is_empty():
+		if selected != FieldWeapons.AXE:
+			input["cooldown_maximum_seconds"] = float(FieldWeapons.PROFILES[selected]["cooldown"]) / Z2Talents.speed_multiplier(simulation.player.get("z2_talents", {}), "attack_speed_percent")
+		if float(field_weapons["reload"]) > 0.0 or (selected != FieldWeapons.AXE and int(field_weapons["magazines"][String(selected)]) <= 0):
+			input["ready"] = false
+			input["buffer_window_open"] = false
+	combat["field_weapons"] = field_weapons.duplicate(true)
+	combat["field_weapon_busy"] = _weapon_busy()
+	combat["field_skill"] = _field_skill_snapshot(selected)
 	return combat
+
+
+func _field_skill_snapshot(weapon: StringName) -> Dictionary:
+	var ability := FieldWeapons.skill(weapon)
+	if ability.is_empty():
+		return {}
+	var attack_available := not has_active_combat() or float(simulation.player.get("attack_cooldown", 0.0)) <= simulation.EPSILON
+	var cooldown := _skill_cooldown(weapon)
+	var reason: StringName = &""
+	if cooldown > CombatSimulationScript.EPSILON:
+		reason = &"cooldown"
+	elif _magazine_rounds(weapon) < int(ability["ammo_cost"]):
+		reason = &"ammo"
+	elif context == null or not context.run_active or paused or not _opening_attack_allowed() or _weapon_busy() or not attack_available or float(field_weapons.get("field_attack_cooldown", 0.0)) > CombatSimulationScript.EPSILON:
+		reason = &"busy"
+	return {"cooldown": cooldown, "block": reason}
 
 
 func _start_current_encounter(player_local_pos: Vector2) -> void:
@@ -406,8 +669,10 @@ func _encounter_types(
 
 
 func _consume_domain_events(events: Array[Dictionary]) -> Dictionary:
+	var encounter := simulation.encounter_id if simulation != null else ""
 	for event in events:
 		var event_copy := event.duplicate(true)
+		event_copy["encounter_id"] = encounter
 		recent_domain_events.append(event_copy)
 		if recent_domain_events.size() > 32:
 			recent_domain_events.pop_front()
@@ -415,6 +680,14 @@ func _consume_domain_events(events: Array[Dictionary]) -> Dictionary:
 		# Damage has already been resolved synchronously by the parent. These
 		# events are committed facts, never a second request to deduct HP.
 		match StringName(event.get("event_type", &"")):
+			&"player_attack_resolved":
+				var weapon := StringName(event.get("weapon", FieldWeapons.AXE))
+				if FieldWeapons.PROFILES.has(weapon):
+					var use_skill := event.has("skill_id")
+					var ammo_cost := int(FieldWeapons.skill(weapon).get("ammo_cost", 1)) if use_skill else 1
+					if _magazine_rounds(weapon) < ammo_cost:
+						return {"ok": false, "reason": &"field_weapon_ammo_underflow"}
+					_settle_weapon_shot(weapon, use_skill)
 			&"combat_cleared":
 				result = _commit_combat_cleared(event)
 			&"player_defeated":

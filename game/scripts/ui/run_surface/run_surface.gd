@@ -1,6 +1,10 @@
 extends Control
 class_name RunSurface
 
+const RunVectorSkin := preload("res://scripts/ui/run_surface/run_vector_skin.gd")
+const WeaponPanelScript := preload("res://scripts/ui/run_surface/run_weapon_panel.gd")
+const PlayerHealthHudScript := preload("res://scripts/ui/run_surface/player_health_hud.gd")
+
 const HUDScene := preload("res://scenes/ui/hud/hud.tscn")
 const MiniMapScene := preload("res://scenes/ui/minimap/minimap_panel.tscn")
 const PresentationTheme := preload("res://scripts/presentation/presentation_theme.gd")
@@ -18,7 +22,6 @@ const PROTOCOL_LEVEL_ASSET_PREFIX := "ui.art24.ui.protocol.level_"
 const PROTOCOL_LEVEL_FALLBACK_ASSET := &"ui.art24.ui.protocol.level_5"
 const PROTOCOL_PRESSURE_MAX := 100.0
 const COMMAND_FEEDBACK_TOAST_SECONDS := 2.2
-const STATUS_CARD_FRAME_PATH := "res://assets/ui/art21r2/run_hud/ui_art21r2_run_status_card_frame.png"
 const REDUNDANT_ENCOUNTER_OPTION_IDS := [&"search", &"open_chest", &"attack_basic"]
 const EVENT_MODAL_ENCOUNTER_TYPES := [&"trader", &"dice", &"altar", &"trap"]
 const FOCUSED_MODAL_IDS := [
@@ -41,6 +44,8 @@ const PROTOCOL_LEVEL_COLORS := {
 	5: Color(0.28, 0.82, 0.58, 0.96),
 }
 
+signal field_weapon_requested(weapon: StringName)
+signal field_reload_requested
 signal interact_requested
 signal inventory_requested
 signal ground_loot_requested
@@ -83,6 +88,8 @@ var scanner_glow_layer: ColorRect
 var room_glow_layer: ColorRect
 var protocol_glow_layer: ColorRect
 var protocol_level_plate: TextureRect
+var player_health_hud: PlayerHealthHudScript
+var weapon_panel: WeaponPanelScript
 var protocol_pressure_track: ColorRect
 var protocol_pressure_fill: ColorRect
 var bottom_key_glow_layer: ColorRect
@@ -90,7 +97,9 @@ var right_game_fill_layer: ColorRect
 var left_rail_art: NinePatchRect
 var status_card_art: NinePatchRect
 var bottom_overlay_art: NinePatchRect
-var mine_risk_tag_art: TextureRect
+var mine_risk_tag_art: NinePatchRect
+var mine_risk_icon: TextureRect
+var pressure_icon: TextureRect
 var player_sprite_layer: TextureRect
 var scanner_title_label: Label
 var scanner_summary_label: Label
@@ -113,7 +122,6 @@ var encounter_title_label: Label
 var encounter_body_label: Label
 var encounter_result_label: Label
 var resource_label: Label
-var vitals_label: Label
 var mine_risk_label: Label
 var right_title_label: Label
 var right_body_label: Label
@@ -171,8 +179,7 @@ func build() -> void:
 	left_backdrop = _add_panel("RunScannerRail", PresentationTheme.panel_color(), PresentationTheme.color_for_key(&"ui.accent"))
 	left_backdrop.add_theme_stylebox_override("panel", _panel_style(Color(0.006, 0.014, 0.016, 0.72), PresentationTheme.color_for_key(&"ui.accent"), 2))
 	Art10UISkinKitScript.apply_panel(left_backdrop, &"deep")
-	left_rail_art = _add_nine_patch_from_ref("Art21RunLeftInfoRail", Art21UIPlacementContractScript.slot_ref(&"run_hud", &"left_info_rail", &"ui.art21.shared.panel.page_frame.normal"), 0.96, 14)
-	_apply_art24_frame(left_rail_art, "res://assets/art24/ui/modal_frame.png", 18)
+	left_rail_art = _add_vector_frame("Art21RunLeftInfoRail", RunVectorSkin.RAIL)
 	left_rail_art.draw_center = false
 	center_backdrop = _add_panel("RunRoomSignalPanel", Color(0.006, 0.012, 0.014, 0.10), PresentationTheme.color_for_key(&"mini.normal"))
 	center_backdrop.add_theme_stylebox_override("panel", _panel_style(Color(0.006, 0.012, 0.014, 0.10), PresentationTheme.color_for_key(&"mini.normal"), 1))
@@ -183,31 +190,21 @@ func build() -> void:
 	right_backdrop = _add_panel("RunProtocolRail", Color(0.035, 0.04, 0.042, 0.90), PresentationTheme.color_for_key(&"ui.warning"))
 	right_backdrop.add_theme_stylebox_override("panel", _panel_style(Color(0.006, 0.014, 0.016, 0.68), PresentationTheme.color_for_key(&"ui.warning"), 2))
 	Art10UISkinKitScript.apply_panel(right_backdrop, &"summary")
-	status_card_art = _add_nine_patch_from_ref("Art21RunStatusCard", Art21UIPlacementContractScript.slot_ref(&"run_hud", &"top_right_status_card", &"ui.art19.panel.deploy_summary"), 0.94, 12)
-	# Keep the source rivets, bevels and bracket ends inside unstretched corners.
-	_apply_art24_frame(status_card_art, STATUS_CARD_FRAME_PATH, 36)
+	status_card_art = _add_vector_frame("Art21RunStatusCard", RunVectorSkin.STATUS)
 	protocol_level_plate = _add_texture_rect_from_ref("RunProtocolLevelPlate", _protocol_level_ref(5), 0.48)
 	protocol_level_plate.stretch_mode = TextureRect.STRETCH_SCALE
 	protocol_level_plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pressure_icon = _add_vector_icon("RunProtocolPressureIcon", RunVectorSkin.PRESSURE)
 	protocol_pressure_track = _add_color_layer("RunProtocolPressureTrack", Color(0.01, 0.02, 0.022, 0.92))
 	protocol_pressure_fill = _add_color_layer("RunProtocolPressureFill", _protocol_level_color(5))
 	bottom_backdrop = _add_panel("RunActionBarSurface", PresentationTheme.panel_color(), PresentationTheme.color_for_key(&"ui.accent"))
 	bottom_backdrop.add_theme_stylebox_override("panel", _panel_style(Color(0.006, 0.014, 0.016, 0.70), PresentationTheme.color_for_key(&"ui.accent"), 2))
 	Art10UISkinKitScript.apply_panel(bottom_backdrop, &"summary")
-	bottom_overlay_art = _add_nine_patch_from_ref("Art21RunBottomOverlay", Art21UIPlacementContractScript.slot_ref(&"run_hud", &"bottom_overlay", &"ui.art19.bar.summary_dark"), 0.96, 12)
-	_apply_art24_frame(bottom_overlay_art, "res://assets/art24/ui/bottom_bar.png", 12)
-	mine_risk_tag_art = _add_texture_rect_from_ref(
-		"RunMineRiskTagArt",
-		Art09ManifestAssetMappingScript.asset_ref(
-			&"ui.art24.ui.ue.ui_mine_risk_tag",
-			&"ui.hud.mine_risk_tag",
-			&"mine_risk_tag",
-			&"known"
-		),
-		1.0
-	)
-	mine_risk_tag_art.stretch_mode = TextureRect.STRETCH_SCALE
+	bottom_overlay_art = _add_vector_frame("Art21RunBottomOverlay", RunVectorSkin.RAIL)
+	mine_risk_tag_art = _add_vector_frame("RunMineRiskTagArt", RunVectorSkin.ALERT_FRAME)
 	mine_risk_tag_art.visible = false
+	mine_risk_icon = _add_vector_icon("RunMineRiskIcon", RunVectorSkin.ALERT)
+	mine_risk_icon.visible = false
 	resource_backdrop = _add_panel("RunResourcePocket", Color(0.035, 0.055, 0.055, 0.92), PresentationTheme.color_for_key(&"mini.chest"))
 	resource_backdrop.add_theme_stylebox_override("panel", _interior_band_style(Color(0.006, 0.014, 0.016, 0.44)))
 	scanner_text_mask = _add_panel("RunScannerTextMask", Color(0.012, 0.026, 0.030, 0.72), PresentationTheme.color_for_key(&"ui.accent"))
@@ -257,10 +254,10 @@ func build() -> void:
 	backpack_scroll.add_child(backpack_strip)
 	backpack_empty_watermark = TextureRect.new()
 	backpack_empty_watermark.name = "RunBackpackEmptyWatermark"
-	backpack_empty_watermark.texture = load("res://assets/art24/ui/ue/ui_icon_backpack.png") as Texture2D
+	backpack_empty_watermark.texture = RunVectorSkin.BAG
 	backpack_empty_watermark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	backpack_empty_watermark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	backpack_empty_watermark.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	backpack_empty_watermark.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	backpack_empty_watermark.modulate = Color(0.58, 0.72, 0.64, 0.16)
 	backpack_empty_watermark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(backpack_empty_watermark)
@@ -308,7 +305,9 @@ func build() -> void:
 	# probe, but present the authoritative count in the UE-aligned plate below
 	# the room. The left rail must not duplicate the same risk signal.
 	resource_label.visible = false
-	vitals_label = _add_label("RunProtocolVitals", "", 13, PresentationTheme.text_color())
+	player_health_hud = PlayerHealthHudScript.new()
+	player_health_hud.name = "RunPlayerHealthHUD"
+	add_child(player_health_hud)
 	mine_risk_label = _add_label("RunMineRiskText", "", 16, Color(0.91, 0.87, 0.78, 1.0))
 	mine_risk_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mine_risk_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -318,10 +317,6 @@ func build() -> void:
 
 	right_title_label = _add_label("RunProtocolTitle", "协议状态", 18, PresentationTheme.color_for_key(&"ui.warning"))
 	right_body_label = _add_label("RunProtocolBody", "协议：--\n压力：--\n危险：--", 13, PresentationTheme.text_color())
-	var protocol_body_backing := StyleBoxFlat.new()
-	protocol_body_backing.bg_color = Color(18.0 / 255.0, 22.0 / 255.0, 20.0 / 255.0, 1.0)
-	protocol_body_backing.set_content_margin_all(0.0)
-	right_body_label.add_theme_stylebox_override(&"normal", protocol_body_backing)
 	event_label = _add_label("RunEventStatus", "事件：无待处理事件。", 13, PresentationTheme.text_color())
 	reward_label = _add_label("RunRewardSummary", "奖励：等待记录。", 12, PresentationTheme.color_for_key(&"ui.muted"))
 	reward_label.visible = false
@@ -370,6 +365,11 @@ func build() -> void:
 	feedback_slot = _add_slot("RunFeedbackSlot")
 	overlay_slot = _add_slot("RunOverlaySlot")
 	modal_slot = _add_slot("RunModalSlot")
+	weapon_panel = WeaponPanelScript.new()
+	weapon_panel.name = "RunWeaponPanel"
+	weapon_panel.weapon_requested.connect(func(weapon: StringName) -> void: field_weapon_requested.emit(weapon))
+	weapon_panel.reload_requested.connect(func() -> void: field_reload_requested.emit())
+	add_child(weapon_panel)
 	_apply_layer_order()
 	room_description_scroll = _wrap_text_scroll(room_body_label, "RunRoomBodyScroll")
 	command_feedback_scroll = _wrap_text_scroll(command_feedback_label, "RunCommandFeedbackScroll")
@@ -390,14 +390,15 @@ func apply_surface_model(model: Dictionary) -> void:
 		call_deferred("_reflow_backpack_content_layout")
 	scanner_title_label.text = "区域扫描图"
 	scanner_legend_label.text = String(model.get("currency_text", _resource_lines(String(model.get("resource_summary", "")))))
-	vitals_label.text = String(model.get("vitals_text", ""))
+	_update_vitals(model)
 	scanner_detail_label.text = "作业包  %s 展开" % SemanticActionHintScript.current_binding_label(&"open_inventory")
 	_refresh_backpack_strip(model.get("backpack_items", []))
 	backpack_capacity_label.text = "共享 %s/%s\n战利品 %s/%s" % [model.get("equipment_used", 0), model.get("equipment_capacity", 100), model.get("backpack_used", 0), model.get("backpack_capacity", 0)]
 	scanner_summary_label.text = "%d × %d · 展开详情" % [current_map_dimensions.x, current_map_dimensions.y] if current_map_dimensions.x > 0 and current_map_dimensions.y > 0 else "地图尚未公开"
 	room_title_label.text = String(model.get("room_title", "当前房间"))
 	var description_lines: Array[String] = []
-	for text: String in [String(model.get("room_summary", "")), String(model.get("current_objective", "")), String(model.get("commission_text", ""))]:
+	# The first lines stay visible when the player increases the UI scale.
+	for text: String in [String(model.get("current_objective", "")), String(model.get("room_summary", "")), String(model.get("commission_text", ""))]:
 		if not text.is_empty() and not description_lines.has(text):
 			description_lines.append(text)
 	room_body_label.text = "\n\n".join(description_lines)
@@ -409,9 +410,8 @@ func apply_surface_model(model: Dictionary) -> void:
 	var mine_risk := _dict_variant(model.get("mine_risk", {}))
 	_update_mine_risk_presentation(mine_risk.get("count", -1))
 	var protocol_level := clampi(int(model.get("protocol_level", 5)), 1, 5)
-	var protocol_title := String(model.get("protocol_title", RunSurfaceModelScript.protocol_title_for_level(protocol_level)))
 	right_title_label.text = "协议 %s" % protocol_level
-	right_body_label.text = "%s · 压力 %s%%" % [protocol_title, model.get("pressure", "--")]
+	right_body_label.text = "压力 %s%%" % model.get("pressure", "--")
 	_update_protocol_presentation(model.get("protocol_level", 5), model.get("pressure", 0))
 	_schedule_content_layout()
 	event_label.text = ""
@@ -422,7 +422,7 @@ func apply_surface_model(model: Dictionary) -> void:
 		command_feedback_label.visible = false
 
 	var status_text := "\n".join(model.get("status_lines", []))
-	right_body_label.tooltip_text = status_text
+	right_body_label.tooltip_text = "%s\n%s" % [RunSurfaceModelScript.protocol_title_for_level(protocol_level), status_text]
 	event_label.text = ""
 	event_label.visible = false
 	event_label.tooltip_text = String(model.get("event_panel_summary", ""))
@@ -448,7 +448,7 @@ func apply_surface_model(model: Dictionary) -> void:
 func apply_combat_snapshot(snapshot: Dictionary) -> void:
 	if not built:
 		return
-	vitals_label.text = "生命 %s/%s\n强度 %s" % [snapshot.get("hp", 0), snapshot.get("max_hp", 0), snapshot.get("power", 0)]
+	_update_vitals(snapshot)
 	# Combat refreshes omit ledger/map fields. Preserve their last authoritative
 	# projection until a snapshot explicitly supplies a new value.
 	if snapshot.has("black_coin") and snapshot.has("gold_coin"):
@@ -460,11 +460,9 @@ func apply_combat_snapshot(snapshot: Dictionary) -> void:
 			alive_enemies += 1
 	var protocol_level := clampi(int(snapshot.get("protocol_level", 5)), 1, 5)
 	right_title_label.text = "协议 %s" % protocol_level
-	right_body_label.text = "%s · 压力 %s%%" % [
+	right_body_label.text = "压力 %s%%" % snapshot.get("pressure", 0)
+	right_body_label.tooltip_text = "%s · 当前威胁：%d · 生命 %s/%s" % [
 		RunSurfaceModelScript.protocol_title_for_level(protocol_level),
-		snapshot.get("pressure", 0),
-	]
-	right_body_label.tooltip_text = "当前威胁：%d · 生命 %s/%s" % [
 		alive_enemies,
 		snapshot.get("hp", 0),
 		snapshot.get("max_hp", 0),
@@ -472,6 +470,18 @@ func apply_combat_snapshot(snapshot: Dictionary) -> void:
 	_update_protocol_presentation(snapshot.get("protocol_level", 5), snapshot.get("pressure", 0))
 	if snapshot.has("adjacent_mines"):
 		_update_mine_risk_presentation(int(snapshot.adjacent_mines))
+
+
+func apply_field_weapon_snapshot(snapshot: Dictionary) -> void:
+	if is_node_ready() and weapon_panel != null:
+		weapon_panel.apply_runtime_snapshot(snapshot)
+
+
+func _update_vitals(snapshot: Dictionary) -> void:
+	player_health_hud.apply_vitals(
+		int(snapshot.get("hp", 0)), int(snapshot.get("max_hp", 0)),
+		int(snapshot.get("power", 0)), str(snapshot.get("run_id", ""))
+	)
 
 
 func apply_combat_attack_state(attack_input: Dictionary) -> void:
@@ -515,6 +525,8 @@ func _update_mine_risk_presentation(adjacent_value: Variant) -> void:
 		mine_risk_label.visible = known
 		mine_risk_label.set_meta("adjacent_mine_count", adjacent)
 	if mine_risk_tag_art != null:
+		mine_risk_icon.visible = known
+		mine_risk_icon.modulate = Color.WHITE if adjacent >= 3 else Color("#cad6bc")
 		mine_risk_tag_art.visible = known
 		mine_risk_tag_art.set_meta("adjacent_mine_count", adjacent)
 
@@ -550,6 +562,8 @@ func apply_modal_visibility_policy(modal_id: StringName) -> void:
 	# underneath a terminal result modal.
 	for status_node in [
 		status_card_art,
+		player_health_hud,
+		pressure_icon,
 		protocol_pressure_track,
 		protocol_pressure_fill,
 		protocol_glow_layer,
@@ -592,32 +606,41 @@ func apply_layout_profile(profile: Dictionary) -> void:
 	var action: Rect2 = geometry.action_rect
 	var risk: Rect2 = geometry.mine_risk_rect
 	_apply_ue_readability_tokens(current_layout_profile)
-	for label in [backpack_capacity_label, room_title_label, room_body_label, vitals_label, scanner_title_label, right_title_label, scanner_summary_label, command_feedback_label]:
+	for label in [backpack_capacity_label, room_title_label, room_body_label, scanner_title_label, right_title_label, scanner_summary_label, command_feedback_label]:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.max_lines_visible = -1
 		label.clip_text = false
 		label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	vitals_label.add_theme_font_size_override("font_size", right_body_label.get_theme_font_size("font_size"))
 	resource_label.visible = false
 	for hidden in [hud, right_backdrop, protocol_level_plate, center_backdrop, room_background_layer, player_sprite_layer, player_tag_mask, player_tag_label, room_hint_softener, scanner_glow_layer, room_glow_layer, threat_mask, event_mask, event_label, reward_mask, reward_label, right_game_fill_layer, layout_label, objective_label, backpack_detail_label]:
 		hidden.visible = false
 	_set_rect(status_card_art, protocol)
 	status_card_art.visible = true
-	var safe := Rect2(protocol.position + Vector2(maxf(18.0, protocol.size.x * 0.18), 18.0), Vector2(protocol.size.x - maxf(18.0, protocol.size.x * 0.18) - 18.0, protocol.size.y - 36.0))
+	var safe := protocol.grow(-11.0)
 	status_card_art.set_meta("protocol_safe_rect", safe)
-	status_card_art.set_meta("protocol_visible_border_thickness", 12.0)
-	var cursor := safe.position.y
-	for label in [right_title_label, right_body_label, vitals_label]:
-		label.size.x = safe.size.x
-		var line_height: float = label.get_minimum_size().y
-		_set_rect(label, Rect2(safe.position.x, cursor, safe.size.x, line_height))
-		label.visible = true
-		label.set_meta("protocol_safe_rect", safe)
-		cursor += line_height + 4.0
-	_set_rect(protocol_pressure_track, Rect2(safe.position.x, safe.end.y - 6.0, safe.size.x, 6.0))
+	status_card_art.set_meta("protocol_visible_border_thickness", RunVectorSkin.FRAME_SLICE)
+	var status_line := maxf(20.0, right_title_label.get_minimum_size().y)
+	var status_top := safe.end.y - status_line - 10.0
+	_set_rect(player_health_hud, Rect2(safe.position, Vector2(safe.size.x, status_top - safe.position.y - 4.0)))
+	var icon_size := roundf(14.0 * ui_scale_factor)
+	var status_x := safe.position.x + 6.0
+	_set_rect(pressure_icon, Rect2(Vector2(status_x, status_top + (status_line - icon_size) * 0.5), Vector2.ONE * icon_size))
+	status_x += icon_size + 4.0
+	right_title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	right_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var title_width := right_title_label.get_minimum_size().x + 8.0
+	_set_rect(right_title_label, Rect2(status_x, status_top, title_width, status_line))
+	status_x += title_width
+	right_body_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	right_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_set_rect(right_body_label, Rect2(status_x, status_top, safe.end.x - status_x - 4.0, status_line))
+	_set_rect(protocol_pressure_track, Rect2(safe.position.x + 6.0, safe.end.y - 4.0, safe.size.x - 12.0, 4.0))
+	if weapon_panel.is_node_ready():
+		weapon_panel.apply_scale(ui_scale_factor)
+	_set_rect(weapon_panel, geometry.weapon_rect)
 	protocol_pressure_track.visible = true
 	protocol_pressure_fill.visible = true
-	_set_rect(protocol_glow_layer, safe)
+	_set_rect(protocol_glow_layer, Rect2(safe.position.x, status_top, safe.size.x, safe.end.y - status_top))
 	_update_protocol_presentation(current_protocol_level, current_protocol_pressure)
 	_set_rect(room_title_label, geometry.room_title_rect)
 	room_title_label.visible = true
@@ -634,7 +657,7 @@ func apply_layout_profile(profile: Dictionary) -> void:
 	left_backdrop.visible = true
 	left_backdrop.add_theme_stylebox_override("panel", _interior_band_style(Color(0.060, 0.065, 0.055, 0.98)))
 	var inner := rail.grow(-18.0)
-	cursor = inner.position.y
+	var cursor := inner.position.y
 	for label in [scanner_title_label, scanner_summary_label]:
 		label.size.x = inner.size.x
 		var line_height: float = label.get_minimum_size().y
@@ -705,6 +728,7 @@ func apply_layout_profile(profile: Dictionary) -> void:
 		button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	_refresh_action_button_visibility()
 	_set_rect(mine_risk_tag_art, risk)
+	_set_rect(mine_risk_icon, Rect2(risk.position + Vector2(24, (risk.size.y - icon_size) * 0.5), Vector2.ONE * icon_size))
 	_set_rect(mine_risk_label, Rect2(risk.position + Vector2(risk.size.x * 0.27, 2.0), Vector2(risk.size.x * 0.73 - 10.0, risk.size.y - 4.0)))
 	var feedback_rect := Rect2(action.position.x, risk.position.y - 126.0, action.size.x, 120.0)
 	_set_rect(command_feedback_scroll, feedback_rect)
@@ -951,15 +975,8 @@ func get_feedback_slot() -> Control:
 func apply_legacy_modal_style(panel: PanelContainer, theme_key: StringName = &"ui.accent") -> void:
 	if panel == null:
 		return
-	var panel_style := Art10UISkinKitScript.style_box_from_asset_ref_with_insets(
-		Art21UIPlacementContractScript.component_ref(
-			&"shared.panel.modal.normal",
-			&"ui.art19.panel.terminal_main",
-			&"runtime_modal"
-		),
-		Art10UISkinKitScript.POPUP_CONTENT_INSETS,
-		Art10UISkinKitScript.POPUP_SLICE_INSETS
-	)
+	var frame := RunVectorSkin.ALERT_FRAME if theme_key == &"ui.danger" else RunVectorSkin.PANEL
+	var panel_style := RunVectorSkin.frame(frame, Art10UISkinKitScript.POPUP_CONTENT_INSETS)
 	if panel_style != null:
 		panel_style.set_meta("runtime_modal_theme_key", theme_key)
 		panel.add_theme_stylebox_override("panel", panel_style)
@@ -1029,6 +1046,10 @@ func _run_layer_roots() -> Array:
 
 
 func _run_target_root_for_node(node: Node) -> Control:
+	if node == weapon_panel:
+		return run_floating_info_root
+	if node == player_health_hud:
+		return run_top_right_status_root
 	var target_name := UILayerContractScript.run_root_for_node(node)
 	match target_name:
 		&"RunRoomViewportRoot":
@@ -1065,7 +1086,7 @@ func _local_run_layer_for_node(node: Node) -> int:
 		return 2
 	if node_name.find("Mask") >= 0 or node_name.find("Backdrop") >= 0 or node_name.find("Rail") >= 0 or node_name.find("Surface") >= 0 or node_name.find("Pocket") >= 0 or node_name.find("Slot") >= 0:
 		return 0
-	if node is Label or node is Button or node is Container:
+	if node is Label or node is Button or node is Container or node in [player_health_hud, pressure_icon, mine_risk_icon]:
 		return 4
 	return 1
 
@@ -1129,18 +1150,28 @@ func _add_texture_rect_from_ref(node_name: String, asset_ref: Dictionary, alpha:
 	return texture_rect
 
 
-func _add_nine_patch_from_ref(node_name: String, asset_ref: Dictionary, alpha: float = 1.0, margin: int = 12) -> NinePatchRect:
+func _add_vector_frame(node_name: String, texture: Texture2D) -> NinePatchRect:
 	var frame := NinePatchRect.new()
 	frame.name = node_name
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.modulate = Color(1.0, 1.0, 1.0, alpha)
-	frame.texture = Art09ManifestAssetMappingScript.resolve_texture(asset_ref)
-	frame.set_patch_margin(SIDE_LEFT, margin)
-	frame.set_patch_margin(SIDE_TOP, margin)
-	frame.set_patch_margin(SIDE_RIGHT, margin)
-	frame.set_patch_margin(SIDE_BOTTOM, margin)
+	frame.texture = texture
+	frame.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		frame.set_patch_margin(side, int(RunVectorSkin.FRAME_SLICE))
 	add_child(frame)
 	return frame
+
+
+func _add_vector_icon(node_name: String, texture: Texture2D) -> TextureRect:
+	var icon := TextureRect.new()
+	icon.name = node_name
+	icon.texture = texture
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(icon)
+	return icon
 
 
 func _apply_texture_ref(texture_rect: TextureRect, asset_ref: Dictionary, alpha: float = 1.0) -> void:
@@ -1199,9 +1230,10 @@ func _add_action_button(action_id: StringName, label: String, callback: Callable
 
 
 func _apply_key_prompt_icon(button: Button, action_id: StringName) -> void:
-	if button == null:
-		return
-	button.icon = null
+	if action_id == &"extract":
+		RunVectorSkin.set_icon(button, RunVectorSkin.ROUTE, 14)
+	else:
+		button.icon = null
 
 
 func _add_slot(node_name: String) -> Control:
@@ -1285,6 +1317,7 @@ func blocks_world_pointer(viewport_position: Vector2) -> bool:
 	for control in [
 		left_backdrop,
 		status_card_art,
+		weapon_panel,
 		bottom_backdrop,
 		bottom_overlay_art,
 		mine_risk_tag_art,
@@ -1353,6 +1386,12 @@ func _action_guidance_text(action_data: Dictionary) -> String:
 			detail = "%s；暂不可用：%s" % [detail, disabled_reason]
 	if detail.is_empty():
 		detail = "当前没有补充说明。"
+	if action_id == &"combat":
+		var keyboard := SemanticActionHintScript.DEVICE_KEYBOARD_MOUSE
+		detail += "\n%s 跳跃 · 按住 %s 加速" % [
+			SemanticActionHintScript.display_label(&"jump", keyboard),
+			SemanticActionHintScript.display_label(&"sprint", keyboard),
+		]
 	return Art10UISkinKitScript.sanitize_player_copy("%s：%s" % [prefix, detail]).strip_edges()
 
 
@@ -1714,13 +1753,8 @@ func _apply_action_button_style(button: Button, tone: StringName, enabled: bool)
 	)
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	var normal_style := _art24_keycap_style("normal", tone)
-	var pressed_style := _art24_keycap_style("pressed", tone)
-	var disabled_style := _art24_keycap_style("disabled", tone)
-	button.add_theme_stylebox_override("normal", normal_style)
-	button.add_theme_stylebox_override("hover", pressed_style)
-	button.add_theme_stylebox_override("pressed", pressed_style)
-	button.add_theme_stylebox_override("disabled", disabled_style)
+	var normal := tone if tone in [&"primary", &"danger"] else &"normal"
+	RunVectorSkin.apply_button(button, Vector4(6, 1, 6, 1), normal)
 	var tone_color := _tone_color(tone)
 	var font_color := Color(0.98, 0.91, 0.70, 1.0)
 	if tone == &"danger":
@@ -1737,40 +1771,6 @@ func _apply_action_button_style(button: Button, tone: StringName, enabled: bool)
 	var action_copy := button.get_node_or_null("ActionCopy") as Label
 	if action_copy != null:
 		action_copy.add_theme_color_override("font_color", Color(0.98, 0.91, 0.70, 1.0) if enabled else Color(0.64, 0.62, 0.54, 1.0))
-
-
-func _art24_keycap_style(state: String, tone: StringName = &"secondary") -> StyleBox:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.075, 0.080, 0.065, 0.98)
-	style.border_color = Color(0.48, 0.44, 0.32, 0.82)
-	if tone == &"primary":
-		style.bg_color = Color(0.075, 0.070, 0.035, 0.98)
-		style.border_color = Color(0.94, 0.70, 0.27, 0.95)
-	elif tone == &"danger":
-		style.bg_color = Color(0.095, 0.030, 0.030, 0.98)
-		style.border_color = Color(0.82, 0.28, 0.25, 0.95)
-	elif tone == &"warning":
-		style.bg_color = Color(0.090, 0.060, 0.025, 0.98)
-		style.border_color = Color(0.92, 0.55, 0.20, 0.95)
-	if state == "pressed":
-		style.bg_color = style.bg_color.lightened(0.08)
-		style.border_color = _tone_color(tone).lightened(0.16)
-	elif state == "disabled":
-		style.bg_color = Color(0.045, 0.050, 0.042, 0.96)
-		style.border_color = Color(0.28, 0.29, 0.24, 0.78)
-	style.border_width_left = 0
-	style.border_width_top = 0
-	style.border_width_right = 1
-	style.border_width_bottom = 1 if state == "pressed" or tone in [&"primary", &"danger"] else 0
-	style.corner_radius_top_left = 2
-	style.corner_radius_top_right = 2
-	style.corner_radius_bottom_left = 2
-	style.corner_radius_bottom_right = 2
-	style.content_margin_left = 6
-	style.content_margin_top = 1
-	style.content_margin_right = 6
-	style.content_margin_bottom = 1
-	return style
 
 
 func _tone_color(tone: StringName) -> Color:
@@ -1794,14 +1794,10 @@ func _apply_runtime_modal_button_style(button: Button, tone: StringName) -> void
 		&"button",
 		&"display"
 	)
-	var active_tone := &"danger" if visual_tone == &"danger" else &"primary"
-	button.add_theme_stylebox_override("normal", Art10UISkinKitScript.registered_control_style(visual_tone))
-	button.add_theme_stylebox_override("hover", Art10UISkinKitScript.registered_control_style(active_tone))
-	button.add_theme_stylebox_override("pressed", Art10UISkinKitScript.registered_control_style(active_tone))
-	button.add_theme_stylebox_override("disabled", Art10UISkinKitScript.registered_control_style(&"disabled"))
-	button.add_theme_stylebox_override("focus", Art10UISkinKitScript.registered_control_style(&"focus"))
-	button.clip_text = true
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var normal := visual_tone if visual_tone != &"secondary" else &"normal"
+	RunVectorSkin.apply_button(button, Vector4(12, 5, 12, 5), normal)
+	button.clip_text = false
+	button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	var semantic_key := _runtime_modal_theme_key_for(button)
 	if visual_tone == &"danger":
 		semantic_key = &"ui.danger"
@@ -2032,6 +2028,8 @@ func _update_protocol_presentation(level_value: Variant, pressure_value: Variant
 		protocol_pressure_fill.color = pressure_color
 	if right_title_label != null:
 		right_title_label.add_theme_color_override("font_color", pressure_color)
+	if pressure_icon != null:
+		pressure_icon.texture = RunVectorSkin.ALERT if current_protocol_level <= 2 else RunVectorSkin.PRESSURE
 	if protocol_pressure_track != null and protocol_pressure_fill != null:
 		_set_rect(
 			protocol_pressure_fill,
@@ -2049,21 +2047,6 @@ func _update_protocol_presentation(level_value: Variant, pressure_value: Variant
 func _protocol_level_color(level_value: Variant) -> Color:
 	var level := clampi(int(level_value), 1, 5)
 	return Color(PROTOCOL_LEVEL_COLORS.get(level, PROTOCOL_LEVEL_COLORS[5]))
-
-
-func _apply_art24_frame(frame: NinePatchRect, texture_path: String, patch_margin: int) -> void:
-	if frame == null:
-		return
-	var texture := load(texture_path) as Texture2D
-	if texture == null:
-		return
-	frame.texture = texture
-	frame.patch_margin_left = patch_margin
-	frame.patch_margin_top = patch_margin
-	frame.patch_margin_right = patch_margin
-	frame.patch_margin_bottom = patch_margin
-	frame.axis_stretch_horizontal = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
-	frame.axis_stretch_vertical = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
 
 
 func _set_rect(control: Control, rect: Rect2) -> void:

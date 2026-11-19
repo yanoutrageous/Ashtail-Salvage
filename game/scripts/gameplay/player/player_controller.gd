@@ -5,6 +5,9 @@ const DEFAULT_ROOM_RECT := G41RuntimeLayout.ROOM_RECT
 const LOCAL_MOVE_SPEED := 0.74
 const LOCAL_ACCELERATION := 8.0
 const LOCAL_DECELERATION := 12.0
+const SPRINT_SPEED_MULTIPLIER := 1.48
+const JUMP_DURATION := 0.46
+const JUMP_HEIGHT := 0.085
 const PLAYER_RADIUS := G41RuntimeLayout.PLAYER_BODY_RADIUS
 const DOOR_ALIGN_HALF := 0.16
 const DOOR_ENTRY_INSET := 0.005
@@ -22,6 +25,7 @@ const Art24MotionSettingsScript := preload("res://scripts/presentation/art24/art
 const RuntimeAnimationCatalog := preload("res://scripts/presentation/art24/art24_runtime_animation_catalog.gd")
 const TextureCache := preload("res://scripts/presentation/runtime_texture_cache.gd")
 const Z2Talents := preload("res://scripts/core/progression/z2_talent_runtime.gd")
+const RuntimeInputProfileScript := preload("res://scripts/core/input/runtime_input_profile.gd")
 const CONTACT_SHADOW := preload("res://assets/ui/art21/main_menu/scene/character/shadow.png")
 
 var input_enabled := true
@@ -47,6 +51,8 @@ var last_texture_path := ""
 var pending_visual_state: StringName = &""
 var transient_state_remaining := 0.0
 var authoritative_combat_facing_locked := false
+var sprinting := false
+var jump_elapsed := JUMP_DURATION
 
 
 func set_talent_runtime_profile(profile: Dictionary) -> void:
@@ -64,6 +70,7 @@ func set_input_enabled(enabled: bool) -> void:
 	input_enabled = enabled
 	if not enabled:
 		local_velocity = Vector2.ZERO
+		sprinting = false
 		step_preview_remaining = 0.0
 		if visual_state == &"move":
 			set_runtime_visual_state(&"idle")
@@ -75,13 +82,54 @@ func get_move_vector() -> Vector2:
 	return Input.get_vector("move_left", "move_right", "move_up", "move_down", 0.18)
 
 
+func start_jump() -> bool:
+	if not input_enabled or _is_airborne() or visual_state in [&"hurt", &"dead", &"attack_windup", &"attack_active"]:
+		return false
+	jump_elapsed = 0.0
+	return true
+
+
+func advance_locomotion(delta: float, move_vector: Vector2) -> void:
+	sprinting = (
+		input_enabled
+		and move_vector.length_squared() > 0.0001
+		and Input.is_action_pressed(RuntimeInputProfileScript.ACTION_SPRINT)
+	)
+	jump_elapsed = minf(JUMP_DURATION, jump_elapsed + maxf(0.0, delta))
+
+
+func move_speed_multiplier() -> float:
+	return SPRINT_SPEED_MULTIPLIER if sprinting else 1.0
+
+
+func locomotion_snapshot() -> Dictionary:
+	var height := _jump_height_ratio()
+	return {"sprinting": sprinting, "airborne": height, "visual_lift": height * JUMP_HEIGHT}
+
+
+func _is_airborne() -> bool:
+	return jump_elapsed < JUMP_DURATION
+
+
+func _jump_height_ratio() -> float:
+	var phase := jump_elapsed / JUMP_DURATION
+	return 4.0 * phase * (1.0 - phase)
+
+
 func reset_local_position() -> void:
 	# Spawn on the clear left aisle, away from the room's upright furniture.
 	place_on_clear_floor(Vector2(0.30, 0.5))
 
 
-func place_on_clear_floor(preferred: Vector2) -> Vector2:
+func reset_locomotion() -> void:
 	local_velocity = Vector2.ZERO
+	step_preview_remaining = 0.0
+	sprinting = false
+	jump_elapsed = JUMP_DURATION
+
+
+func place_on_clear_floor(preferred: Vector2) -> Vector2:
+	reset_locomotion()
 	for point: Vector2 in [preferred, Vector2(0.50, 0.72), Vector2(0.50, 0.28), Vector2(0.28, 0.72), Vector2(0.72, 0.72)]:
 		if not _position_hits_obstacle(point):
 			set_local_position(point)
@@ -178,7 +226,7 @@ func get_door_projections() -> Array[Dictionary]:
 
 
 func requested_transition(move_vector: Vector2) -> Vector2i:
-	if not input_enabled or move_vector.length_squared() <= 0.0001:
+	if not input_enabled or _is_airborne() or move_vector.length_squared() <= 0.0001:
 		return Vector2i.ZERO
 	var direction := move_vector.normalized()
 	return _transition_for_next_pos(local_pos + direction * 0.02, direction)
@@ -319,7 +367,7 @@ func move_local(move_vector: Vector2, delta: float) -> Dictionary:
 	var direction := move_vector.limit_length(1.0)
 	if direction.length_squared() > 0.0001:
 		_set_facing_from_vector(direction)
-	var target_velocity := direction * LOCAL_MOVE_SPEED * local_move_speed_multiplier
+	var target_velocity := direction * LOCAL_MOVE_SPEED * local_move_speed_multiplier * move_speed_multiplier()
 	var acceleration := LOCAL_ACCELERATION if direction.length_squared() > 0.0001 else LOCAL_DECELERATION
 	var integration := _integrate_velocity(local_velocity, target_velocity, acceleration, maxf(0.0, delta))
 	local_velocity = integration.get("velocity", Vector2.ZERO)
@@ -329,7 +377,7 @@ func move_local(move_vector: Vector2, delta: float) -> Dictionary:
 		set_runtime_visual_state(&"idle")
 		return {"status": &"idle"}
 	var next_pos := local_pos + Vector2(integration.get("displacement", Vector2.ZERO))
-	var transition := _transition_for_next_pos(next_pos, local_velocity.normalized())
+	var transition := Vector2i.ZERO if _is_airborne() else _transition_for_next_pos(next_pos, local_velocity.normalized())
 	if transition != Vector2i.ZERO:
 		local_velocity = Vector2.ZERO
 		return {"status": &"transition", "direction": transition}
@@ -435,7 +483,7 @@ func _process(delta: float) -> void:
 		animation_elapsed = 0.0
 		animation_frame = 0
 	else:
-		animation_elapsed += delta
+		animation_elapsed += delta * (1.32 if sprinting and show_walk else 1.0)
 		var frame_duration := RuntimeAnimationCatalog.player_frame_duration(visual_state, show_walk, _animation_set_descriptor())
 		var frame_count := maxi(1, RuntimeAnimationCatalog.player_frame_count(visual_state, show_walk, _animation_set_descriptor()))
 		var next_frame := int(animation_elapsed / frame_duration)
@@ -508,15 +556,23 @@ func _door_body_reached(body_rect: Rect2, direction: Vector2i, next_pos: Vector2
 
 
 func _resolve_obstacle_motion(from: Vector2, to: Vector2) -> Vector2:
-	if not _position_hits_obstacle(to):
-		return to
-	var x_only := Vector2(to.x, from.y)
-	if not _position_hits_obstacle(x_only):
-		return x_only
-	var y_only := Vector2(from.x, to.y)
-	if not _position_hits_obstacle(y_only):
-		return y_only
-	return from
+	# Sprint frames can be longer than a narrow obstacle. Keep each sample
+	# smaller than the collider's own clearance while retaining wall slide.
+	var count := maxi(1, ceili(from.distance_to(to) / PLAYER_RADIUS))
+	var step := (to - from) / float(count)
+	var current := from
+	for _index in count:
+		var candidate := current + step
+		if not _position_hits_obstacle(candidate):
+			current = candidate
+		else:
+			var x_only := Vector2(candidate.x, current.y)
+			var y_only := Vector2(current.x, candidate.y)
+			if not _position_hits_obstacle(x_only):
+				current = x_only
+			elif not _position_hits_obstacle(y_only):
+				current = y_only
+	return current
 
 
 func _position_hits_obstacle(test_pos: Vector2) -> bool:
@@ -605,7 +661,7 @@ func _apply_idle_motion(walking: bool) -> void:
 		var pulse := sin(visual_clock * (11.0 if action_visual else 2.4))
 		bob_offset = pulse * 0.8
 		scale_pulse += pulse * 0.006
-	sprite.position.y = PLAYER_ART_GROUND_OFFSET.y + bob_offset
+	sprite.position.y = PLAYER_ART_GROUND_OFFSET.y + bob_offset - _jump_height_ratio() * JUMP_HEIGHT * room_rect.size.y
 	sprite.scale = Vector2.ONE * PLAYER_ART_SCALE * scale_pulse
 	_apply_appearance_modulate(sprite)
 	sprite.rotation = -0.18 if visual_state == &"dead" else 0.0

@@ -54,7 +54,11 @@ func present_error() -> bool:
 	if not is_blocked():
 		return false
 	_scene._sync_player_input_enabled()
-	persistence_error_label.text = "保存未完成，探索已停止推进。请检查存储空间或文件访问权限后重试。"
+	var reason := String(_scene.runtime_controller.persistence_error.get("reason", ""))
+	if reason == "checkpoint_content_mismatch":
+		persistence_error_label.text = "这份探索存档来自不同的游戏版本。原存档仍保留，请使用创建它的游戏版本继续。"
+	else:
+		persistence_error_label.text = "保存未完成，探索已停止推进。请检查存储空间或文件访问权限后重试。"
 	persistence_retry_button.text = "重试保存并退出" if _quit_after_retry else "重试并继续"
 	if not persistence_error_panel.visible:
 		persistence_error_panel.show()

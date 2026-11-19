@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <path id="cell" d="M4 1h16l3 3v16l-3 3H4l-3-3V4z" fill="#254349" stroke="#719e9f" stroke-width="1.15"/>
+  <path id="corner-ticks" d="M4 8V4h4m8 16h4v-4" fill="none" stroke="#b6d7bc" stroke-opacity=".78"/>
+  <path id="registration" d="M18 4h2M4 20h2" stroke="#b6d7bc" stroke-opacity=".45"/>
+</svg>
