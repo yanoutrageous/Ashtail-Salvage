@@ -44,13 +44,6 @@ func _check_footer_and_mine_risk(resolution_id: StringName) -> void:
 	var risk_rect := surface.mine_risk_tag_art.get_rect()
 	var risk_label_rect := surface.mine_risk_label.get_rect()
 	var key_rect := surface.bottom_overlay_art.get_rect()
-	var detail_rect := surface.backpack_detail_label.get_global_rect()
-	var capacity_rect := surface.backpack_capacity_label.get_global_rect()
-	var detail_capacity_gap := capacity_rect.position.y - detail_rect.end.y
-	var rail_rect := surface.left_rail_art.get_rect()
-	var scanner_title_rect := surface.scanner_title_label.get_rect()
-	var resource_style := surface.resource_backdrop.get_theme_stylebox(&"panel")
-	var backpack_style := surface.scanner_text_mask.get_theme_stylebox(&"panel")
 	_check(surface.mine_risk_tag_art.visible, "%s known mine-risk plate is hidden" % resolution_id)
 	_check(surface.mine_risk_label.visible, "%s known mine-risk text is hidden" % resolution_id)
 	_check(surface.mine_risk_label.text == "周围雷险：3", "%s mine-risk copy/count drifted" % resolution_id)
@@ -58,84 +51,17 @@ func _check_footer_and_mine_risk(resolution_id: StringName) -> void:
 	_check(not surface.resource_label.visible, "%s duplicated the mine-risk signal in the left rail" % resolution_id)
 	_check(risk_rect.is_equal_approx(layout.mine_risk_rect), "%s risk plate escaped the shared HUD allocation" % resolution_id)
 	_check(key_rect.is_equal_approx(layout.action_rect), "%s key dock escaped the shared HUD allocation" % resolution_id)
-	var protocol_rect := surface.status_card_art.get_rect()
-	_check(
-		risk_rect.position.x > protocol_rect.end.x and risk_rect.end.x < rail_rect.position.x
-		and absf(risk_rect.get_center().x - (protocol_rect.end.x + rail_rect.position.x) * 0.5) <= 0.5
-		and canvas.get_global_rect().encloses(surface.mine_risk_tag_art.get_global_rect()),
-		"%s risk plate overlaps a side rail or leaves the visible canvas" % resolution_id
-	)
-	_check(not surface.command_feedback_art.visible, "%s steady state retained a permanent command-feedback frame" % resolution_id)
-	_check(not surface.command_feedback_label.visible, "%s steady state retained permanent command-feedback copy" % resolution_id)
-	_check(not surface.action_hint_label.visible, "%s steady state retained permanent action-guidance copy" % resolution_id)
-	_check(resource_style is StyleBoxFlat, "%s resource section retained a second textured frame" % resolution_id)
-	_check(backpack_style is StyleBoxFlat, "%s backpack section retained a second textured frame" % resolution_id)
-	if resource_style is StyleBoxFlat:
-		var flat_resource := resource_style as StyleBoxFlat
-		_check(
-			flat_resource.border_width_left + flat_resource.border_width_top
-			+ flat_resource.border_width_right + flat_resource.border_width_bottom == 0,
-			"%s resource section retained a complete inner outline" % resolution_id
-		)
-	if backpack_style is StyleBoxFlat:
-		var flat_backpack := backpack_style as StyleBoxFlat
-		_check(
-			flat_backpack.border_width_left + flat_backpack.border_width_top
-			+ flat_backpack.border_width_right + flat_backpack.border_width_bottom == 0,
-			"%s backpack section retained a complete inner outline" % resolution_id
-		)
-	# The scanner rail uses the SVG frame with 12 px fixed corner slices.
-	# Its 18px corner slices and real GPU title bounds are recorded in the audit.
-	var rail := surface.left_rail_art
-	var rail_texture := rail.texture
-	_check(
-		rail_texture != null and rail_texture.resource_path == "res://assets/ui/run_vector/frame_rail.svg"
-		and FileAccess.get_sha256(rail_texture.resource_path).to_upper() == "BD8F384B860463BA8F3D153EA254A904E7F78CCFF6C0FFAA5297F250CA408414",
-		"%s scanner rail asset changed; its reviewed ornament clearance must be revalidated" % resolution_id
-	)
-	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-		_check(rail.get_patch_margin(side) == 12, "%s scanner rail lost its reviewed fixed corner slices" % resolution_id)
-	var rail_inset := Vector2(rail.get_patch_margin(SIDE_LEFT), rail.get_patch_margin(SIDE_TOP))
-	var rail_tail := Vector2(rail.get_patch_margin(SIDE_RIGHT), rail.get_patch_margin(SIDE_BOTTOM))
-	var scanner_safe := Rect2(rail_rect.position + rail_inset, rail_rect.size - rail_inset - rail_tail)
-	_check(
-		scanner_safe.encloses(scanner_title_rect)
-		and surface.scanner_title_label.get_minimum_size().y <= scanner_title_rect.size.y + 0.5
-		and surface.scanner_title_label.get_theme_font_size("font_size") >= 16
-		and not surface.scanner_title_label.clip_text
-		and surface.scanner_title_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING
-		and scanner_title_rect.end.y + 4.0 <= surface.scanner_summary_label.get_rect().position.y + 0.5,
-		"%s scanner title enters the authored rail ornament safe zone: title=%s rail=%s" % [
-			resolution_id,
-			scanner_title_rect,
-			scanner_safe,
-		]
-	)
-	_check(
-		surface.scanner_title_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER,
-		"%s scanner title is not centered inside the rail header" % resolution_id
-	)
-	_check(
-		risk_rect.end.y <= key_rect.position.y
-		and key_rect.position.y - risk_rect.end.y <= 6.0,
-		"%s mine-risk plate is not directly adjacent to the key dock: gap=%.1f" % [
-			resolution_id,
-			key_rect.position.y - risk_rect.end.y,
-		]
-	)
-	_check(risk_rect.encloses(risk_label_rect), "%s mine-risk text escapes its authored plate" % resolution_id)
-	_check(
-		surface.backpack_detail_label.text.length() >= 60,
-		"%s long quick-bag item did not reach the detail presentation" % resolution_id
-	)
-	_check(not detail_rect.intersects(capacity_rect), "%s long quick-bag detail overlaps the burden label" % resolution_id)
-	_check(
-		detail_capacity_gap >= 8.0,
-		"%s long quick-bag detail lacks safe spacing above burden: gap=%.1f" % [
-			resolution_id,
-			detail_capacity_gap,
-		]
-	)
+	var minimap := surface.minimap_panel.get_global_rect()
+	_check(risk_rect.position.y >= minimap.end.y and risk_rect.end.x <= canvas.size.x, "%s risk plate escapes the area below the map" % resolution_id)
+	_check(risk_rect.encloses(risk_label_rect), "%s mine-risk text escapes its plate" % resolution_id)
+	_check(not surface.command_feedback_art.visible and not surface.command_feedback_label.visible and not surface.action_hint_label.visible, "%s permanent duplicate feedback" % resolution_id)
+	var bag := surface.compact_bag_button.get_global_rect()
+	var strip := surface.backpack_scroll.get_global_rect()
+	_check(bag.end.x < strip.position.x and strip.end.y < key_rect.position.y, "%s backpack overlaps its slots or commands" % resolution_id)
+	_check(absf(bag.merge(strip).get_center().x - canvas.size.x * 0.5) <= 1.0, "%s backpack is not centered" % resolution_id)
+	_check(not surface.left_rail_art.visible and not surface.backpack_capacity_label.visible, "%s retained old map frame or capacity readout" % resolution_id)
+	var item := surface.backpack_strip.get_child(0) as Button
+	_check(item != null and item.tooltip_text.length() >= 60 and strip.encloses(item.get_global_rect()), "%s full item details or icon escaped the compact strip" % resolution_id)
 
 	var stable_reserved_rect := risk_rect
 	surface.apply_surface_model(_surface_model(profile, -1))

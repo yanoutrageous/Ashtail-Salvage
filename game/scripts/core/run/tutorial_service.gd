@@ -5,26 +5,26 @@ const SemanticActionHintScript := preload("res://scripts/core/input/semantic_act
 
 const POPUP_DEFS := {
 	&"spawn_intro": {
-		"title": "新员工说明",
-		"message_template": "欢迎入职灰尾回收。\n\n你是封锁区临时回收员。本次目标是读取区域扫描图，避开雷险，搜刮物资，并找到撤离信标。\n\n移动：{move_up} / {move_down} / {move_left} / {move_right}\n\n调度台 A-7：公司建议你带回物资。更建议你带回自己。",
+		"title": "先走到门边",
+		"message_template": "向右（{move_right}）或向下（{move_down}）穿过门。\n\n这次演练的目标是到达撤离信标。右上角三角形是你，出口图标是撤离点。",
 		"blocking": false,
 		"once": true,
 		"room_scoped": false,
 		"confirm_text": "开始作业",
 		"confirm_action": &"ui_accept",
-		"action_ids": [&"move_up", &"move_down", &"move_left", &"move_right"],
+		"action_ids": [&"move_right", &"move_down"],
 	},
 	&"number_rule": {
-		"title": "区域扫描图",
-		"message_template": "房间数字表示周围 8 个区域中的雷险数量。\n\n上下左右和斜向都会计入数字。异常体、物资、事件和撤离信标不计入该数字。\n\n调度台 A-7：数字通常不会骗人。公司系统另行计算。",
+		"title": "看数字，再选门",
+		"message_template": "看右上角。房间右下角的数字是周围 8 格的雷险数。\n\n例如数字 2 表示周围有 2 格雷险，具体位置需要结合其他房间的数字判断。用 {open_map} 展开地图。学会插旗后，点未知格可以标记疑点。",
 		"blocking": false,
 		"once": false,
 		"room_scoped": true,
-		"action_ids": [],
+		"action_ids": [&"open_map"],
 	},
 	&"mine_rule": {
-		"title": "雷险区",
-		"message_template": "雷险区会造成伤害，并提高封锁压力。封锁压力升高时，五四三二一撤离协议可能下降。\n\n已触发的雷险会被记录，再次经过不会重复触发。\n\n调度台 A-7：协议下降不是惩罚。只是公司提前声明提醒过你。",
+		"title": "刚刚触发了雷险",
+		"message_template": "看左上角：触雷扣生命、升高压力。\n\n这格雷险已经触发。看右上角地图，再决定是继续探索还是返回已走过的路线。",
 		"blocking": false,
 		"once": false,
 		"room_scoped": true,
@@ -72,20 +72,20 @@ const POPUP_DEFS := {
 		"action_ids": [&"attack"],
 	},
 	&"chest_rule": {
-		"title": "物资箱",
-		"message_template": "发现物资箱时，使用 {interact} 开启。物资箱通常比普通搜索更有价值，但收益仍需成功撤离后结算。\n\n调度台 A-7：箱子归你，风险也归你。",
+		"title": "第一次搜箱",
+		"message_template": "走到箱子旁，看到提示后按 {interact} 搜索。\n\n若地面有掉落，按 {open_ground_loot} 查看并拾取。用 {open_inventory} 查看作业包。正式探索中，回收物需要撤离才能带回。",
 		"blocking": false,
 		"once": false,
 		"room_scoped": true,
-		"action_ids": [&"interact"],
+		"action_ids": [&"interact", &"open_ground_loot", &"open_inventory"],
 	},
 	&"map_rule": {
-		"title": "区域扫描图操作",
-		"message_template": "使用 {open_map} 打开区域扫描图。左键单击未知格可标记或取消标记；键盘/手柄聚焦格子后使用 {ui_accept} 执行同一操作。单击已探索且可回传的安全格即可回传。\n\n调度台 A-7：回头不是失败。失联才是。",
+		"title": "标记风险房间",
+		"message_template": "按 {open_map} 展开地图。点未知格可标记疑点。\n\n插旗只是你的判断。已经探索、带回传标记的安全格可点选回传。",
 		"blocking": false,
 		"once": false,
 		"room_scoped": true,
-		"action_ids": [&"open_map", &"ui_accept"],
+		"action_ids": [&"open_map"],
 	},
 	&"mine_review": {
 		"title": "雷险复查",
@@ -97,16 +97,16 @@ const POPUP_DEFS := {
 		"action_ids": [&"open_map"],
 	},
 	&"route_rule": {
-		"title": "路线规划",
-		"message_template": "区域扫描图可以帮助你重新规划路线。使用 {open_map} 后，可以单击已探索且可回传的安全格完成回传，适合在协议下降后调整路径。\n\n调度台 A-7：合理返程不影响绩效。失联会。",
+		"title": "接近出口",
+		"message_template": "在右上角找出口图标，朝它所在方向走。\n\n路线不顺时，按 {open_map} 查看全图。已走过且可回传的安全格能帮你调整路线。",
 		"blocking": false,
 		"once": false,
 		"room_scoped": true,
 		"action_ids": [&"open_map"],
 	},
 	&"exit_goal": {
-		"title": "撤离信标",
-		"message_template": "到达撤离信标后，使用 {request_extract} 打开撤离确认。\n\n教程撤离只记录完成状态，不结算收益或回收物。五四三二一撤离协议表示当前封锁区风险；数字越低，调度台越不建议继续深入。\n\n调度台 A-7：撤离是建议。不撤离是自主选择。相关条款已说明。",
+		"title": "完成演练",
+		"message_template": "靠近撤离信标后，按 {request_extract} 并确认。\n\n本次演练只记录教学完成。回到营地后领取首次物资，再开始正式探索。",
 		"blocking": false,
 		"once": true,
 		"room_scoped": false,
@@ -191,8 +191,7 @@ static func trigger_for(context: RunContext, pos: Vector2i) -> StringName:
 		"confirm_action_hint": SemanticActionHintScript.descriptor(confirm_action),
 	}
 	if trigger_id == &"spawn_intro" and context.profile_fields.get("z2_progression_version") == 1 and not context.profile_fields.get("flag_unlocked", false):
-		context.tutorial_popup["title"] = "学习插旗标记"
-		context.tutorial_popup["message"] = "你已获得100点教学天赋点。\n\n通过教学目标中的“100点 · 学习插旗”主动学习，在区域图上标记可能有风险的房间。你可以先自由探索，学习入口不会因离开本房而消失；收起说明不会扣点。\n\n进入插旗房间前仍需再次确认。学习后到达撤离信标完成教学、升至Lv1，再前往营地申领首次物资。"
+		context.tutorial_popup["message"] += "\n\n有100点教学天赋点可用。先走出起点、看懂房间数字，再用“100点 · 学习插旗”学习标记。撤离前完成学习即可。"
 		context.tutorial_popup["confirm_text"] = "收起说明"
 	return trigger_id
 

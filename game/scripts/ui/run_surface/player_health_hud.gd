@@ -5,8 +5,6 @@ const SkinKit := preload("res://scripts/presentation/art10_ui_skin_kit.gd")
 const PAUSE_SECONDS := 0.24
 const CATCH_UP_SECONDS := 0.46
 const WARM_WHITE := Color("#f3e6c9")
-const STEEL_LIP := Color("#7da8b5")
-const STEEL_SHADOW := Color("#0b131a")
 
 var _health := 0
 var _maximum := 0
@@ -18,8 +16,6 @@ var _damage_age := 0.0
 var _portrait_rect := Rect2()
 var _track := Rect2()
 var _number_area := Rect2()
-var _power_channel := Rect2()
-var _caption: Label
 var _number: Label
 var _maximum_label: Label
 var _power: Label
@@ -27,9 +23,7 @@ var _power: Label
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	_caption = _label("HealthCaption", WARM_WHITE)
-	_caption.text = "生命"
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_number = _label("HealthValue", WARM_WHITE)
 	var digits := FontVariation.new()
 	digits.base_font = SkinKit.pixel_font() as Font
@@ -69,7 +63,7 @@ func apply_vitals(hp: int, max_hp: int, power: int, run_id: String) -> void:
 		_fit_health_number()
 		_number.add_theme_color_override(&"font_color", Color("#ffc9ab") if _ratio <= 0.25 else WARM_WHITE)
 		queue_redraw()
-	var strength := "强度 %d" % power
+	var strength := "战力 %d" % power
 	if _power.text != strength:
 		_power.text = strength
 
@@ -85,31 +79,27 @@ func _process(delta: float) -> void:
 
 
 func _layout() -> void:
-	var pad := clampf(roundf(size.y * 0.065), 5.0, 8.0)
-	var face_size := maxf(0.0, floorf(minf(size.y - pad * 2.0, size.x * 0.35)))
-	_portrait_rect = Rect2(Vector2(pad, floorf((size.y - face_size) * 0.5)), Vector2.ONE * face_size)
-	var text_x := _portrait_rect.end.x + pad * 0.5
-	var usable := maxf(1.0, size.x - text_x - pad - 2.0)
-	var caption_font := clampi(roundi(size.y * 0.16), 12, 19)
-	_caption.add_theme_font_size_override(&"font_size", caption_font)
-	_power.add_theme_font_size_override(&"font_size", clampi(roundi(size.y * 0.14), 11, 18))
-	_caption.position = Vector2(text_x + 6.0, roundf(size.y * 0.115))
-	_caption.size = Vector2(caption_font * 2.0 + 3.0, roundf(size.y * 0.22))
-	var number_x := _caption.get_rect().end.x + 4.0
-	_number_area = Rect2(number_x, 0.0, maxf(1.0, size.x - pad - 8.0 - number_x), size.y * 0.405)
+	var face_size := floorf(clampf(size.y - 3.0, 24.0, 60.0))
+	_portrait_rect = Rect2(0.0, floorf((size.y - face_size) * 0.5), face_size, face_size)
+	var text_x := _portrait_rect.end.x + 8.0
+	var digits_width := clampf(size.x * 0.44, 88.0, 130.0)
+	var number_x := size.x - digits_width
+	var track_y := roundf(size.y * 0.27)
+	var channel_height := clampf(roundf(size.y * 0.25), 9.0, 15.0)
+	_track = Rect2(text_x, track_y, maxf(0.0, number_x - text_x - 5.0), channel_height)
+	_number_area = Rect2(number_x, 0.0, digits_width, _track.end.y - 1.0)
 	_fit_health_number()
-	_track = Rect2(Vector2(text_x, roundf(size.y * 0.435)), Vector2(usable, maxf(16.0, roundf(size.y * 0.27))))
-	_power_channel = Rect2(Vector2(text_x, _track.end.y + 2.0), Vector2(usable, maxf(12.0, size.y - _track.end.y - pad - 2.0)))
-	_power.position = _power_channel.position + Vector2(6.0, 0.0)
-	_power.size = Vector2(usable - 12.0, _power_channel.size.y)
+	var power_font := clampi(roundi(size.y * 0.32), 12, 18)
+	_power.add_theme_font_size_override(&"font_size", power_font)
+	_power.position = Vector2(text_x, _track.end.y + 1.0)
+	_power.size = Vector2(maxf(1.0, size.x - text_x), _power.get_minimum_size().y)
 	queue_redraw()
-
 
 func _fit_health_number() -> void:
 	var current_font := _number.get_theme_font(&"font")
 	var maximum_font := _maximum_label.get_theme_font(&"font")
 	var current_text := str(_health)
-	var current_size := clampi(roundi(size.y * 0.39), 21, 44)
+	var current_size := clampi(roundi(size.y * 0.43), 16, 30)
 	var maximum_size := maxi(11, roundi(current_size * 0.52))
 	var gap := 3.0
 	var current_width := _text_width(current_font, current_text, current_size)
@@ -117,7 +107,7 @@ func _fit_health_number() -> void:
 	# Measure both native glyph runs because their font sizes and advances differ.
 	while current_width + maximum_width + gap > _number_area.size.x and current_size > 10:
 		current_size -= 1
-		maximum_size = maxi(9, roundi(current_size * 0.55))
+		maximum_size = maxi(11, roundi(current_size * 0.55))
 		current_width = _text_width(current_font, current_text, current_size)
 		maximum_width = _text_width(maximum_font, _maximum_label.text, maximum_size)
 	var baseline := roundf(_number_area.end.y)
@@ -141,55 +131,15 @@ func _set_number_label(label: Label, font_size: int, width: float, x: float, bas
 func _draw() -> void:
 	if _track.size.x < 12.0 or _portrait_rect.size.x < 12.0:
 		return
-	_draw_chassis()
-	_draw_portrait()
-	_draw_bevel(Rect2(_caption.position - Vector2(6, 2), _caption.size + Vector2(13, 4)), 6.0, 1.0, Color("#263c49"), Color("#506e7c"), Color("#0b151c"))
-	_draw_bevel(_power_channel, 6.0, 1.0, Color("#162730"), Color("#3c5664"), Color("#0a141a"))
-	_draw_bevel(_track, 8.0, 2.0, Color("#263f4c"), STEEL_LIP, STEEL_SHADOW)
-	_draw_bevel(_track.grow(-3.0), 5.0, 1.5, Color("#0a1116"), Color("#0b1922"), Color("#638493"))
-	var channel := _track.grow(-5.0)
+	draw_texture_rect(PORTRAIT, _portrait_rect, false)
+	draw_rect(_track, Color("#203136"))
+	draw_rect(_track, Color("#755e4c"), false, 1.0)
+	var channel := _track.grow(-1.0)
 	var damage_visible := roundf(channel.size.x * _white_ratio) > roundf(channel.size.x * _ratio)
 	if damage_visible:
 		_draw_fill(channel, _white_ratio, WARM_WHITE, Color("#fff9e5"), Color("#9c9074"))
-	var red := Color("#e02a29") if _ratio > 0.25 else Color("#ff4f42")
-	_draw_fill(channel, _ratio, red, Color("#ff785e"), Color("#811820"), damage_visible)
-	for tick in [0.25, 0.50, 0.75]:
-		var x := roundf(channel.position.x + channel.size.x * tick)
-		draw_line(Vector2(x, _track.position.y + 2.0), Vector2(x, channel.position.y + 1.0), Color("#b5c8cd"))
-	var terminal := Vector2(_track.end.x - 4.0, _track.get_center().y)
-	draw_polyline(PackedVector2Array([terminal + Vector2(-3, -7), terminal + Vector2(0, -4), terminal + Vector2(0, 4), terminal + Vector2(-3, 7)]), Color("#b64438"), 1.0, true)
-
-
-func _draw_chassis() -> void:
-	var plate := Rect2(0, 0, size.x, size.y - 1.0)
-	_draw_plate(plate, 9.0, Color("#070e12"))
-	_draw_bevel(plate.grow(-1.0), 9.0, 2.0, Color("#344d5c"), STEEL_LIP, STEEL_SHADOW)
-	_draw_bevel(plate.grow(-4.0), 6.0, 1.0, Color("#142530"), Color("#1f3641"), Color("#577889"))
-	var joint_x := roundf(size.x * 0.57)
-	for joint_y in [1.0, plate.end.y - 5.0]:
-		var joint := Rect2(joint_x, joint_y, 19.0, 5.0)
-		_draw_bevel(joint, 2.0, 1.0, Color("#805e3c"), Color("#cbad79"), Color("#3d2b22"))
-		for inset in [3.5, 15.5]:
-			draw_circle(Vector2(joint_x + inset, joint_y + 2.5), 1.0, Color("#4c3628"), true, -1.0, true)
-	_draw_bolt(Vector2(size.x - 9.0, 9.0))
-	_draw_bolt(Vector2(size.x - 9.0, plate.end.y - 8.0))
-
-
-func _draw_portrait() -> void:
-	_draw_bevel(_portrait_rect, 12.0, 2.0, Color("#365563"), Color("#91bdc8"), STEEL_SHADOW)
-	_draw_bevel(_portrait_rect.grow(-3.0), 9.0, 1.0, Color("#233944"), Color("#547781"), Color("#1b2a33"))
-	var image_area := _portrait_rect.grow(-5.0)
-	_draw_bevel(image_area, 7.0, 1.0, Color("#132932"), Color("#090f15"), Color("#769eae"))
-	draw_texture_rect(PORTRAIT, image_area.grow(-1.5), false)
-	_draw_bolt(_portrait_rect.position + Vector2(6.0, 6.0))
-	_draw_bolt(Vector2(_portrait_rect.position.x + 6.0, _portrait_rect.end.y - 6.0))
-
-
-func _draw_bolt(center: Vector2) -> void:
-	var bolt := Rect2(center - Vector2(3.5, 3.5), Vector2(7.0, 7.0))
-	_draw_bevel(bolt, 2.0, 1.0, Color("#987047"), Color("#e3be80"), Color("#382619"))
-	draw_line(center - Vector2(1.2, 0.6), center + Vector2(1.2, 0.6), Color("#493a2b"), 1.0, true)
-
+	var red := Color("#b94139") if _ratio > 0.25 else Color("#ff4f42")
+	_draw_fill(channel, _ratio, red, Color("#e17c60"), Color("#811820"), damage_visible)
 
 func _label(node_name: String, color: Color) -> Label:
 	var label := Label.new()
@@ -201,10 +151,6 @@ func _label(node_name: String, color: Color) -> Label:
 	label.clip_text = true
 	add_child(label)
 	return label
-
-
-func _draw_plate(rect: Rect2, cut: float, color: Color) -> void:
-	draw_colored_polygon(_chamfer_points(rect, cut), color)
 
 
 func _chamfer_points(rect: Rect2, cut: float) -> PackedVector2Array:

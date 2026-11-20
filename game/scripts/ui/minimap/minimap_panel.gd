@@ -172,7 +172,6 @@ func _apply_marker_scale_for_view_model(grid_size: Vector2i) -> void:
 
 func _add_marker_node(grid: GridContainer, marker: Dictionary, size: Vector2) -> void:
 	var state := PresentationMapping.map_marker_state(marker)
-	var asset_ref := RunVectorSkin.map_tile(state)
 	var theme_key := StringName(marker.get("theme_key", &"mini.normal"))
 	var pos: Vector2i = marker.get("pos", Vector2i.ZERO)
 	var cell := Control.new()
@@ -195,19 +194,29 @@ func _add_marker_node(grid: GridContainer, marker: Dictionary, size: Vector2) ->
 			var count_size := Vector2(count_font.get_string_size(str(adjacent), HORIZONTAL_ALIGNMENT_LEFT, -1, count_font_size).x + 2.0, count_font.get_height(count_font_size)).ceil()
 			layer_layout["count_rect"] = Rect2(size - count_size, count_size)
 			layer_layout["count_font_size"] = count_font_size
+	elif adjacent >= 0:
+		layer_layout["count_font_size"] = clampi(roundi(size.y * 0.40), 13, 19)
 	cell.set_meta("map_cell_layer_layout", layer_layout.duplicate(true))
 	cell.set_meta("map_cell_clip_contract", true)
-	if asset_ref is Texture2D:
-		var base_icon := TextureRect.new()
-		base_icon.name = "CellBase"
-		base_icon.texture = asset_ref
-		base_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		base_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		base_icon.stretch_mode = TextureRect.STRETCH_SCALE
-		MapCellLayerLayoutScript.apply_rect(base_icon, Rect2(layer_layout.get("base_rect", Rect2())))
-		base_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		base_icon.z_index = int(layer_layout.get("base_z", 0))
-		cell.add_child(base_icon)
+	var base := Panel.new()
+	base.name = "CellBase"
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base_style := StyleBoxFlat.new()
+	base_style.bg_color = Color("#345458") if state != &"unknown" else Color("#0e2429")
+	base_style.border_color = Color("#597675") if state != &"unknown" else Color("#2c484b")
+	base_style.set_border_width_all(1)
+	base.add_theme_stylebox_override("panel", base_style)
+	MapCellLayerLayoutScript.apply_rect(base, Rect2(layer_layout["base_rect"]))
+	cell.add_child(base)
+	var eligibility: Dictionary = marker.get("return_eligibility", {})
+	if not bool(marker.get("is_current", false)) and bool(eligibility.get("eligible", eligibility.get("fast_return", false))):
+		var dot := ColorRect.new()
+		dot.name = "ReturnDot"
+		dot.color = Color("#f2d69f")
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.z_index = 32
+		MapCellLayerLayoutScript.apply_rect(dot, Rect2(3.0, 3.0, 4.0, 4.0))
+		cell.add_child(dot)
 	var overlay_ref := RunVectorSkin.map_symbol(state)
 	if overlay_ref is Texture2D:
 		var overlay_icon := TextureRect.new()
@@ -220,7 +229,7 @@ func _add_marker_node(grid: GridContainer, marker: Dictionary, size: Vector2) ->
 		overlay_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		overlay_icon.z_index = int(layer_layout.get("semantic_z", 20))
 		cell.add_child(overlay_icon)
-	elif not (asset_ref is Texture2D) or PresentationMapping.map_marker_state(marker) not in [&"unknown", &"scanned", &"explored"]:
+	elif state not in [&"unknown", &"scanned", &"explored"]:
 		var label := Label.new()
 		label.name = "SemanticFallback"
 		var label_text := String(marker.get("label", "?"))

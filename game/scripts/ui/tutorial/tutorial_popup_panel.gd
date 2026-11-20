@@ -59,7 +59,7 @@ func apply_popup(next_popup: Dictionary) -> void:
 			display = _last_guidance.duplicate(true)
 		else:
 			display = {"id": &"tutorial_objective", "title": "教学目标", "blocking": false,
-				"message": "学习插旗后，前往撤离信标完成训练。" if _learning_required else "前往撤离信标完成训练。"}
+				"message": "先学习插旗，再朝地图上的出口图标前进。" if _learning_required else "朝右上角地图的出口图标前进，找到撤离信标。"}
 			_guidance_expanded = false
 	var next_id := StringName(display.get("id", &""))
 	var popup_changed := next_id != _last_popup_id
@@ -270,8 +270,6 @@ func _refresh(reset_scroll: bool = false) -> void:
 		message.add_theme_constant_override("line_separation", maxi(2, int(round(3.0 * ui_scale_factor))))
 		var full_message := String(popup.get("message", ""))
 		var summary := full_message.get_slice("\n", 0)
-		if summary.length() > 48:
-			summary = summary.left(48) + "…"
 		message.text = summary if not blocking and not _guidance_expanded else full_message
 		message.scroll_active = true
 		message.scroll_following = false
@@ -308,7 +306,7 @@ func _refresh(reset_scroll: bool = false) -> void:
 			call_deferred("_grab_confirm_focus_if_valid", _last_popup_id)
 	var learn := get_node_or_null("Panel/Content/LearnFlagButton") as Button
 	if learn != null:
-		learn.visible = _learning_required and not blocking
+		learn.visible = _learning_required and not blocking and _last_popup_id != &"spawn_intro"
 		learn.disabled = not _learning_enabled
 		learn.add_theme_font_size_override("font_size", Art10UISkinKitScript.scaled_font_size(Art10UISkinKitScript.font_size(&"body"), ui_scale_factor))
 		_reserve_button_focus_inset(learn)
@@ -477,7 +475,7 @@ func _tutorial_geometry(profile: Dictionary) -> Dictionary:
 		"left_hud_rect": layout.protocol_rect,
 		"right_status_rect": layout.scanner_rail_rect,
 		"room_stage_rect": layout.room_stage_rect,
-		"footer_rect": Rect2(layout.action_rect.position.x, layout.mine_risk_rect.position.y, layout.action_rect.size.x, layout.action_rect.end.y - layout.mine_risk_rect.position.y),
+		"footer_rect": layout.action_rect.merge(layout.bag_rect),
 	}
 
 

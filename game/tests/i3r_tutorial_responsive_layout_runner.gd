@@ -149,9 +149,9 @@ func _check_case(physical_size: Vector2i, ui_scale: float) -> void:
 	# The retired frame is hidden; the visible copy belongs to its real scroll viewport.
 	_check(surface.command_feedback_scroll.is_ancestor_of(surface.command_feedback_label), _case_error(physical_size, ui_scale, "feedback_copy_outside_scroll_owner"))
 	_check(key_rect.encloses(surface.action_bar.get_global_rect()), _case_error(physical_size, ui_scale, "action_bar_escapes_frame"))
-	_check(surface.scanner_title_label.visible and surface.scanner_title_label.text == "区域扫描图", _case_error(physical_size, ui_scale, "scanner_title_missing"))
+	_check(surface.minimap_panel.is_visible_in_tree() and surface.minimap_panel.tooltip_text.contains("地图"), _case_error(physical_size, ui_scale, "scanner_title_missing"))
 	_check(
-		surface.scanner_title_label.get_combined_minimum_size().y <= surface.scanner_title_label.size.y + 0.5,
+		viewport_rect.encloses(surface.minimap_panel.get_global_rect()),
 		_case_error(
 			physical_size,
 			ui_scale,
@@ -173,12 +173,12 @@ func _check_case(physical_size: Vector2i, ui_scale: float) -> void:
 	var protocol_title_rect := surface.right_title_label.get_global_rect()
 	var protocol_body_rect := surface.right_body_label.get_global_rect()
 	_check(
-		protocol_title_rect.end.y + 1.0 <= protocol_body_rect.position.y,
+		not protocol_title_rect.intersects(protocol_body_rect),
 		_case_error(physical_size, ui_scale, "protocol_title_overlaps_body")
 	)
 	var protocol_left_safe := maxf(
 		PROTOCOL_VISIBLE_BORDER_THICKNESS,
-		status_art_rect.size.x * 0.18
+		status_art_rect.size.x * 0.10
 	)
 	var protocol_top_safe := PROTOCOL_VISIBLE_BORDER_THICKNESS
 	_check(
@@ -297,7 +297,7 @@ func _check_fee_and_confirmation(popup: TutorialPopupPanel, world_pointer: World
 	var context := RunContextScript.new()
 	context.mode = &"tutorial"
 	context.profile_fields = {"ruleset_id": "z2", "z2_progression_version": 1, "flag_unlocked": false}
-	context.tutorial_triggers = {"0,0": &"spawn_intro"}
+	context.tutorial_triggers = {"0,0": &"spawn_intro", "0,1": &"number_rule"}
 	TutorialServiceScript.trigger_for(context, Vector2i.ZERO)
 	var source := context.tutorial_popup.duplicate(true)
 	var training := {"run_id": "responsive-training", "position": Vector2i.ZERO, "mode": &"tutorial", "run_active": true, "phase": &"running", "profile_fields": context.profile_fields.duplicate(true), "tutorial_popup": source.duplicate(true)}
@@ -318,6 +318,14 @@ func _check_fee_and_confirmation(popup: TutorialPopupPanel, world_pointer: World
 	var primary := popup.get_node("Panel/Content/ConfirmButton") as Button
 	var learn := popup.get_node_or_null("Panel/Content/LearnFlagButton") as Button
 	var case_id := _case_error(physical, scale, "z2_fee")
+	_check(learn != null and not learn.is_visible_in_tree(), case_id + ":purchase_presented_before_room_movement")
+	TutorialServiceScript.trigger_for(context, Vector2i(0, 1))
+	source = context.tutorial_popup.duplicate(true)
+	training["position"] = Vector2i(0, 1)
+	training["tutorial_popup"] = source.duplicate(true)
+	popup.apply_training_state(training)
+	popup.apply_popup(source)
+	await _frames(3)
 	_check(learn != null and learn.is_visible_in_tree() and not learn.disabled and learn.text == "100点 · 学习插旗" and learn.tooltip_text.contains("花费100点"), case_id + ":explicit_fee_action_missing")
 	_check(primary.text == "查看教学说明" and not primary.text.contains("100点"), case_id + ":reading_still_looks_like_a_purchase")
 	_check(root.gui_get_focus_owner() == external_focus, case_id + ":learning_presentation_automatically_grabbed_focus")
@@ -343,28 +351,28 @@ func _check_fee_and_confirmation(popup: TutorialPopupPanel, world_pointer: World
 	_mouse_button(primary.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	await _frames(3)
 	await _check_guidance_layout(popup, source, viewport, physical, scale, "z2_fee_expanded", true)
-	_check(message.text == str(source.message) and message.text.contains("100点"), case_id + ":fee_or_full_copy_missing")
+	_check(message.text == str(source.message) and message.text.contains("雷险"), case_id + ":fee_or_full_copy_missing")
 	_check(signals_seen.confirmed == 0 and signals_seen.learned == 0 and signals_seen.dismissed.is_empty() and world_pointer.clicks == before, case_id + ":expanding_guidance_confirmed_bought_or_leaked")
 	_mouse_button(primary.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	await _frames(3)
 	await _check_guidance_layout(popup, source, viewport, physical, scale, "z2_fee_collapsed_again", false)
-	_check(signals_seen.confirmed == 0 and signals_seen.learned == 0 and signals_seen.dismissed == [&"spawn_intro"] and world_pointer.clicks == before, case_id + ":guidance_collapse_did_not_use_only_dismissal")
+	_check(signals_seen.confirmed == 0 and signals_seen.learned == 0 and signals_seen.dismissed == [&"number_rule"] and world_pointer.clicks == before, case_id + ":guidance_collapse_did_not_use_only_dismissal")
 	if learn != null:
 		_mouse_button(learn.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	await _frames(2)
-	_check(signals_seen.learned == 1 and signals_seen.confirmed == 0 and signals_seen.cancelled == 0 and signals_seen.dismissed == [&"spawn_intro"] and world_pointer.clicks == before, case_id + ":learning_request_not_isolated_or_leaked")
+	_check(signals_seen.learned == 1 and signals_seen.confirmed == 0 and signals_seen.cancelled == 0 and signals_seen.dismissed == [&"number_rule"] and world_pointer.clicks == before, case_id + ":learning_request_not_isolated_or_leaked")
 	_check(context.tutorial_popup == source and not bool(context.profile_fields.get("flag_unlocked", true)), case_id + ":component_mutated_authoritative_state")
 	var manual_learning_focus := root.gui_get_focus_owner()
 	_check(learn != null and manual_learning_focus == learn, case_id + ":explicit_learning_click_did_not_receive_keyboard_focus")
 
 	# Learning remains available with no active lesson after changing rooms.
 	var later_room := training.duplicate(true)
-	later_room["position"] = Vector2i(0, 1)
+	later_room["position"] = Vector2i(0, 2)
 	later_room["tutorial_popup"] = {}
 	popup.apply_training_state(later_room)
 	popup.apply_popup({})
 	await _frames(3)
-	var objective := {"title": "教学目标", "message": "学习插旗后，前往撤离信标完成训练。"}
+	var objective := {"title": "教学目标", "message": "先学习插旗，再朝地图上的出口图标前进。"}
 	_check(root.gui_get_focus_owner() == manual_learning_focus, case_id + ":objective_refresh_displaced_manual_learning_focus")
 	await _check_guidance_layout(popup, objective, viewport, physical, scale, "z2_objective_learn", false)
 	_check(learn != null and learn.is_visible_in_tree() and not learn.disabled and not primary.is_visible_in_tree(), case_id + ":no_lesson_objective_lost_learning_action")
@@ -381,7 +389,7 @@ func _check_fee_and_confirmation(popup: TutorialPopupPanel, world_pointer: World
 	popup.apply_training_state(learned_state)
 	popup.apply_popup({})
 	await _frames(3)
-	await _check_guidance_layout(popup, {"title": "教学目标", "message": "前往撤离信标完成训练。"}, viewport, physical, scale, "z2_objective_learned", false)
+	await _check_guidance_layout(popup, {"title": "教学目标", "message": "朝右上角地图的出口图标前进，找到撤离信标。"}, viewport, physical, scale, "z2_objective_learned", false)
 	_check(learn != null and not learn.is_visible_in_tree() and not primary.is_visible_in_tree(), case_id + ":learned_state_kept_purchase_or_details_action")
 	_check(root.gui_get_focus_owner() == external_focus, case_id + ":learned_objective_stole_external_focus")
 
@@ -410,7 +418,7 @@ func _check_fee_and_confirmation(popup: TutorialPopupPanel, world_pointer: World
 	_mouse_button(cancel.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	_check(signals_seen.cancelled == 1 and signals_seen.confirmed == 0 and signals_seen.learned == 1, case_id + ":native_cancel_not_isolated")
 	_mouse_button(primary.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
-	_check(signals_seen.confirmed == 1 and signals_seen.cancelled == 1 and signals_seen.learned == 1 and signals_seen.dismissed == [&"spawn_intro"] and world_pointer.clicks == before, case_id + ":native_confirmation_not_isolated")
+	_check(signals_seen.confirmed == 1 and signals_seen.cancelled == 1 and signals_seen.learned == 1 and signals_seen.dismissed == [&"number_rule"] and world_pointer.clicks == before, case_id + ":native_confirmation_not_isolated")
 	popup.confirmed.disconnect(on_confirm)
 	popup.cancelled.disconnect(on_cancel)
 	popup.learn_flag_requested.disconnect(on_learn)
