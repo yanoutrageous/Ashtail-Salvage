@@ -7,6 +7,7 @@ const FLOOR_Y := 0.06
 const STONE := Color("#666c68")
 const MORTAR := Color("#343836")
 const BRICK := Color("#69706c")
+const WALL_CAP := Color("#283e3d")
 const BLOCK_EDGE := Color("#8b8c7e")
 const METAL := Color("#465354")
 const BRASS := Color("#ad8a5b")
@@ -35,7 +36,7 @@ func build(entry: Dictionary) -> Node3D:
 	var scene := Node3D.new()
 	scene.name = "VoxelArchitecture"
 	var palette := {
-		"Spawn": "#777363", "Monster": "#615d65", "Combat": "#615d65", "Chest": "#76674f",
+		"Spawn": "#777363", "Monster": "#615d65", "Combat": "#615d65", "Chest": "#65706d",
 		"Mine": "#665851", "Exit": "#567272", "Boss": "#63556b", "Event": "#687269",
 	}
 	var kind := String(entry["room_type"])
@@ -368,7 +369,7 @@ func _wall(rect: Rect2) -> void:
 				continue
 			var lip := (float(row) - 0.5) * cap_depth
 			var cap := center + basis * Vector3((left + right - length) * 0.5, height + 0.075, lip)
-			var tone := _shade(wall_tint.lerp(BLOCK_EDGE, 0.48 if lip * inward > 0.0 else 0.26), 0.19)
+			var tone := _shade(WALL_CAP.lerp(wall_tint, 0.12 if lip * inward > 0.0 else 0.03), 0.045)
 			_stone_block(cap, Vector3(right - left - 0.035, 0.175, cap_depth - 0.038), tone, rng.randf_range(0.037, 0.073), "", turn)
 
 	for end: float in [-1.0, 1.0]:
@@ -385,14 +386,14 @@ func _wall_buttress(center: Vector3, basis: Basis, turn: float, x: float, z: flo
 	_box(base + Vector3.UP * (height * 0.50), Vector3(0.49, height * 0.82, 0.34), accent, "", turn)
 	_box(base + Vector3.UP * (height - 0.015), Vector3(0.63, 0.15, 0.40), tint.darkened(0.07), "", turn)
 	var crest := base + Vector3.UP * (height + 0.102)
-	_stone_block(crest, Vector3(0.65, 0.174, 0.40), accent.lightened(0.12), 0.066, "", turn)
+	_stone_block(crest, Vector3(0.65, 0.174, 0.40), WALL_CAP.lerp(accent, 0.20), 0.066, "", turn)
 	for rail in [-0.16, 0.16]:
 		_box(crest + basis * Vector3(rail, 0.093, 0), Vector3(0.052, 0.025, 0.31), METAL, "", turn, Finish.IRON)
 		_box(crest + basis * Vector3(rail, 0.109, 0.0), Vector3(0.078, 0.017, 0.071), BRASS.darkened(0.12), "", turn, Finish.BRONZE)
 
 func _frame_dressing() -> void:
 	for side in [-1.0, 1.0]:
-		for p: Vector3 in [Vector3(side * 2.22, 0.38, -6.00), Vector3(side * 7.68, 0.31, 1.90)]:
+		for p: Vector3 in [Vector3(side * 2.22, 0.38, -6.00), Vector3(side * 7.68, 0.31, 1.90), Vector3(side * 7.68, 0.31, -1.90), Vector3(side * 2.22, 0.31, 6.00)]:
 			_box(p + Vector3.DOWN * 0.13, Vector3(0.39, 0.26, 0.39), STONE.darkened(0.23))
 			_box(p + Vector3.UP * 0.29, Vector3(0.16, 0.62, 0.16), METAL, "", 0.0, Finish.IRON)
 			_box(p + Vector3.UP * 0.63, Vector3(0.40, 0.19, 0.40), METAL.darkened(0.16), "", 0.0, Finish.IRON)

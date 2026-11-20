@@ -8,6 +8,13 @@ const Y_SPAN := 14.77
 const ELEVATION := 55.0
 const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
 const WALL_LIGHT_LAYER := 4
+const DOOR_LAMP_ENERGY := 2.65
+const DOOR_LIGHT_POSITIONS := {
+	"north": [Vector3(-2.12, 1.5, -5.85), Vector3(2.12, 1.5, -5.85)],
+	"east": [Vector3(7.65, 1.4, -1.85), Vector3(7.65, 1.4, 1.85)],
+	"south": [Vector3(-2.12, 1.4, 5.85), Vector3(2.12, 1.4, 5.85)],
+	"west": [Vector3(-7.65, 1.4, -1.85), Vector3(-7.65, 1.4, 1.85)],
+}
 const IMPACT_SECONDS := 0.24
 var entry: Dictionary = {}
 var viewport: SubViewport
@@ -78,8 +85,8 @@ func _build() -> void:
 	var settings := Environment.new()
 	settings.background_mode = Environment.BG_CLEAR_COLOR
 	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	settings.ambient_light_color = Color("#aeb9b0")
-	settings.ambient_light_energy = 0.36 if entry.get("polished", false) else 0.24
+	settings.ambient_light_color = Color("#829fa1")
+	settings.ambient_light_energy = 0.33 if entry.get("polished", false) else 0.25
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
 	room_world.add_child(environment)
@@ -217,31 +224,32 @@ func _index_meshes(node: Node) -> void:
 		_index_meshes(child)
 
 func _build_lights() -> void:
-	for p: Vector3 in [Vector3(-2.0, 1.65, -6), Vector3(2.0, 1.65, -6), Vector3(-7.8, 1.45, -1.7), Vector3(-7.8, 1.45, 1.7), Vector3(7.8, 1.45, -1.7), Vector3(7.8, 1.45, 1.7), Vector3(-2.0, 0.8, 5.8), Vector3(2.0, 0.8, 5.8)]:
-		var light := OmniLight3D.new()
-		light.position = p
-		light.light_color = Color(1.0, 0.56, 0.24)
-		light.light_energy = 3.4
-		light.omni_range = 6.0
-		light.omni_attenuation = 1.4
-		room_world.add_child(light)
-		candle_lights.append(light)
+	for side: String in DOOR_LIGHT_POSITIONS:
+		for point: Vector3 in DOOR_LIGHT_POSITIONS[side]:
+			var lamp := OmniLight3D.new()
+			lamp.position = point
+			lamp.light_color = Color("#ff9b56")
+			lamp.light_energy = DOOR_LAMP_ENERGY
+			lamp.omni_range = 4.15
+			lamp.omni_attenuation = 1.30
+			room_world.add_child(lamp)
+			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-65, -25, 0)
-	fill.light_color = Color(0.36, 0.57, 0.60)
+	fill.light_color = Color("#81a6ad")
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
 	var masonry := DirectionalLight3D.new()
 	masonry.name = "MasonryFill"
 	masonry.rotation_degrees = Vector3(-49.0, -37.0, 0.0)
 	masonry.light_color = Color("#b9cbd1")
-	masonry.light_energy = 0.49 if entry.get("generated", false) else 0.82
+	masonry.light_energy = 0.24 if entry.get("generated", false) else 0.40
 	masonry.light_cull_mask = WALL_LIGHT_LAYER
 	room_world.add_child(masonry)
 	var work := OmniLight3D.new()
 	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
 	work.light_color = Color(1.0, 0.76, 0.44)
-	work.light_energy = 2.0
+	work.light_energy = 0.55 if entry.get("room_type") in [&"Chest", &"Event", &"Exit"] else 0.0
 	work.omni_range = 6.0
 	work.shadow_enabled = true
 	room_world.add_child(work)
