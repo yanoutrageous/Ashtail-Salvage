@@ -505,7 +505,7 @@ func _assert_run_hud_policy(run_scene: Node, expected_modal_id: StringName) -> v
 	_require(bool(snapshot.get("action_bar_visible", false)) == not suppress_footer, "run action dock visibility drifted for %s" % expected_modal_id)
 	_require(bool(snapshot.get("left_rail_visible", false)) == not suppress_all, "run left rail visibility drifted for %s" % expected_modal_id)
 	_require(bool(snapshot.get("status_visible", false)) == not suppress_all, "run status visibility drifted for %s" % expected_modal_id)
-	_require(bool(snapshot.get("status_card_art_visible", false)) == not suppress_all, "run status-card art visibility drifted for %s" % expected_modal_id)
+	_require(not bool(snapshot.get("status_card_art_visible", true)), "run status-card art visibility drifted for %s" % expected_modal_id)
 	_require(bool(snapshot.get("protocol_decoration_visible", false)) == not suppress_all, "run protocol decoration visibility drifted for %s" % expected_modal_id)
 
 

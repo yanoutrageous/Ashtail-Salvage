@@ -174,6 +174,16 @@ func _play_tutorial_to_result(cycle: int) -> bool:
 	var tutorial_panel := run_scene.get("tutorial_popup_panel") as Control
 	var focus_owner := root.gui_get_focus_owner()
 	_require(tutorial_panel != null and (focus_owner == null or (focus_owner != tutorial_panel and not tutorial_panel.is_ancestor_of(focus_owner))), "spawn_guidance_stole_keyboard_focus:%d" % cycle)
+	if cycle == 0:
+		var surface := run_scene.get("run_surface") as Control
+		var bag := surface.find_child("CompactBackpackOpen", true, false) as Button
+		var strip := surface.find_child("RunBackpackStrip", true, false) as GridContainer
+		var inventory := run_scene.get("inventory_panel") as Control
+		_require(bag != null and bag.is_visible_in_tree() and strip != null and strip.get_child_count() == 8, "compact_backpack_layout_missing")
+		await _click_control(bag)
+		_require(await _wait_until(func() -> bool: return inventory != null and inventory.visible, 2.0), "compact_backpack_did_not_open_inventory")
+		await _tap_key(KEY_ESCAPE)
+		_require(await _wait_until(func() -> bool: return inventory != null and not inventory.visible, 2.0), "compact_backpack_inventory_did_not_close")
 	var before_guidance_meta: Dictionary = adapter.data.duplicate(true)
 	var before_guidance_profile: Dictionary = context.profile_fields.duplicate(true)
 	await _tap_key(KEY_ESCAPE)

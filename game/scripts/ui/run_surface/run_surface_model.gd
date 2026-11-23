@@ -11,18 +11,22 @@ static func layout_geometry(profile: Dictionary) -> Dictionary:
 	var viewport := UILayerContractScript.viewport_size_from_profile(profile)
 	var scale_step := (clampf(float(profile.get("ui_scale_factor", 1.0)), 1.0, 1.5) - 1.0) / 0.5
 	var margin := 12.0
-	var left_width := clampf(viewport.x * 0.20, 240.0, 360.0) + 32.0 * scale_step
-	var right_width := clampf(viewport.x * 0.22, 280.0, 400.0) + 32.0 * scale_step
-	var protocol := Rect2(margin, margin, left_width, 148.0 + 42.0 * scale_step)
+	var left_width := clampf(viewport.x * 0.165, 214.0, 290.0) + 46.0 * scale_step
+	var right_width := clampf(viewport.x * 0.155, 180.0, 272.0) + 28.0 * scale_step
+	var protocol := Rect2(margin, margin, left_width, 91.0 + 45.0 * scale_step)
 	var weapon := Rect2(margin, protocol.end.y + 8.0, left_width, 122.0 + 44.0 * scale_step)
-	var title := Rect2(margin, weapon.end.y + 8.0, left_width, 34.0 + 16.0 * scale_step)
-	var description_height := minf(viewport.y - title.end.y - 32.0, viewport.y * 5.0 / 12.0 + 64.0 * scale_step - weapon.size.y - 8.0)
-	var description := Rect2(margin, title.end.y + 8.0, left_width, maxf(120.0, description_height))
-	var right_rail := Rect2(viewport.x - right_width - margin, margin, right_width, viewport.y - margin * 2.0)
+	var title := Rect2(margin, weapon.end.y + 8.0, left_width, 26.0 + 12.0 * scale_step)
+	var description := Rect2(margin, title.end.y + 5.0, left_width, minf(155.0 + 60.0 * scale_step, viewport.y - title.end.y - margin))
+	var right_rail := Rect2(viewport.x - right_width - margin, margin, right_width, minf(viewport.y * 0.40, right_width + 4.0))
 	var center_left := protocol.end.x + margin
 	var center_width := maxf(1.0, right_rail.position.x - margin - center_left)
-	var action := Rect2(center_left, viewport.y - 54.0 - 10.0 * scale_step, center_width, 46.0 + 10.0 * scale_step)
-	var risk := Rect2(center_left + (center_width - 242.0 - 22.0 * scale_step) * 0.5, action.position.y - 48.0, 242.0 + 22.0 * scale_step, 42.0)
+	var centered_width := maxf(1.0, viewport.x - 2.0 * maxf(center_left, viewport.x - right_rail.position.x + margin))
+	var action_width := minf(centered_width, 760.0 + 60.0 * scale_step)
+	var action := Rect2((viewport.x - action_width) * 0.5, viewport.y - 44.0 - 26.0 * scale_step, action_width, 36.0 + 26.0 * scale_step)
+	var bag_width := minf(centered_width, 414.0 + 104.0 * scale_step)
+	var bag_height := 48.0 + 12.0 * scale_step
+	var bag := Rect2((viewport.x - bag_width) * 0.5, action.position.y - bag_height - 6.0, bag_width, bag_height)
+	var risk := Rect2(right_rail.position.x, right_rail.end.y + 4.0, right_width, 30.0 + 8.0 * scale_step)
 	return {
 		"viewport_size": viewport,
 		"protocol_rect": protocol,
@@ -30,8 +34,9 @@ static func layout_geometry(profile: Dictionary) -> Dictionary:
 		"room_title_rect": title,
 		"description_rect": description,
 		"scanner_rail_rect": right_rail,
-		"room_stage_rect": Rect2(center_left, margin, center_width, maxf(1.0, risk.position.y - margin * 2.0)),
+		"room_stage_rect": Rect2(center_left, margin, center_width, maxf(1.0, bag.position.y - margin * 2.0)),
 		"action_rect": action,
+		"bag_rect": bag,
 		"mine_risk_rect": risk,
 	}
 

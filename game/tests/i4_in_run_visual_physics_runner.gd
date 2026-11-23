@@ -116,18 +116,15 @@ func _check_scaled_capacity_text() -> void:
 					surface.minimap_panel.apply_view_model(minimap_model)
 					await _settle_hud(surface)
 					_check_reference_geometry(surface, profile, viewport)
-					_check_bag_layout(surface, items, factor)
+					_check_bag_layout(surface, items)
 					_check(is_equal_approx(surface.ui_scale_factor, factor), "Capacity probe did not use requested scale")
 					var grid := surface.minimap_panel.get_node("Grid") as GridContainer
 					_check(Rect2(Vector2.ZERO, surface.minimap_panel.size).encloses(grid.get_rect()), "Actual-size map escapes its right-rail viewport at UI scale %s" % factor)
 					_check(grid.get_child_count() == dimensions.x * dimensions.y, "HUD cropped the actual map at UI scale %s" % factor)
-					if count == 4:
-						await _check_bag_scroll(surface, false)
 			var long_items := _long_catalog_items()
 			surface.apply_surface_model(_surface_model(profile, long_items, 5, 100))
 			await _settle_hud(surface)
-			_check_bag_layout(surface, long_items, factor)
-			await _check_bag_scroll(surface, true)
+			_check_bag_layout(surface, long_items)
 			await _check_room_description(surface, profile, factor)
 			print("I4_ADAPTIVE_HUD physical=%s logical=%s scale=%s long_items=%d" % [physical, viewport.size, factor, long_items.size()])
 	var high_profile := UILayoutProfileScript.profile_for_resolution(&"2560x1440")
@@ -135,7 +132,7 @@ func _check_scaled_capacity_text() -> void:
 	surface.apply_layout_profile(high_profile)
 	surface.apply_surface_model(_surface_model(high_profile, [], 5, 100))
 	await process_frame
-	_check(surface.scanner_title_label.size.y >= surface.scanner_title_label.get_line_height(), "High-resolution overview title is clipped at 150 percent")
+	_check(surface.left_rail_art.get_global_rect().encloses(surface.minimap_panel.get_global_rect()), "High-resolution map escapes its slot at 150 percent")
 	settings.set_draft_value(&"ui_scale_percent", original_percent)
 	settings.apply_draft()
 	settings.close_transaction()
@@ -156,7 +153,7 @@ func _check_minimap_texture_bounds() -> void:
 	await process_frame
 	await process_frame
 	for cell in minimap.get_node("Grid").get_children():
-		var base := cell.get_node("CellBase") as TextureRect
+		var base := cell.get_node("CellBase") as Control
 		var intended := Rect2((cell.get_meta("map_cell_layer_layout") as Dictionary)["base_rect"])
 		_check(base.get_rect().is_equal_approx(intended), "Minimap texture retained its native minimum size: %s expected=%s" % [base.get_rect(), intended])
 		_check(Rect2(Vector2.ZERO, cell.size).encloses(base.get_rect()), "Minimap cell clips its base texture")
@@ -597,7 +594,7 @@ func _check_main_tutorial_mapping() -> void:
 	var before_learning: Dictionary = meta.data.duplicate(true)
 	var meta_hash := FileAccess.get_sha256(meta.active_meta_progress_path)
 	_check(before_learning.get("talent_points") == 100 and before_learning.get("talent_spent") == 0 and before_learning.get("talent_earned") == 100 and before_learning.get("talent_flags", []).is_empty(), "Actual Main tutorial must begin with its untouched100-point learning budget")
-	_check(not details.text.contains("100点") and learn.text.contains("100点"), "Main tutorial separates read-only details from the actual100-point Learn action")
+	_check(not details.text.contains("100点") and not learn.is_visible_in_tree(), "Main tutorial separates read-only details from the actual100-point Learn action")
 	await _click_tutorial_button(details, "native Main guidance expand")
 	await _wait_until(func() -> bool: return scene.tutorial_popup_panel.layout_snapshot().get("guidance_expanded", false), "native Main guidance expanded")
 	await _click_tutorial_button(details, "native Main guidance close")
@@ -607,6 +604,12 @@ func _check_main_tutorial_mapping() -> void:
 	_check(scene.get_node("RoomLayer").transform.is_equal_approx(transform), "Tutorial dismissal changed the room mapping")
 	_check([player.room_rect, player.logical_obstacles, player.get_door_projections(), player.get_local_position()] == logical, "Tutorial dismissal changed logical position, walls or door bodies")
 	_check_world_mapping(scene)
+	player.set_local_position(Vector2(0.5, 0.75))
+	_hold_input(KEY_S, true)
+	await _wait_until(func() -> bool: return scene.run_context.get_current_pos() == Vector2i(0, 1), "walk out before the paid lesson")
+	_hold_input(KEY_S, false)
+	transform = scene.get_node("RoomLayer").transform
+	logical = [player.room_rect, player.logical_obstacles.duplicate(true), player.get_door_projections().duplicate(true), player.get_local_position()]
 	await _click_tutorial_button(learn, "native Main explicit Learn purchase")
 	await _wait_until(func() -> bool: return scene.run_context.profile_fields.get("flag_unlocked", false) and meta.data.get("talent_points") == 0 and meta.data.get("talent_spent") == 100, "native Main independent Learn pays exactly100 and grants flag capability")
 	var disk: Variant = JSON.parse_string(FileAccess.get_file_as_string(meta.active_meta_progress_path))
@@ -673,7 +676,7 @@ func _check_main_inventory_details() -> void:
 	scene._refresh_view_models()
 	await process_frame
 	await process_frame
-	_pointer(scene.run_surface.action_buttons[&"inventory"].get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
+	_pointer(scene.run_surface.compact_bag_button.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
 	var panel = scene.inventory_panel
 	if not await _wait_until(func() -> bool: return panel.visible, "native HUD inventory entry"):
 		await _dispose_isolated_main(main)
@@ -942,8 +945,6 @@ func _check_protocol_and_left_density() -> void:
 	canvas.size = Vector2(1280, 720)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(canvas)
-	var world_pointer := WorldPointerProbe.new()
-	canvas.add_child(world_pointer)
 	var surface = RunSurfaceScript.new()
 	canvas.add_child(surface)
 	surface.build()
@@ -952,42 +953,9 @@ func _check_protocol_and_left_density() -> void:
 	for count in [0, 1, 4]:
 		var items := _sample_items(count)
 		surface.apply_surface_model(_surface_model(profile, items, 5, 100))
-		await _wait_until(
-			func() -> bool:
-				var layout := surface.scanner_text_mask.get_meta("content_layout_rects", {}) as Dictionary
-				return (
-					int(surface.scanner_text_mask.get_meta("content_item_count", -1)) == count
-					and layout.has("panel")
-					and layout.has("header")
-					and layout.has("list")
-					and layout.has("capacity")
-					and _bag_buttons(surface).size() == count
-				),
-			"backpack content-driven layout for %d items" % count
-		)
 		await _settle_hud(surface)
-		_check_bag_layout(surface, items, 1.0)
-		if count == 0:
-			_check(not surface.backpack_scroll.visible, "Empty backpack retains a fixed empty scroll surface")
-			var watermark := surface.backpack_empty_watermark as TextureRect
-			_check(watermark.visible and watermark.size.x <= 80.0 and watermark.size.y <= 80.0 and surface.backpack_scroll.get_global_rect().encloses(watermark.get_global_rect()), "Empty backpack watermark exceeds its actual available list area")
-			_check(_bag_buttons(surface).is_empty(), "Empty backpack renders fake item slots")
-			var before := world_pointer.clicks
-			_pointer(surface.backpack_scroll.get_global_rect().get_center(), MOUSE_BUTTON_LEFT)
-			_check(world_pointer.clicks == before + 1, "Hidden empty backpack scroll intercepts world input")
-		elif count == 1:
-			var bar := surface.backpack_scroll.get_v_scroll_bar() as VScrollBar
-			_check(surface.backpack_scroll.visible and surface.backpack_scroll.get_global_rect().grow(1.0).encloses(_bag_buttons(surface)[0].get_global_rect()), "Single complete item is outside the actual bag viewport")
-			_check(bar.max_value - bar.page <= 1.0 and not bar.is_visible_in_tree(), "One-item backpack exposes actual unnecessary scrolling")
-		else:
-			await _check_bag_scroll(surface, false)
-			var columns := {}
-			for button in _bag_buttons(surface):
-				var x := roundi(button.get_global_rect().position.x)
-				columns[x] = int(columns.get(x, 0)) + 1
-			_check(columns.size() == 2 and columns.values() == [2, 2], "Balanced four-item fixture must occupy both columns with two real items each")
-	# Unequal columns, unknown legacy types and capability-only changes must not
-	# lose identities or be hidden by the quick-bag signature cache.
+		_check_bag_layout(surface, items)
+	# Preserve legacy stack identities and update usable-item details.
 	var unknown := _sample_items(1)[0]
 	unknown.item_type = "unknown_legacy"
 	unknown.instance_ids = ["legacy-a", "legacy-b"]
@@ -1005,14 +973,13 @@ func _check_protocol_and_left_density() -> void:
 	for items: Array[Dictionary] in [only_tool, uneven, edge_items]:
 		surface.apply_surface_model(_surface_model(profile, items, 5, 100))
 		await _settle_hud(surface)
-		_check_bag_layout(surface, items, 1.0)
-		await _check_bag_scroll(surface, false)
+		_check_bag_layout(surface, items)
 	for can_consume in [false, true, false]:
 		unknown.can_consume = can_consume
 		var toggle_items: Array[Dictionary] = [unknown]
 		surface.apply_surface_model(_surface_model(profile, toggle_items, 5, 100))
 		await _settle_hud(surface)
-		_check_bag_layout(surface, toggle_items, 1.0)
+		_check_bag_layout(surface, toggle_items)
 	# Capacity comes from snapshot counters, independently of visible stack rows.
 	var capacity_model := _surface_model(profile, _sample_items(4), 5, 100)
 	capacity_model.equipment_used = 2
@@ -1022,7 +989,7 @@ func _check_protocol_and_left_density() -> void:
 	surface.apply_surface_model(capacity_model)
 	await _settle_hud(surface)
 	_check(surface.backpack_capacity_label.text == "共享 2/11\n战利品 9/17", "Bag recalculated authoritative capacity counters from visible category or stack counts")
-	_check_readable_label(surface.backpack_capacity_label, 13, 1.0, "Independent snapshot capacity")
+	_check(not surface.backpack_capacity_label.visible, "Compact bag retained the capacity labels")
 	var safe_rect := Rect2(surface.status_card_art.get_meta("protocol_safe_rect", Rect2()))
 	for control in [surface.right_title_label, surface.right_body_label, surface.player_health_hud, surface.protocol_pressure_track]:
 		var control_rect := (control as Control).get_global_rect()
@@ -1046,7 +1013,7 @@ func _check_protocol_and_left_density() -> void:
 	_check_readable_label(surface.right_body_label, 13, 1.0, "Protocol body")
 	var health_value := surface.player_health_hud.get_node("HealthValue") as Label
 	var power_value := surface.player_health_hud.get_node("PowerValue") as Label
-	_check(surface.right_body_label.text == "压力 100%" and health_value.text == "10 / 10" and power_value.text == "强度 3", "Protocol projection lost complete pressure/HP/power facts")
+	_check(surface.right_body_label.text == "压力 100%" and health_value.text == "10 / 10" and power_value.text == "战力 3", "Protocol projection lost complete pressure/HP/power facts")
 	_check(_vertical_gap(surface.player_health_hud.get_global_rect(), surface.right_body_label.get_global_rect()) >= 3.5, "Health widget overlaps the pressure text")
 	canvas.queue_free()
 	await canvas.tree_exited
@@ -1078,8 +1045,8 @@ func _check_reference_geometry(surface: RunSurface, profile: Dictionary, viewpor
 	_check(viewport.encloses(protocol) and viewport.encloses(rail) and viewport.encloses(room), "Adaptive side rails or central room exceed the logical viewport")
 	_check(protocol.end.x < room.position.x and room.end.x < rail.position.x, "HUD side rails overlap the central room allocation")
 	_check(protocol.is_equal_approx(projected.protocol_rect) and rail.is_equal_approx(projected.scanner_rail_rect), "Actual HUD controls disagree with their public layout projection")
-	_check(rail.grow(-18.0).grow(0.5).encloses(map_rect), "Complete minimap escapes the right rail's texture-safe content area")
-	_check(surface.resource_backdrop.get_global_rect().position.y - map_rect.end.y >= 7.5, "Actual-size map leaves less than 8px before the currency band")
+	_check(rail.grow(-10.0).grow(0.5).encloses(map_rect), "Complete minimap escapes the right rail's texture-safe content area")
+	_check(surface.mine_risk_tag_art.get_global_rect().position.y >= map_rect.end.y, "Risk readout overlaps the minimap")
 
 
 func _check_readable_label(label: Label, base_size: int, factor: float, subject: String) -> void:
@@ -1098,106 +1065,23 @@ func _bag_buttons(surface: RunSurface) -> Array[Button]:
 	return result
 
 
-func _check_bag_layout(surface: RunSurface, items: Array[Dictionary], factor: float) -> void:
-	var inner := surface.left_rail_art.get_global_rect().grow(-18.0)
-	var header := surface.scanner_detail_label.get_global_rect()
-	var capacity := surface.backpack_capacity_label.get_global_rect()
-	var supplies := surface.backpack_supplies_header.get_global_rect()
-	var tools := surface.backpack_tools_header.get_global_rect()
+func _check_bag_layout(surface: RunSurface, items: Array[Dictionary]) -> void:
 	var list := surface.backpack_scroll.get_global_rect()
-	var geometry: Dictionary = surface.scanner_text_mask.get_meta("content_layout_rects", {})
-	_check_readable_label(surface.scanner_detail_label, 13, factor, "Backpack header")
-	_check_readable_label(surface.backpack_capacity_label, 13, factor, "Backpack capacity")
-	_check(surface.backpack_capacity_label.text == "共享 7/100\n战利品 %d/12" % items.size() and surface.backpack_capacity_label.max_lines_visible == -1, "Full shared/loot capacity values and units must remain visible")
-	_check(inner.grow(0.5).encloses(header) and inner.grow(0.5).encloses(capacity) and inner.grow(0.5).encloses(list), "Backpack header/capacity/list escapes right-rail safe content")
-	_check(absf(_vertical_gap(header, capacity) - 6.0) <= 0.5 and absf(_vertical_gap(capacity, supplies) - 6.0) <= 0.5 and absf(_vertical_gap(supplies, list) - 4.0) <= 0.5, "Actual bag order must be header, capacity, categories, list with 6/6/4px spacing")
-	_check(surface.backpack_supplies_header.text == "物资" and surface.backpack_tools_header.text == "道具", "Fixed bag category names changed")
-	for label: Label in [surface.backpack_supplies_header, surface.backpack_tools_header]:
-		_check_readable_label(label, 13, factor, "Bag category")
-		_check(inner.grow(0.5).encloses(label.get_global_rect()), "Bag category escaped the frame safe area")
-	_check(is_equal_approx(supplies.position.y, tools.position.y) and absf(tools.position.x - supplies.end.x - 4.0) <= 0.5, "Category headers lost their common baseline or 4px gap")
-	_check(absf(list.end.y - inner.end.y) <= 0.5, "Bag list does not end at the frame's 18px safe inset")
-	_check(not surface.backpack_detail_label.visible and not Rect2(geometry.get("detail", Rect2())).has_area(), "On-demand details retained a permanent blank layout allocation")
-	_check(Rect2(geometry.get("header", Rect2())).is_equal_approx(surface.scanner_detail_label.get_rect()) and Rect2(geometry.get("capacity", Rect2())).is_equal_approx(surface.backpack_capacity_label.get_rect()) and Rect2(geometry.get("list", Rect2())).is_equal_approx(surface.backpack_scroll.get_rect()), "Bag content geometry disagrees with actual controls")
-	_check(surface.backpack_strip.columns == 2 and surface.backpack_strip.get_theme_constant("h_separation") == 4 and surface.backpack_strip.get_theme_constant("v_separation") == 4, "Two bag columns lost the 4px spacing contract")
+	var bag := surface.compact_bag_button.get_global_rect()
+	var footer := surface.action_bar.get_global_rect()
+	_check(bag.end.x < list.position.x and list.end.y < footer.position.y, "Bag icon, items and commands overlap")
+	_check(not surface.backpack_capacity_label.visible and not surface.backpack_scroll.get_v_scroll_bar().is_visible_in_tree(), "Compact bag retained capacity or scrolling")
+	_check(surface.backpack_strip.columns == 8 and surface.backpack_strip.get_child_count() == 8, "Compact bag lost the full slot row")
 	var buttons := _bag_buttons(surface)
-	_check(buttons.size() == items.size(), "Bag hides real items or inserts fake slots")
-	var by_id := {}
-	var expected_columns: Array = [[], []]
-	for item in items:
-		by_id[str(item.instance_id)] = item
-		expected_columns[1 if bool(item.get("can_consume", false)) or str(item.get("item_type", "")) == "consumable" else 0].append(str(item.instance_id))
-	var actual_columns: Array = [[], []]
-	var seen := {}
-	for button in buttons:
-		var id := str(button.get_meta("item_instance_id", ""))
-		if not by_id.has(id):
-			_check(false, "Bag button has no corresponding projected item: " + id)
-			continue
-		var descriptor := RunUIViewModelScript.item_presentation(by_id[id])
-		_check(not seen.has(id), "Bag renders a projected instance more than once: " + id)
-		seen[id] = true
-		_check(button.get_meta("item_instance_ids", []) == by_id[id].get("instance_ids", []) and str(button.get_meta("item_stack_key", "")) == str(by_id[id].get("stack_key", "")), "Bag lost stack member identities or stack key")
-		var column := 1 if bool(by_id[id].get("can_consume", false)) or str(by_id[id].get("item_type", "")) == "consumable" else 0
-		var category: Rect2 = tools if column == 1 else supplies
-		# GridContainer distributes whole pixels; the header keeps its fractional
-		# Rect2 width (114.8 at 100%). Check its exact floor/ceil pixel allocation,
-		# including a non-expanding empty left column, rather than a false 0.5px gate.
-		var grid_x := surface.backpack_strip.get_global_rect().position.x
-		var expected_x := category.position.x - grid_x
-		var actual_x := button.get_global_rect().position.x - grid_x
-		var aligned := (is_equal_approx(actual_x, expected_x) or is_equal_approx(actual_x, floorf(expected_x)) or is_equal_approx(actual_x, ceilf(expected_x))) and (is_equal_approx(button.size.x, category.size.x) or is_equal_approx(button.size.x, floorf(category.size.x)) or is_equal_approx(button.size.x, ceilf(category.size.x)))
-		_check(aligned, "Real item is not aligned with its category's native pixel allocation: %s column=%d count=%d actual=%s category=%s" % [id, column, items.size(), button.get_global_rect(), category])
-		actual_columns[column].append(id)
-		_check(button.text == "%s ×%d" % [descriptor.display_name, descriptor.quantity], "Bag lost a full item name or quantity")
-		_check(button.tooltip_text == str(descriptor.detail_text), "Bag tooltip lost shared name/rarity/weight/quantity/effect detail")
-		_check(button.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and button.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "Bag item does not preserve wrapped full text")
-		_check(button.get_theme_font_size("font_size") >= UISkin.scaled_font_size(13, factor), "Bag item font was reduced to fit")
-		var style := button.get_theme_stylebox("normal")
-		var icon_width := minf(button.icon.get_width(), button.get_theme_constant("icon_max_width")) if button.icon != null else 0.0
-		var text_width := button.size.x - style.get_minimum_size().x - icon_width - (button.get_theme_constant("h_separation") if icon_width > 0.0 else 0)
-		var shaped := button.get_theme_font("font").get_multiline_string_size(button.text, HORIZONTAL_ALIGNMENT_LEFT, text_width, button.get_theme_font_size("font_size"), -1, TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE)
-		_check(text_width > 0.0 and shaped.x <= text_width + 0.5 and shaped.y <= button.size.y - style.get_minimum_size().y + 0.5 and button.get_minimum_size().y <= button.size.y + 0.5, "Native-shaped complete item name/quantity exceeds its actual text allocation")
-		for other in buttons:
-			if other != button:
-				_check(not button.get_global_rect().intersects(other.get_global_rect()), "Bag items overlap")
-	_check(actual_columns == expected_columns, "Bag classification changed stable order or omitted an identity")
-	if not items.is_empty():
-		var slots := surface.backpack_strip.get_children().filter(func(child: Node) -> bool: return not child.is_queued_for_deletion())
-		_check(slots.size() == maxi(expected_columns[0].size(), expected_columns[1].size()) * 2, "Bag rows must equal the larger category count")
-		for child: Control in slots:
-			if child is Button: continue
-			_check(child.get_class() == "Control" and child.get_child_count() == 0 and child.focus_mode == Control.FOCUS_NONE and child.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Short category contains a fake or interactive item placeholder")
-
-
-func _check_bag_scroll(surface: RunSurface, require_overflow: bool) -> void:
-	var scroll := surface.backpack_scroll
-	var bar := scroll.get_v_scroll_bar()
-	var buttons := _bag_buttons(surface)
-	var overflow := bar.max_value - bar.page > 1.0
-	_check(not require_overflow or overflow, "Sixteen actual long-name items did not exercise the overflow branch")
-	if not overflow:
-		_check(not bar.is_visible_in_tree(), "A fitting bag shows an unnecessary scrollbar")
-		for button in buttons:
-			_check(scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect()), "A fitting bag hides part of an actual item")
-		return
-	_check(scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Overflow bag is not scrollable")
-	var seen := {}
-	var header_rects := [surface.backpack_supplies_header.get_global_rect(), surface.backpack_tools_header.get_global_rect()]
-	var start := bar.value
-	var deadline := Time.get_ticks_msec() + 5000
-	while Time.get_ticks_msec() < deadline:
-		for button in buttons:
-			if scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect()):
-				seen[button.get_instance_id()] = true
-		if bar.value >= bar.max_value - bar.page - 1.0: break
-		_pointer(scroll.get_global_rect().get_center(), MOUSE_BUTTON_WHEEL_DOWN)
-		await process_frame
-	_check(bar.value > start and bar.value >= bar.max_value - bar.page - 1.0, "Native wheel never reached the real bag end")
-	_check(seen.size() == buttons.size(), "Native wheel cannot expose every complete item, including the final row")
-	_check(header_rects == [surface.backpack_supplies_header.get_global_rect(), surface.backpack_tools_header.get_global_rect()] and surface.backpack_supplies_header.is_visible_in_tree() and surface.backpack_tools_header.is_visible_in_tree(), "Bag wheel scroll moved or hid its category headers")
-	scroll.scroll_vertical = 0
-	await process_frame
+	_check(buttons.size() == mini(8, items.size()), "Compact bag lost or invented stack entries")
+	for index in range(buttons.size()):
+		var button := buttons[index]
+		var item := items[index]
+		var descriptor := RunUIViewModelScript.item_presentation(item)
+		var quantity := button.get_node_or_null("Quantity") as Label
+		_check(list.grow(1.0).encloses(button.get_global_rect()) and button.icon != null, "Bag stack icon is clipped or missing")
+		_check(button.get_meta("item_instance_id") == item.instance_id and button.get_meta("item_instance_ids", []) == item.get("instance_ids", []) and str(button.get_meta("item_stack_key", "")) == str(item.get("stack_key", "")), "Bag lost stack order or member identity")
+		_check(quantity != null and quantity.text == str(descriptor.quantity) and button.tooltip_text == str(descriptor.detail_text), "Bag lost quantity or complete item details")
 
 
 func _pointer(position: Vector2, button_index: MouseButton) -> void:
@@ -1244,7 +1128,7 @@ func _check_room_description(surface: RunSurface, profile: Dictionary, factor: f
 	await _settle_hud(surface)
 	var scroll := surface.room_description_scroll
 	var label := surface.room_body_label
-	var text := "%s\n\n%s\n\n%s" % [model.room_summary, model.current_objective, model.commission_text]
+	var text := "%s\n\n%s\n\n%s" % [model.current_objective, model.room_summary, model.commission_text]
 	_check(label.text == text and scroll.is_ancestor_of(label), "Short left panel lost full room/objective/commission text")
 	_check(label.get_theme_font_size("font_size") >= UISkin.scaled_font_size(13, factor) and label.max_lines_visible == -1 and not label.clip_text and label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "Short left panel shrinks or trims its source text")
 	var geometry := RunSurfaceModelScript.layout_geometry(profile)

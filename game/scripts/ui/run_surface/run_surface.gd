@@ -65,6 +65,7 @@ var run_game_stage_root: Control
 var run_room_viewport_root: Control
 var run_left_info_rail_root: Control
 var run_top_right_status_root: Control
+var compact_bag_button: Button
 var run_floating_info_root: Control
 var run_interaction_prompt_root: Control
 var run_action_overlay_root: Control
@@ -372,9 +373,22 @@ func build() -> void:
 	weapon_panel.reload_requested.connect(func() -> void: field_reload_requested.emit())
 	add_child(weapon_panel)
 	_apply_layer_order()
+	compact_bag_button = Button.new()
+	compact_bag_button.name = "CompactBackpackOpen"
+	compact_bag_button.icon = preload("res://assets/art24/ui/ue/ui_icon_backpack.png")
+	compact_bag_button.expand_icon = true
+	compact_bag_button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	compact_bag_button.add_theme_constant_override("icon_max_width", 30)
+	compact_bag_button.add_theme_color_override("icon_normal_color", Color("edce9e"))
+	compact_bag_button.pressed.connect(func() -> void: inventory_requested.emit())
+	compact_bag_button.tooltip_text = "打开作业包"
+	Art10UISkinKitScript.apply_button(compact_bag_button, &"secondary")
+	run_action_overlay_root.add_child(compact_bag_button)
+	backpack_scroll.reparent(run_action_overlay_root, false)
 	room_description_scroll = _wrap_text_scroll(room_body_label, "RunRoomBodyScroll")
 	command_feedback_scroll = _wrap_text_scroll(command_feedback_label, "RunCommandFeedbackScroll")
 	command_feedback_scroll.visible = false
+	_refresh_backpack_strip([])
 	_update_protocol_presentation(5, 0)
 
 
@@ -562,7 +576,6 @@ func apply_modal_visibility_policy(modal_id: StringName) -> void:
 	# explicit visibility prevents a re-shown status-card shell from surviving
 	# underneath a terminal result modal.
 	for status_node in [
-		status_card_art,
 		player_health_hud,
 		pressure_icon,
 		protocol_pressure_track,
@@ -616,8 +629,8 @@ func apply_layout_profile(profile: Dictionary) -> void:
 	for hidden in [hud, right_backdrop, protocol_level_plate, center_backdrop, room_background_layer, player_sprite_layer, player_tag_mask, player_tag_label, room_hint_softener, scanner_glow_layer, room_glow_layer, threat_mask, event_mask, event_label, reward_mask, reward_label, right_game_fill_layer, layout_label, objective_label, backpack_detail_label]:
 		hidden.visible = false
 	_set_rect(status_card_art, protocol)
-	status_card_art.visible = true
-	var safe := protocol.grow(-11.0)
+	status_card_art.visible = false
+	var safe := protocol.grow(-7.0)
 	status_card_art.set_meta("protocol_safe_rect", safe)
 	status_card_art.set_meta("protocol_visible_border_thickness", RunVectorSkin.FRAME_SLICE)
 	var status_line := maxf(20.0, right_title_label.get_minimum_size().y)
@@ -654,69 +667,37 @@ func apply_layout_profile(profile: Dictionary) -> void:
 	room_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_set_rect(left_rail_art, rail)
 	_set_rect(left_backdrop, rail.grow(-8.0))
-	left_rail_art.visible = true
-	left_backdrop.visible = true
+	left_rail_art.visible = false
+	left_backdrop.visible = false
 	left_backdrop.add_theme_stylebox_override("panel", _interior_band_style(Color(0.060, 0.065, 0.055, 0.98)))
-	var inner := rail.grow(-18.0)
-	var cursor := inner.position.y
-	for label in [scanner_title_label, scanner_summary_label]:
-		label.size.x = inner.size.x
-		var line_height: float = label.get_minimum_size().y
-		_set_rect(label, Rect2(inner.position.x, cursor, inner.size.x, line_height))
-		cursor += line_height + 4.0
-	var map_height := minf(inner.size.x, viewport.y * 0.29)
-	_set_rect(minimap_panel, Rect2(inner.position.x, cursor, inner.size.x, map_height))
+	var inner := rail.grow(-10.0)
+	scanner_title_label.hide()
+	var map_height := minf(inner.size.x, inner.size.y)
+	_set_rect(minimap_panel, Rect2(inner.position, Vector2(inner.size.x, map_height)))
 	minimap_panel.apply_layout_profile(current_layout_profile)
-	cursor += map_height + 8.0
-	scanner_legend_label.size.x = inner.size.x - 12.0
-	var currency_height := scanner_legend_label.get_minimum_size().y + 12.0
-	_set_rect(resource_backdrop, Rect2(inner.position.x, cursor, inner.size.x, currency_height))
-	_set_rect(scanner_legend_label, Rect2(inner.position.x + 6.0, cursor + 6.0, inner.size.x - 12.0, currency_height - 12.0))
-	resource_backdrop.visible = true
-	cursor += currency_height + 8.0
-	var bag_top := cursor
-	for label in [scanner_detail_label, backpack_capacity_label]:
-		label.size.x = inner.size.x
-		var line_height: float = label.get_minimum_size().y
-		_set_rect(label, Rect2(inner.position.x, cursor, inner.size.x, line_height))
-		cursor += line_height + 6.0
-	_set_rect(scanner_text_mask, Rect2(inner.position.x, bag_top, inner.size.x, inner.end.y - bag_top))
-	scanner_text_mask.visible = true
-	var list_width := maxf(1.0, inner.size.x - 12.0)
-	var cell_width := (list_width - 4.0) * 0.5
-	var header_height := 0.0
-	for label: Label in [backpack_supplies_header, backpack_tools_header]:
-		label.add_theme_font_size_override("font_size", Art10UISkinKitScript.scaled_font_size(13, ui_scale_factor))
-		label.size.x = cell_width
-		header_height = maxf(header_height, label.get_minimum_size().y)
-	_set_rect(backpack_supplies_header, Rect2(inner.position.x, cursor, cell_width, header_height))
-	_set_rect(backpack_tools_header, Rect2(inner.position.x + cell_width + 4.0, cursor, cell_width, header_height))
-	cursor += header_height + 4.0
-	var list_rect := Rect2(inner.position.x, cursor, inner.size.x, maxf(1.0, inner.end.y - cursor))
+	scanner_legend_label.hide()
+	for hidden in [scanner_summary_label, resource_backdrop, scanner_detail_label, backpack_capacity_label, scanner_text_mask, backpack_supplies_header, backpack_tools_header, backpack_empty_watermark]:
+		hidden.hide()
+	var bag: Rect2 = geometry.bag_rect
+	var slot_side := floorf(minf(bag.size.y - 2.0, (bag.size.x - 36.0) / 9.0))
+	var strip_width := slot_side * 8.0 + 4.0 * 7.0
+	var group_x := floorf(bag.get_center().x - (slot_side + 8.0 + strip_width) * 0.5)
+	_set_rect(compact_bag_button, Rect2(group_x, bag.position.y, slot_side, slot_side))
+	compact_bag_button.tooltip_text = "打开作业包 · %s" % SemanticActionHintScript.current_binding_label(&"open_inventory")
+	var list_rect := Rect2(group_x + slot_side + 8.0, bag.position.y, strip_width, slot_side + 1.0)
 	_set_rect(backpack_scroll, list_rect)
-	backpack_scroll.visible = current_backpack_item_count > 0
-	backpack_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	backpack_strip.columns = 2
+	backpack_scroll.visible = true
+	backpack_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	backpack_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	backpack_strip.columns = 8
 	backpack_strip.add_theme_constant_override("h_separation", 4)
-	backpack_strip.add_theme_constant_override("v_separation", 4)
-	backpack_strip.custom_minimum_size = Vector2(list_width, 0.0)
-	for child in backpack_strip.get_children():
-		var button := child as Button
-		if button == null:
-			if child is Control:
-				child.custom_minimum_size = Vector2(cell_width, 0.0)
-			continue
-		button.add_theme_font_size_override("font_size", Art10UISkinKitScript.scaled_font_size(13, ui_scale_factor))
-		button.add_theme_constant_override("icon_max_width", roundi(20.0 * minf(ui_scale_factor, 1.25)))
-		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		button.size.x = cell_width
-		button.custom_minimum_size = Vector2(cell_width, maxf(38.0, button.get_minimum_size().y + 8.0))
-	var watermark_size := Vector2.ONE * minf(80.0, minf(list_rect.size.x, list_rect.size.y))
-	_set_rect(backpack_empty_watermark, Rect2(list_rect.get_center() - watermark_size * 0.5, watermark_size))
-	backpack_empty_watermark.visible = current_backpack_item_count == 0
+	backpack_strip.custom_minimum_size = Vector2(strip_width, 0)
+	for child: Control in backpack_strip.get_children():
+		child.custom_minimum_size = Vector2.ONE * slot_side
+		if child is Button:
+			child.add_theme_constant_override("icon_max_width", roundi(slot_side * 0.62))
 	scanner_text_mask.set_meta("content_item_count", current_backpack_item_count)
-	scanner_text_mask.set_meta("content_layout_rects", {"panel": scanner_text_mask.get_rect(), "header": scanner_detail_label.get_rect(), "list": list_rect, "detail": Rect2(), "capacity": backpack_capacity_label.get_rect()})
+	scanner_text_mask.set_meta("content_layout_rects", {"panel": bag, "header": compact_bag_button.get_rect(), "list": list_rect, "detail": Rect2(), "capacity": Rect2()})
 	_set_rect(bottom_backdrop, action)
 	_set_rect(bottom_overlay_art, action)
 	bottom_backdrop.visible = true
@@ -731,13 +712,13 @@ func apply_layout_profile(profile: Dictionary) -> void:
 	_set_rect(mine_risk_tag_art, risk)
 	_set_rect(mine_risk_icon, Rect2(risk.position + Vector2(24, (risk.size.y - icon_size) * 0.5), Vector2.ONE * icon_size))
 	_set_rect(mine_risk_label, Rect2(risk.position + Vector2(risk.size.x * 0.27, 2.0), Vector2(risk.size.x * 0.73 - 10.0, risk.size.y - 4.0)))
-	var feedback_rect := Rect2(action.position.x, risk.position.y - 126.0, action.size.x, 120.0)
+	var feedback_rect := Rect2(action.position.x, bag.position.y - 126.0, action.size.x, 120.0)
 	_set_rect(command_feedback_scroll, feedback_rect)
 	command_feedback_scroll.visible = command_feedback_label.visible
 	command_feedback_art.visible = false
 	_set_rect(action_hint_label, Rect2())
 	action_hint_label.visible = false
-	encounter_option_base_rect = Rect2(action.position.x + action.size.x * 0.35, risk.position.y - 85.0, action.size.x * 0.65, 72.0)
+	encounter_option_base_rect = Rect2(action.position.x + action.size.x * 0.35, bag.position.y - 85.0, action.size.x * 0.65, 72.0)
 	_fit_encounter_option_geometry()
 	for slot in [feedback_slot, overlay_slot, modal_slot]:
 		_set_rect(slot, Rect2(Vector2.ZERO, viewport))
@@ -810,7 +791,7 @@ func _refresh_backpack_strip(items_variant: Variant) -> void:
 	if item_count_changed and not current_layout_profile.is_empty():
 		call_deferred("_reflow_backpack_content_layout")
 	if backpack_empty_watermark != null:
-		backpack_empty_watermark.visible = items.is_empty()
+		backpack_empty_watermark.hide()
 		backpack_empty_watermark.modulate.a = 0.14
 	var signature_parts: Array[String] = []
 	for item_variant in items:
@@ -835,22 +816,14 @@ func _refresh_backpack_strip(items_variant: Variant) -> void:
 	for child in backpack_strip.get_children():
 		backpack_strip.remove_child(child)
 		child.queue_free()
-	if items.is_empty():
-		if backpack_detail_label != null:
-			backpack_detail_label.text = "暂无物资"
-			backpack_detail_label.tooltip_text = ""
-		return
 	var first_item: Dictionary = {}
-	var columns := RunSurfaceModelScript.backpack_columns(items)
-	var slots: Array = []
-	for row in range(maxi(columns[0].size(), columns[1].size())):
-		for column: Array in columns:
-			slots.append(column[row] if row < column.size() else {})
-	for index in range(slots.size()):
-		if (slots[index] as Dictionary).is_empty():
-			var space := Control.new()
-			space.name = "BackpackColumnSpace%d" % index
+	var slots: Array = items.slice(0, 8)
+	for index in range(8):
+		if index >= slots.size() or not slots[index] is Dictionary or (slots[index] as Dictionary).is_empty():
+			var space := Panel.new()
+			space.name = "BackpackEmptySlot%d" % index
 			space.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			space.add_theme_stylebox_override("panel", _panel_style(Color("0e252b"), Color("6f5145"), 1))
 			backpack_strip.add_child(space)
 			continue
 		var item: Dictionary = (slots[index] as Dictionary).duplicate(true)
@@ -865,13 +838,15 @@ func _refresh_backpack_strip(items_variant: Variant) -> void:
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.focus_mode = Control.FOCUS_ALL
 		slot.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		slot.text = "%s ×%d" % [String(presentation.get("display_name", "未命名物资")), int(presentation.get("quantity", 1))]
+		slot.text = ""
+		slot.pressed.connect(func() -> void: inventory_requested.emit())
 		slot.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		slot.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		slot.tooltip_text = String(presentation.get("detail_text", "尚未选择物品。"))
 		slot.icon = Art24ItemVisualCatalog.texture_for(item)
 		slot.expand_icon = true
-		slot.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		slot.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		slot.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		slot.add_theme_constant_override("icon_max_width", 34)
 		slot.add_theme_font_size_override("font_size", 13)
 		slot.add_theme_color_override("font_color", rarity_color)
@@ -899,6 +874,21 @@ func _refresh_backpack_strip(items_variant: Variant) -> void:
 		rarity_marker.offset_bottom = -5.0
 		rarity_marker.set_meta("rarity_border_token", StringName(rarity.get("border_token", &"rarity.border.unknown")))
 		slot.add_child(rarity_marker)
+		var quantity := Label.new()
+		quantity.name = "Quantity"
+		quantity.text = str(presentation.get("quantity", 1))
+		quantity.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		quantity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		quantity.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		quantity.add_theme_color_override("font_color", Color("fff1c8"))
+		quantity.add_theme_color_override("font_outline_color", Color("111b20"))
+		quantity.add_theme_constant_override("outline_size", 4)
+		quantity.add_theme_font_override("font", Art10UISkinKitScript.pixel_font())
+		quantity.add_theme_font_size_override("font_size", 13)
+		slot.add_child(quantity)
+		quantity.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		quantity.offset_right = -3.0
+		quantity.offset_bottom = -1.0
 		slot.mouse_entered.connect(_show_backpack_item_detail.bind(item))
 		slot.focus_entered.connect(_show_backpack_item_detail.bind(item))
 		backpack_strip.add_child(slot)

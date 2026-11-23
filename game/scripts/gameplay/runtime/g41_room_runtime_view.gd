@@ -776,10 +776,7 @@ func _sync_chest(objects: Array[Dictionary]) -> void:
 		chest.name = "ChestInteractable"
 		get_node("WorldInteractables").add_child(chest)
 	chest.configure_chest(chest_projection)
-	if _uses_generated_room():
-		var visual := chest.get_node_or_null("VisualRoot/ArtVisual") as CanvasItem
-		if visual != null:
-			visual.hide()
+	chest.set_room_supplies_visual(_uses_generated_room())
 
 
 func _sync_ground_loot(objects: Array[Dictionary], same_room: bool) -> void:

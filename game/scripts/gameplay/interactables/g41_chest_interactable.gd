@@ -120,6 +120,7 @@ func _apply_visual_state() -> void:
 	var art_visual := get_node_or_null("VisualRoot/ArtVisual") as Sprite2D
 	var opening_fx := get_node_or_null("VisualRoot/OpeningFx") as Sprite2D
 	if art_visual != null:
+		art_visual.visible = not _room_supplies_visual
 		var stable_visual_key := &"visual.art24.prop.chest_open_state" if authority_opened else &"visual.art24.prop.chest_closed"
 		visual_key = stable_visual_key
 		art_visual.texture = AssetContract.texture(stable_visual_key)
@@ -131,7 +132,7 @@ func _apply_visual_state() -> void:
 		if authority_opened:
 			art_visual.modulate = Color(1.06, 0.96, 0.76, 1.0) if focused else Color.WHITE
 	if opening_fx != null:
-		opening_fx.visible = visual_state == &"opening"
+		opening_fx.visible = not _room_supplies_visual and visual_state == &"opening"
 		if opening_fx.visible:
 			var progress := 1.0 - clampf(opening_remaining / OPENING_SECONDS, 0.0, 1.0)
 			var frame := mini(OPENING_FX_FRAMES - 1, int(progress * float(OPENING_FX_FRAMES)))
