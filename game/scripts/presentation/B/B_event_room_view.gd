@@ -16,6 +16,7 @@ const DOOR_LIGHT_POSITIONS := {
 	"west": [Vector3(-7.65, 1.4, -1.85), Vector3(-7.65, 1.4, 1.85)],
 }
 const IMPACT_SECONDS := 0.24
+const CHEST_OPEN_SECONDS := 0.28
 var entry: Dictionary = {}
 var viewport: SubViewport
 var front_viewport: SubViewport
@@ -35,6 +36,8 @@ var _last_depth := -1
 var _geometry_key := ""
 var _generated_meshes: Dictionary = {}
 var _prop_impacts: Dictionary = {}
+var _lid_state := -1 # First snapshot for this room has no preceding transition.
+var _lid_progress := 0.0
 
 func configure(next_entry: Dictionary) -> void:
 	var next_key := String(next_entry.get("geometry_key", next_entry.get("model_path", "")))
@@ -61,6 +64,8 @@ func _clear() -> void:
 	gate_targets.clear()
 	candle_lights.clear()
 	_prop_impacts.clear()
+	_lid_state = -1
+	_lid_progress = 0.0
 	status_lamp = null
 	_ready_model = false
 	_last_depth = -1
@@ -303,14 +308,13 @@ func _apply_voxel_prop_state(snapshot: Dictionary) -> bool:
 	var changed := false
 	if entry.get("room_type") == &"Chest":
 		var opened := bool(snapshot.get("search_state_data", {}).get("searched", false))
-		var rect := Rect2(entry.get("object_rect", Rect2()))
-		var hinge := local_to_model(Vector2(rect.get_center().x, rect.position.y)) + Vector3.UP * 0.72
-		var turn := Basis(Vector3.RIGHT, -0.92 if opened else 0.0)
-		var pose := Transform3D(turn, hinge - turn * hinge)
-		for lid: MeshInstance3D in assemblies.get("chest_lid", []):
-			if not lid.transform.is_equal_approx(pose):
-				lid.transform = pose
+		var next_state := int(opened)
+		if _lid_state != next_state:
+			if _lid_state < 0 or not opened:
+				_lid_progress = float(next_state)
+				_set_lid_pose(_lid_progress)
 				changed = true
+			_lid_state = next_state
 	elif entry.get("room_type") == &"Mine":
 		var armed := not bool(snapshot.get("current_room_detail", {}).get("triggered", false))
 		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_teeth", []):
@@ -318,6 +322,13 @@ func _apply_voxel_prop_state(snapshot: Dictionary) -> bool:
 				part.visible = armed
 				changed = true
 	return changed
+
+func _set_lid_pose(progress: float) -> void:
+	var rect := Rect2(entry.object_rect)
+	var hinge := local_to_model(Vector2(rect.get_center().x, rect.position.y)) + Vector3.UP * 0.72
+	var eased := 1.0 - pow(1.0 - progress, 2.0)
+	var turn := Basis(Vector3.RIGHT, deg_to_rad(-100.0) * eased)
+	_set_prop_transform("chest_lid", Transform3D(turn, hinge - turn * hinge))
 
 func update_player_depth(player: Vector2) -> void:
 	if not _ready_model:
@@ -336,6 +347,10 @@ func update_player_depth(player: Vector2) -> void:
 		front_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func _process(delta: float) -> void:
+	if _lid_state == 1 and _lid_progress < 1.0:
+		_lid_progress = move_toward(_lid_progress, 1.0, delta / CHEST_OPEN_SECONDS)
+		_set_lid_pose(_lid_progress)
+		_request_model_redraw()
 	for side in gates:
 		var gate: Node3D = gates[side]
 		var target := float(gate_targets[side])

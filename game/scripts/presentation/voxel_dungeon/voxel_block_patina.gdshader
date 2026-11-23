@@ -23,7 +23,17 @@ void fragment() {
 	vec3 point = block_point + vec3(5.7, 3.2, 6.1);
 	float speckle = grain(floor(point * 15.0));
 
-	if (block_finish < 0.5) {
+	if (block_finish > 4.5) {
+		// Coarse mineral variation and small stepped chips are visible from the play camera.
+		vec3 patch_cell = floor(point * vec3(4.3, 2.0, 5.1));
+		float patch = grain(patch_cell);
+		float large = grain(floor(point * vec3(1.7, 1.0, 2.1)));
+		float pits = smoothstep(0.72, 0.98, grain(floor(point * 13.0)));
+		float wear = 0.80 + 0.11 * large + 0.17 * patch - 0.065 * pits + 0.045 * speckle;
+		ALBEDO = block_tint * wear * mix(vec3(0.98, 1.0, 0.99), vec3(1.04, 1.01, 0.97), patch);
+		ROUGHNESS = 0.93 - 0.08 * patch;
+		SPECULAR = 0.20;
+	} else if (block_finish < 0.5) {
 		float patch = grain(floor(point * vec3(3.5, 4.8, 3.5)));
 		float strata = grain(floor(point * vec3(1.7, 2.9, 2.1)));
 		float pores = smoothstep(0.82, 1.0, speckle) * 0.10;
