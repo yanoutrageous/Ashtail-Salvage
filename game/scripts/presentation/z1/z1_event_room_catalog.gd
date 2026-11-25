@@ -9,19 +9,22 @@ static var _loaded := false
 static var _rooms: Dictionary = {}
 
 
-static func event_type_from_snapshot(snapshot: Dictionary) -> StringName:
+static func event_type_from_snapshot(snapshot: Dictionary, voxel := false) -> StringName:
 	var state: Dictionary = snapshot.get("event_state", {})
 	var encounter: Dictionary = snapshot.get("encounter_view_model", {})
 	return StringName(state.get("event_type", encounter.get("encounter_type", &"")))
 
 
-static func from_snapshot(snapshot: Dictionary) -> Dictionary:
+static func from_snapshot(snapshot: Dictionary, voxel := false) -> Dictionary:
 	if StringName(snapshot.get("current_room", &"Unknown")) != &"Event":
 		return {}
-	return room(event_type_from_snapshot(snapshot))
+	return room(event_type_from_snapshot(snapshot), voxel)
 
 
-static func room(event_type: StringName) -> Dictionary:
+static func room(event_type: StringName, voxel := false) -> Dictionary:
+	var number := Z1EventCatalog.number(event_type)
+	if voxel and number > 0:
+		return preload("res://scripts/presentation/B/B_event_room_catalog.gd").numbered_room(number)
 	var b_room := preload("res://scripts/presentation/B/B_event_room_catalog.gd").room(event_type)
 	if not b_room.is_empty():
 		return b_room

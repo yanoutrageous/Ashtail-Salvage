@@ -246,8 +246,11 @@ func _build_lights() -> void:
 			room_world.add_child(lamp)
 			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-65, -25, 0)
-	fill.light_color = Color("#729ca8")
+	fill.rotation_degrees = Vector3(-76, -22, 0)
+	fill.light_color = Color("#9badb3")
+	fill.shadow_enabled = true
+	fill.shadow_opacity = 0.36
+	fill.directional_shadow_max_distance = 45.0
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
 	var masonry := DirectionalLight3D.new()
@@ -283,7 +286,8 @@ func _build_lights() -> void:
 			work.light_color = Color("#e5bad2") if kind == &"Boss" else Color("#ddd7c8")
 			work.light_energy = 0.64
 		&"Event":
-			work.position = local_to_model(Vector2(0.5, 0.5)) + Vector3(-0.45, 3.65, 0.55)
+			work.position = local_to_model(Vector2(0.5, 0.5)) + Vector3(-0.60, 4.2, 2.1)
+			work.light_color = Color("#ffe2c1")
 			# The spot identifies the service while the door candles keep their shared color.
 			match String(entry.get("id", entry.get("event_type", ""))).trim_prefix("B_"):
 				"relief", "first_aid": work.light_color = Color("#b4e5cd")
@@ -297,7 +301,7 @@ func _build_lights() -> void:
 		_:
 			work.light_energy = 0.70
 	work.omni_range = 7.0
-	work.shadow_enabled = true
+	work.shadow_enabled = false
 	room_world.add_child(work)
 
 func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
@@ -334,6 +338,22 @@ func apply_snapshot(snapshot: Dictionary, doors: Array[Dictionary]) -> void:
 	var lamp_on := StringName(snapshot.get("current_room", &"")) == &"Event" and bool(state.get("completed", false))
 	var changed := status_lamp.visible != lamp_on
 	status_lamp.visible = lamp_on
+	match String(entry.get("numbered_id", "")):
+		"e06":
+			for piece: MeshInstance3D in assemblies.get("main_station", []):
+				if String(piece.name).contains("__main_station_Door") and piece.visible == lamp_on:
+					piece.visible = not lamp_on
+					changed = true
+		"e24":
+			var locked := bool(state.get("cage", {}).get("active", false))
+			for piece: MeshInstance3D in assemblies.get("main_station", []):
+				if String(piece.name).contains("__main_station_RaisedGate"):
+					if not piece.has_meta("raised_y"):
+						piece.set_meta("raised_y", piece.position.y)
+					var target := float(piece.get_meta("raised_y")) - (1.4 if locked else 0.0)
+					if not is_equal_approx(piece.position.y, target):
+						piece.position.y = target
+						changed = true
 	if entry.get("generated", false) and _apply_voxel_prop_state(snapshot):
 		changed = true
 	for d in doors:

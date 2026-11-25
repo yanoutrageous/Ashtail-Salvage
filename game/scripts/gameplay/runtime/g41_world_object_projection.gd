@@ -42,11 +42,11 @@ const DOOR_DIRECTIONS := [
 ]
 
 
-static func build(snapshot: Dictionary, combat_snapshot: Dictionary = {}) -> Dictionary:
+static func build(snapshot: Dictionary, combat_snapshot: Dictionary = {}, voxel := false) -> Dictionary:
 	var room_pos: Vector2i = snapshot.get("position", snapshot.get("player_pos", Vector2i.ZERO))
 	var room_type := StringName(snapshot.get("current_room", &"Unknown"))
 	var room_key := "%d,%d" % [room_pos.x, room_pos.y]
-	var event_room := EventRoomCatalog.from_snapshot(snapshot)
+	var event_room := EventRoomCatalog.from_snapshot(snapshot, voxel)
 	var world_objects: Array[Dictionary] = []
 	var chest_contents: Array[Dictionary] = []
 	var room_floor_items := _dictionary_array(snapshot.get("room_floor_items", []))
@@ -382,7 +382,7 @@ static func room_solid_rects(
 				result.assign(NORMAL_REAR_PROP_RECTS)
 				result.append_array(NORMAL_FRONT_PROP_RECTS)
 		&"Event":
-			var event_room := EventRoomCatalog.room(event_type)
+			var event_room := EventRoomCatalog.room(event_type, generated_voxel)
 			if event_room.is_empty():
 				result.assign(EVENT_PROP_RECTS)
 			elif event_room.has("model_path"):

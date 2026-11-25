@@ -393,7 +393,7 @@ func _rebuild_world_projection() -> void:
 		focused_interaction_id = ""
 		focus_residence_elapsed = 0.0
 		focus_lost_elapsed = 0.0
-	world_projection = WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot)
+	world_projection = WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot, combat_art != null)
 	_merge_room_entry_result_into_projection()
 	var runtime_objects := _dictionary_array(world_projection.get("world_objects", []))
 	var event_room: Dictionary = world_projection.get("event_room", {}).duplicate(true)
@@ -421,7 +421,7 @@ func _rebuild_world_projection() -> void:
 
 
 func _voxel_room_entry(objects: Array[Dictionary]) -> Dictionary:
-	var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
+	var event_type := EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot)
 	var walls := WorldObjectProjectionScript.ROOM_WALL_RECTS
 	var props: Array[Rect2] = []
 	var units: Array[Dictionary] = []
@@ -494,7 +494,7 @@ func _rebuild_door_projection() -> void:
 		door_projections.clear()
 		_sync_door_visuals()
 		return
-	var updated := WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot)
+	var updated := WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot, combat_art != null)
 	door_projections = _dictionary_array(updated.get("doors", []))
 	world_projection["doors"] = door_projections.duplicate(true)
 	door_projection_revision += 1
@@ -874,7 +874,13 @@ func _apply_special_art(entity, projection: Dictionary) -> void:
 		sprite.hide()
 		entity.set_room_supplies_visual(true)
 		var old_readout := visual_root.get_node_or_null("DeviceReadout")
-		if old_readout != null:
+		if payload.has("B_model_path") and Z1Events.number(StringName(payload.get("event_type", ""))) > 0:
+			if old_readout == null:
+				old_readout = EventRoomDeviceView.new()
+				old_readout.name = "DeviceReadout"
+				visual_root.add_child(old_readout)
+			old_readout.call("configure", projection)
+		elif old_readout != null:
 			old_readout.queue_free()
 		_apply_special_prompt_visibility(entity)
 		return
@@ -1518,8 +1524,8 @@ func _rebuild_obstacle_projection() -> void:
 	logical_obstacles.clear()
 	if b_room_view != null and b_room_view.visible:
 		var b_room: Dictionary = world_projection.get("event_room", {})
-		var generated_voxel := _uses_generated_room()
-		var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
+		var generated_voxel := _uses_generated_room() or b_room.has("numbered_id")
+		var event_type := EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot)
 		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel, room_key)
 		if generated_voxel and room_type == &"Chest":
 			rects.append(Rect2(b_room.get("object_rect", Rect2())))

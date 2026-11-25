@@ -1,0 +1,147 @@
+[gd_scene load_steps=17 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.38431, 0.44314, 0.41961, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.27059, 0.30588, 0.31373, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_dark"]
+albedo_color = Color(0.16078, 0.17647, 0.16863, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_paper"]
+albedo_color = Color(0.84314, 0.77647, 0.60784, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_bronze"]
+albedo_color = Color(0.70196, 0.51373, 0.27451, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_edge"]
+albedo_color = Color(0.50980, 0.55686, 0.54510, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_red"]
+albedo_color = Color(0.73333, 0.37255, 0.28235, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="Mesh_1"]
+material = SubResource("Mat_rock")
+size = Vector3(2.31, 0.24, 1.46)
+
+[sub_resource type="BoxMesh" id="Mesh_2"]
+material = SubResource("Mat_iron")
+size = Vector3(2.1483, 0.13, 1.3578)
+
+[sub_resource type="BoxMesh" id="Mesh_3"]
+material = SubResource("Mat_iron")
+size = Vector3(1.84, 1.61, 0.69)
+
+[sub_resource type="BoxMesh" id="Mesh_4"]
+material = SubResource("Mat_dark")
+size = Vector3(1.53, 1.3, 0.08)
+
+[sub_resource type="BoxMesh" id="Mesh_5"]
+material = SubResource("Mat_paper")
+size = Vector3(0.14, 0.62, 0.15)
+
+[sub_resource type="BoxMesh" id="Mesh_6"]
+material = SubResource("Mat_bronze")
+size = Vector3(0.21, 0.12, 0.13)
+
+[sub_resource type="BoxMesh" id="Mesh_7"]
+material = SubResource("Mat_edge")
+size = Vector3(1.72, 1.45, 0.11)
+
+[sub_resource type="BoxMesh" id="Mesh_8"]
+material = SubResource("Mat_red")
+size = Vector3(1.47, 0.12, 0.05)
+
+[sub_resource type="BoxMesh" id="Mesh_9"]
+material = SubResource("Mat_bronze")
+size = Vector3(0.13, 0.28, 0.11)
+
+[node name="E06_FuseCabinet" type="Node3D"]
+
+[node name="E06_FuseCabinet__main_station_Plinth_0" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_1")
+
+[node name="E06_FuseCabinet__main_station_IronShoe_1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.31, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_2")
+
+[node name="E06_FuseCabinet__main_station_FuseCabinet_2" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.17, -0.17)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_3")
+
+[node name="E06_FuseCabinet__main_station_FuseMount_3" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.17, 0.2)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_4")
+
+[node name="E06_FuseCabinet__main_station_Fuse_4" type="MeshInstance3D" parent="."]
+position = Vector3(-0.4, 1.26, 0.3)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E06_FuseCabinet__main_station_Contact_5" type="MeshInstance3D" parent="."]
+position = Vector3(-0.4, 1.02, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Contact_6" type="MeshInstance3D" parent="."]
+position = Vector3(-0.4, 1.5, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Fuse_7" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.26, 0.3)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E06_FuseCabinet__main_station_Contact_8" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.02, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Contact_9" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.5, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Fuse_10" type="MeshInstance3D" parent="."]
+position = Vector3(0.4, 1.26, 0.3)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E06_FuseCabinet__main_station_Contact_11" type="MeshInstance3D" parent="."]
+position = Vector3(0.4, 1.02, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Contact_12" type="MeshInstance3D" parent="."]
+position = Vector3(0.4, 1.5, 0.35)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E06_FuseCabinet__main_station_Door_13" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.17, 0.47)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_7")
+
+[node name="E06_FuseCabinet__main_station_DoorStripe_14" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.61, 0.542)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E06_FuseCabinet__main_station_DoorLatch_15" type="MeshInstance3D" parent="."]
+position = Vector3(0.59, 0.99, 0.56)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")
