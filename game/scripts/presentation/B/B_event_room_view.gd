@@ -90,7 +90,7 @@ func _build() -> void:
 	var settings := Environment.new()
 	settings.background_mode = Environment.BG_CLEAR_COLOR
 	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	settings.ambient_light_color = Color("#829fa1")
+	settings.ambient_light_color = Color("#8398a3")
 	settings.ambient_light_energy = 0.33 if entry.get("polished", false) else 0.25
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
@@ -166,7 +166,7 @@ func _build_generated() -> Node3D:
 		var fresh := VoxelArt.new().build(entry)
 		var meshes: Array[Dictionary] = []
 		for part: MeshInstance3D in fresh.get_children():
-			meshes.append({"name": part.name, "mesh": part.mesh, "assembly": part.get_meta("B_assembly", &"")})
+			meshes.append({"name": part.name, "mesh": part.mesh, "transform": part.transform, "assembly": part.get_meta("B_assembly", &"")})
 		# Re-entering a room gets fresh transforms and depth masks. The static
 		# vertex and material resources are identical for the same layout.
 		if _generated_meshes.size() >= 12:
@@ -178,6 +178,7 @@ func _build_generated() -> Node3D:
 		var part := MeshInstance3D.new()
 		part.name = record.name
 		part.mesh = record.mesh
+		part.transform = record.transform
 		if record.assembly != &"":
 			part.set_meta("B_assembly", record.assembly)
 		reused.add_child(part)
@@ -233,7 +234,7 @@ func _build_lights() -> void:
 		for point: Vector3 in DOOR_LIGHT_POSITIONS[side]:
 			var lamp := OmniLight3D.new()
 			lamp.position = point
-			lamp.light_color = Color("#ff9b56")
+			lamp.light_color = Color("#ff912f")
 			lamp.light_energy = DOOR_LAMP_ENERGY
 			lamp.omni_range = 4.15
 			lamp.omni_attenuation = 1.30
@@ -241,7 +242,7 @@ func _build_lights() -> void:
 			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-65, -25, 0)
-	fill.light_color = Color("#81a6ad")
+	fill.light_color = Color("#729ca8")
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
 	var masonry := DirectionalLight3D.new()
@@ -251,10 +252,18 @@ func _build_lights() -> void:
 	masonry.light_energy = 0.24 if entry.get("generated", false) else 0.40
 	masonry.light_cull_mask = WALL_LIGHT_LAYER
 	room_world.add_child(masonry)
+	if entry.get("props", []).size() > 2 and entry.get("generated", false) and entry.get("room_type") in [&"Normal", &"Spawn", &"Chest"]:
+		var bench: Rect2 = entry.props[2]
+		var lamp := OmniLight3D.new()
+		lamp.position = local_to_model(bench.get_center()) + Vector3(0.42, 1.25, 0.02)
+		lamp.light_color = Color("#ffbd75")
+		lamp.light_energy = 0.72
+		lamp.omni_range = 5.2
+		room_world.add_child(lamp)
 	var work := OmniLight3D.new()
 	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
 	work.light_color = Color(1.0, 0.76, 0.44)
-	work.light_energy = 0.55 if entry.get("room_type") in [&"Chest", &"Event", &"Exit"] else 0.0
+	work.light_energy = 0.55 if entry.get("room_type") in [&"Chest", &"Event", &"Exit"] else (0.38 if entry.get("room_type") in [&"Normal", &"Spawn"] else 0.0)
 	work.omni_range = 6.0
 	work.shadow_enabled = true
 	room_world.add_child(work)

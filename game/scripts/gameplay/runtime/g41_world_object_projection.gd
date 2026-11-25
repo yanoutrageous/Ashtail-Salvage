@@ -38,8 +38,6 @@ const NORMAL_REAR_PROP_RECTS := [
 const NORMAL_FRONT_PROP_RECTS := [
 	Rect2(0.135, 0.81, 0.06, 0.04), Rect2(0.79, 0.80, 0.07, 0.05),
 ]
-# The raised voxel wall cap projects farther into the room than its floor footprint.
-const VOXEL_FRONT_PROP_INSET := 0.055
 const EVENT_PROP_RECTS := [
 	Rect2(0.36, 0.445, 0.28, 0.14),
 ]
@@ -386,11 +384,16 @@ static func room_solid_rects(
 		&"Monster":
 			result.append(MONSTER_ALTAR_OCCLUDER_RECT)
 		&"Normal", &"Spawn", &"Chest":
-			result.assign(NORMAL_REAR_PROP_RECTS)
-			for fixture: Rect2 in NORMAL_FRONT_PROP_RECTS:
-				if generated_voxel:
-					fixture.position.y -= VOXEL_FRONT_PROP_INSET
-				result.append(fixture)
+			if generated_voxel:
+				# The first two pieces share a store bay. The third is an inward-facing lamp bench.
+				var chest := room_type == &"Chest"
+				result.append(Rect2(0.59 if chest else 0.29, 0.32, 0.093, 0.06))
+				result.append(Rect2(0.70 if chest else 0.395, 0.346, 0.046, 0.065))
+				result.append(Rect2(0.27 if chest else 0.64, 0.61, 0.09, 0.047))
+				result.append(Rect2(0.38 if chest else 0.735, 0.665 if chest else 0.571, 0.056, 0.056))
+			else:
+				result.assign(NORMAL_REAR_PROP_RECTS)
+				result.append_array(NORMAL_FRONT_PROP_RECTS)
 		&"Event":
 			var event_room := EventRoomCatalog.room(event_type)
 			if event_room.is_empty():

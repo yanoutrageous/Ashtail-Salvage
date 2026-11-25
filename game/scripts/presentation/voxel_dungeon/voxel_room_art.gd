@@ -5,13 +5,13 @@ const X_SPAN := 19.3
 const Z_SPAN := 14.77
 const FLOOR_Y := 0.06
 const STONE := Color("#666c68")
-const MORTAR := Color("#343836")
+const MORTAR := Color("#292e30")
 const BRICK := Color("#69706c")
-const WALL_CAP := Color("#283e3d")
+const WALL_CAP := Color("#183a3c")
 const BLOCK_EDGE := Color("#8b8c7e")
 const METAL := Color("#465354")
 const BRASS := Color("#ad8a5b")
-const OAK := Color("#77543d")
+const OAK := Color("#865334")
 const DARK_OAK := Color("#503529")
 const AMBER := Color("#ffc47b")
 const TEAL := Color("#62d9bf")
@@ -20,6 +20,8 @@ const STONE_SHADER := preload("res://scripts/presentation/voxel_dungeon/voxel_bl
 
 enum Finish { STONE, IRON, WOOD, BRONZE, GLOW, PAVING }
 
+const DUNGEON_SHELL := preload("res://assets/B_event_rooms/B_room_shell.glb")
+static var floor_meshes: Array[Mesh] = []
 static var gate_mesh: ArrayMesh
 
 var rng := RandomNumberGenerator.new()
@@ -41,7 +43,7 @@ func build(entry: Dictionary) -> Node3D:
 	}
 	var kind := String(entry["room_type"])
 	stone = Color(palette.get(kind, "#626b66"))
-	_floor(kind)
+	_add_dungeon_floor(scene)
 	default_group = "ArchitectureWalls"
 	for rect: Rect2 in entry["wall_rects"]:
 		_wall(rect)
@@ -283,48 +285,32 @@ func _rect_fill(rect: Rect2, height: float, color: Color, group := "", inset := 
 	_box(_point(rect.get_center(), base + height * 0.5), Vector3(size.x, height, size.y), color, group)
 
 
-func _floor(_kind: String) -> void:
-	_box(Vector3(0, -0.36, 0), Vector3(19.48, 0.40, 14.96), Color("#282b2c"))
-	_box(Vector3(0, -0.17, 0), Vector3(19.37, 0.38, 14.83), MORTAR.darkened(0.18))
-	var z := -Z_SPAN * 0.5
-	for row in 12:
-		var depth := Z_SPAN / 12.0 + 0.10 * sin(row * 2.3)
-		if row == 11:
-			depth = Z_SPAN * 0.5 - z
-		var x := -X_SPAN * 0.5
-		while x < X_SPAN * 0.5 - 0.01:
-			var remaining := X_SPAN * 0.5 - x
-			var width := rng.randf_range(1.12, 1.97)
-			if x == -X_SPAN * 0.5 and row % 2 == 1:
-				width *= 0.66
-			if remaining < width + 0.65:
-				width = remaining
-			var p := Vector3(x + width * 0.5, -0.023, z + depth * 0.5)
-			var perimeter := absf(p.x) > 6.2 or absf(p.z) > 4.9
-			var tint := _shade(stone, 0.065 if perimeter else 0.045)
-			if perimeter:
-				p.y += rng.randf_range(-0.016, 0.004)
-				tint = tint.lerp(MORTAR, rng.randf_range(0.04, 0.16))
-			var size := Vector3(width - 0.025, 0.16, depth - 0.027)
-			if perimeter and rng.randf() < 0.26:
-				_chipped_flagstone(p, size, tint)
-			else:
-				_box(p, size, tint, "", 0.0, Finish.PAVING)
-			x += width
-		z += depth
+func _add_dungeon_floor(scene: Node3D) -> void:
+	# Reuse the carved slabs and their painted mineral/roughness atlases from the event-room kit.
+	if floor_meshes.is_empty():
+		var shell := DUNGEON_SHELL.instantiate()
+		for part: MeshInstance3D in shell.find_children("Floor_*", "MeshInstance3D", true, false):
+			if part.name != &"Floor_Substrate":
+				var slab: Mesh = part.mesh.duplicate()
+				for surface in slab.get_surface_count():
+					var original := slab.surface_get_material(surface) as BaseMaterial3D
+					if original != null:
+						var stone := original.duplicate() as BaseMaterial3D
+						stone.albedo_color *= Color("#ebe8e0")
+						slab.surface_set_material(surface, stone)
+				floor_meshes.append(slab)
+		shell.free()
+	_box(Vector3(0, -0.17, 0), Vector3(X_SPAN, 0.33, Z_SPAN), MORTAR.darkened(0.24))
+	for mesh in floor_meshes:
+		var floor_piece := MeshInstance3D.new()
+		floor_piece.mesh = mesh
+		floor_piece.name = mesh.resource_name
+		floor_piece.scale = Vector3(X_SPAN / 16.0, 1.0, Z_SPAN / 12.0)
+		scene.add_child(floor_piece)
+
 	for side in [-1.0, 1.0]:
 		_threshold(Vector3(0.0, FLOOR_Y, side * 6.72), false)
 		_threshold(Vector3(side * 8.55, FLOOR_Y, 0.0), true)
-
-
-func _chipped_flagstone(center: Vector3, size: Vector3, tint: Color) -> void:
-	var chip := Vector2(rng.randf_range(0.14, 0.29), rng.randf_range(0.10, 0.19))
-	var dx := -1.0 if rng.randf() < 0.5 else 1.0
-	var dz := -1.0 if rng.randf() < 0.5 else 1.0
-	# Two flush prisms leave a stepped corner and expose the recessed mortar.
-	_box(center - Vector3(dx * chip.x * 0.5, 0, 0), Vector3(size.x - chip.x, size.y, size.z), tint, "", 0.0, Finish.PAVING)
-	var edge := center + Vector3(dx * (size.x - chip.x) * 0.5, 0, -dz * chip.y * 0.5)
-	_box(edge, Vector3(chip.x, size.y, size.z - chip.y), tint, "", 0.0, Finish.PAVING)
 
 
 func _threshold(p: Vector3, side: bool) -> void:
@@ -357,7 +343,7 @@ func _wall(rect: Rect2) -> void:
 	var cols := maxi(2, roundi(length / 0.94))
 	var tiers := maxi(2, roundi(height / 0.30))
 	var run := length / cols
-	var wall_tint := BRICK.lerp(stone, 0.30)
+	var wall_tint := Color("#46535d").lerp(stone, 0.12)
 	# The right-hand north bay contains one recessed cupboard. Its backing
 	# continues behind the opening and keeps the outside face closed.
 	var has_niche := along_x and north and center.x > 0.0 and length > 5.0 and across > 0.90
@@ -389,6 +375,14 @@ func _wall(rect: Rect2) -> void:
 		var course := height / tiers
 		var sill := center + Vector3(niche_x, course + 0.02, across * 0.5)
 		_north_wall_niche(sill, niche_half, height - 2.0 * course, wall_tint)
+
+	# A projecting foot and a sloped coping reveal the wall depth from the fixed camera.
+	for course_index in cols:
+		var offset := (course_index + 0.5) * run - length * 0.5
+		var foot := center + basis * Vector3(offset, 0.14, inward * (across * 0.5 - 0.02))
+		_stone_block(foot, Vector3(run - 0.028, 0.24, 0.21), wall_tint.darkened(0.18), 0.035, "", turn)
+		var coping := center + basis * Vector3(offset, height + 0.12, inward * (across * 0.5 - 0.04))
+		_stone_block(coping, Vector3(run - 0.024, 0.16, 0.21), Color("#587172"), 0.035, "", turn)
 
 	var cap_depth := across / 2.0
 	for row in 2:
@@ -519,7 +513,17 @@ func _floor_seal(local: Vector2, tint: Color, width: float) -> void:
 func _perimeter_prop(rect: Rect2, id: String, index: int) -> void:
 	var p := _point(rect.get_center())
 	var size := rect.size * Vector2(X_SPAN, Z_SPAN)
-	if index % 2 == 0:
+	if index == 2:
+		# Low repair bench: stacked timber offcuts, a copper lamp and a small tool.
+		for rail in [-0.32, 0.32]:
+			_box(p + Vector3(rail * size.x, 0.19, 0), Vector3(0.16, 0.38, size.y * 0.74), DARK_OAK, id, 0.0, Finish.WOOD)
+		_box(p + Vector3.UP * 0.42, Vector3(size.x, 0.13, size.y), OAK, id, 0.0, Finish.WOOD)
+		for board in 2:
+			_box(p + Vector3(-0.28, 0.52 + board * 0.07, -0.03), Vector3(0.70, 0.07, 0.20), OAK.lightened(0.12), id, 0.09 * board, Finish.WOOD)
+		var wick := p + Vector3(0.42, 0.56, 0.02)
+		_stone_block(wick, Vector3(0.34, 0.15, 0.30), BRASS, 0.04, id, 0.0, Finish.BRONZE)
+		_box(wick + Vector3.UP * 0.20, Vector3(0.14, 0.28, 0.15), AMBER, id, 0.0, Finish.GLOW)
+	elif index % 2 == 0:
 		_box(p + Vector3.UP * 0.33, Vector3(size.x * 0.97, 0.66, size.y * 0.96), DARK_OAK, id, 0.0, Finish.WOOD)
 		for i in 5:
 			var x := (i - 2) * size.x * 0.18
@@ -599,8 +603,8 @@ func _ratchet_workstation(rect: Rect2, id: String) -> void:
 	var span := rect.size * Vector2(X_SPAN, Z_SPAN)
 	var iron := Color("#596669")
 	var iron_shadow := Color("#323d3e")
-	var ochre := Color("#b8905a")
-	var rust := Color("#99533e")
+	var ochre := Color("#c49242")
+	var rust := Color("#ae5131")
 	for side: float in [-1.0, 1.0]:
 		var foot := p + Vector3(side * span.x * 0.36, 0, 0)
 		_stone_block(foot + Vector3.UP * 0.09, Vector3(0.64, 0.18, span.y * 0.92), BRICK, 0.035, id)

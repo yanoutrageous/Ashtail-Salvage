@@ -13,6 +13,7 @@ static func room(event_type: StringName) -> Dictionary:
 	if not _entries.has(String(event_type)):
 		return {}
 	var entry: Dictionary = _entries[String(event_type)].duplicate(true)
+	entry["room_type"] = &"Event"
 	if not ResourceLoader.exists(String(entry.model_path)):
 		return {}
 	for key in ["body_rect"]:

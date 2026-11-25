@@ -15,7 +15,7 @@ float grain(vec3 grid) {
 void vertex() {
 	block_point = VERTEX;
 	block_normal = NORMAL;
-	block_tint = authored_wall ? COLOR.rgb * 1.61 + vec3(0.023, 0.018, 0.026) : COLOR.rgb;
+	block_tint = authored_wall ? COLOR.rgb * vec3(1.30, 1.40, 1.44) + vec3(0.012, 0.016, 0.018) : COLOR.rgb;
 	block_finish = authored_wall ? 0.0 : UV.x;
 }
 
@@ -39,7 +39,7 @@ void fragment() {
 		float pores = smoothstep(0.82, 1.0, speckle) * 0.10;
 		float deposit = smoothstep(0.38, 0.90, patch);
 		float top = smoothstep(0.0, 1.0, block_normal.y);
-		vec3 tone = block_tint * (0.83 + 0.13 * speckle + 0.14 * strata + 0.13 * deposit - pores);
+		vec3 tone = block_tint * (0.89 + 0.065 * speckle + 0.12 * strata + 0.10 * deposit - pores * 0.55);
 		vec3 patina = mix(vec3(0.87, 0.93, 1.06), vec3(1.09, 1.04, 0.91), strata);
 		ALBEDO = tone * mix(vec3(1.0), patina, 0.60);
 		if (authored_wall) {
