@@ -25,6 +25,13 @@ static var floor_meshes: Array[Mesh] = []
 static var gate_mesh: ArrayMesh
 
 const WALL_HEIGHT := 1.55
+const GATE_TRACK := 0.15
+const GATE_JAMB := 0.24
+const GATE_SIDE_PLAY := 0.018
+const GATE_HALF_WIDTH := 1.075
+const GATE_HEIGHT := 1.64
+const CAP_CENTER := WALL_HEIGHT + 0.075
+const CAP_THICKNESS := 0.175
 var growth_key := ""
 var rng := RandomNumberGenerator.new()
 var boxes: Array
@@ -316,16 +323,33 @@ func _add_dungeon_floor(scene: Node3D) -> void:
 		floor_piece.scale = Vector3(X_SPAN / 16.0, 1.0, Z_SPAN / 12.0)
 		scene.add_child(floor_piece)
 
-	for side in [-1.0, 1.0]:
-		_threshold(Vector3(0.0, FLOOR_Y, side * 6.72), false)
-		_threshold(Vector3(side * 8.55, FLOOR_Y, 0.0), true)
+	for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+		_threshold(direction)
 
 
-func _threshold(p: Vector3, side: bool) -> void:
+static func gate_center(direction: Vector2i) -> Vector3:
+	var radius := 8.55 if direction.x != 0 else 6.72
+	return Vector3(direction.x, 0, direction.y) * (radius + GATE_TRACK)
+
+
+static func opening_half_width(direction: Vector2i) -> float:
+	return Z_SPAN * 0.115 if direction.x != 0 else X_SPAN * 0.092
+
+
+static func gate_scale(direction: Vector2i) -> Vector3:
+	var width := opening_half_width(direction) - GATE_JAMB - GATE_SIDE_PLAY
+	var top := FLOOR_Y + CAP_CENTER - CAP_THICKNESS * 0.5 - 0.020
+	return Vector3(width / GATE_HALF_WIDTH, top / GATE_HEIGHT, 1.0)
+
+
+func _threshold(direction: Vector2i) -> void:
+	var side := direction.x != 0
 	var turn := PI * 0.5 if side else 0.0
 	var basis := Basis(Vector3.UP, turn)
-	var outward := (Vector3.RIGHT * signf(p.x)) if side else Vector3.BACK * signf(p.z)
-	var track := -0.15 if side else -0.27
+	var outward := Vector3(direction.x, 0, direction.y)
+	var axis := gate_center(direction) + Vector3.UP * FLOOR_Y
+	var p := axis - outward * GATE_TRACK
+	var track := GATE_TRACK
 	for interval: Vector2 in [Vector2(-0.62, track - 0.17), Vector2(track + 0.17, 0.62)]:
 		var center := p + outward * (interval.x + interval.y) * 0.5 + Vector3.UP * 0.06
 		_stone_block(center, Vector3(3.20, 0.13, interval.y - interval.x), BRICK.lightened(0.16), 0.034, "", turn)
@@ -333,23 +357,31 @@ func _threshold(p: Vector3, side: bool) -> void:
 		_box(p + basis * Vector3(0, 0.142, offset), Vector3(3.08, 0.043, 0.13), METAL, "", turn, Finish.IRON)
 		for plate in range(-2, 3):
 			_box(p + basis * Vector3(plate * 0.43, 0.168, offset), Vector3(0.11, 0.014, 0.092), BRASS.darkened(0.18), "", turn, Finish.BRONZE)
-	# The frame sits on the outer edge of the stonework, offset from the moving grill.
+	# The lintel bears on the jambs, with the ironwork centered in their two U-channels.
 	var frame_group := "ArchitectureWallsFrame" + (("East" if p.x > 0 else "West") if side else ("South" if p.z > 0 else "North"))
-	var half_open := Z_SPAN * 0.115 if side else X_SPAN * 0.092
-	var depth := 0.38
+	var half_open := opening_half_width(direction)
 	var outer_edge := X_SPAN * 0.5 - absf(p.x) if side else Z_SPAN * 0.5 - absf(p.z)
-	var frame := p + outward * (outer_edge - depth * 0.5)
-	var cap_y := WALL_HEIGHT + 0.075
-	var stone_color := WALL_CAP.lerp(BRICK, 0.10)
-	_stone_block(frame + Vector3.UP * cap_y, Vector3(half_open * 2, 0.175, depth), stone_color, 0.034, frame_group, turn)
-	var inner_depth := outer_edge - depth + 0.42
+	var cap_front := -0.23
+	var cap_back := outer_edge - GATE_TRACK
+	var beam_front := 0.16 if side else cap_front
+	var cap_depth := cap_back - beam_front
+	var cap := axis + outward * (cap_back + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
+	var stone_color := WALL_CAP.lerp(BRICK, 0.17)
+	_stone_block(cap, Vector3(half_open * 2, CAP_THICKNESS, cap_depth), stone_color, 0.028, frame_group, turn)
+	var post_height := CAP_CENTER - CAP_THICKNESS * 0.5
 	for hand: float in [-1.0, 1.0]:
-		var rail := p + basis * Vector3(hand * (half_open - 0.074), 0, 0)
-		var post := rail + outward * ((outer_edge - 0.42) * 0.5)
-		var post_height := cap_y - 0.0875
-		_box(post + Vector3.UP * post_height * 0.5, Vector3(0.148, post_height, outer_edge + 0.42), BRICK.darkened(0.20), frame_group, turn)
-		var cheek := rail + outward * ((outer_edge - depth - 0.42) * 0.5)
-		_stone_block(cheek + Vector3.UP * cap_y, Vector3(0.148, 0.175, inner_depth), stone_color, 0.025, frame_group, turn)
+		var jamb := axis + basis * Vector3(hand * (half_open - GATE_JAMB * 0.5), 0, 0)
+		_box(jamb + outward * (cap_back + cap_front) * 0.5 + Vector3.UP * post_height * 0.5, Vector3(GATE_JAMB, post_height, cap_back - cap_front), BRICK.darkened(0.12), frame_group, turn)
+		if side:
+			# A cutaway across the middle reveals the edge-on gate to the overhead camera.
+			var seat_width := GATE_JAMB + 0.16
+			var seat := axis + basis * Vector3(hand * (half_open - seat_width * 0.5), CAP_CENTER, 0)
+			_stone_block(seat + outward * (cap_front + beam_front) * 0.5, Vector3(seat_width, CAP_THICKNESS, beam_front - cap_front), stone_color, 0.022, frame_group, turn)
+		var cheek := axis + basis * Vector3(hand * (half_open - GATE_JAMB - 0.055), post_height * 0.5, 0)
+		for face: float in [-1.0, 1.0]:
+			_box(cheek + outward * face * 0.241, Vector3(0.11, post_height, 0.06), METAL, frame_group, turn, Finish.IRON)
+		for collar_y: float in [0.24, post_height - 0.19]:
+			_box(jamb + outward * (cap_front - 0.024) + Vector3.UP * collar_y, Vector3(GATE_JAMB, 0.11, 0.048), BRASS.darkened(0.25), frame_group, turn, Finish.BRONZE)
 	# A stone landing beyond the north throat is visible through the open frame.
 	if not side and p.z < 0:
 		var landing := Vector3(0, -0.075, -Z_SPAN * 0.5 - 0.53)
@@ -433,7 +465,7 @@ func _wall(rect: Rect2, corner := false) -> void:
 				_stone_block(cap, block_size, tone, bevel, "", turn)
 
 	if corner:
-		if not growth_key.is_empty():
+		if not growth_key.is_empty() and _moisture(center) > 0.28:
 			wear.seed = hash([growth_key, rect, "corner moss"])
 			_corner_moss(center, size, wear)
 		return
@@ -444,42 +476,96 @@ func _wall(rect: Rect2, corner := false) -> void:
 		_wall_buttress(center, basis, turn, length * 0.11, inward * (across * 0.5 - 0.20), height, wall_tint)
 
 
-	# Ivy grows out of a few joints along the inner lip, clear of the gates.
 	if growth_key.is_empty():
 		return
+	var moisture := _moisture(center)
+	if moisture < 0.30:
+		return
 	wear.seed = hash([growth_key, rect])
-	if wear.randf() < 0.52:
-		var margin := minf(1.1, length * 0.26)
-		var anchor := wear.randf_range(-length * 0.5 + margin, length * 0.5 - margin)
-		if has_niche and absf(anchor - niche_x) < niche_half + 0.85:
-			return
+	# Start on a real brick joint toward the damp corner, away from the door shoulders.
+	var corner_dir := Vector3(signf(center.x) * X_SPAN * 0.5, 0, signf(center.z) * Z_SPAN * 0.5) - center
+	var hand := signf((basis.inverse() * corner_dir).x)
+	var anchor := hand * (length * 0.5 - run * (1.0 if length < 4.0 else 1.5))
+	anchor = clampf(roundf((anchor + length * 0.5) / run) * run - length * 0.5, -length * 0.5 + 0.72, length * 0.5 - 0.72)
+	if has_niche and absf(anchor - niche_x) < niche_half + 0.60:
+		return
+	_moss_ledge(center, basis, turn, anchor, inward, across, length, moisture, wear)
+	if wear.randf() < moisture:
 		_wall_ivy(center, basis, turn, anchor, inward, across, height, length, wear)
 
 
+func _moisture(center: Vector3) -> float:
+	var pattern := absi(hash(growth_key))
+	var wet := Vector2(1 if pattern % 2 == 0 else -1, 1 if pattern % 4 < 2 else -1)
+	var corner := Vector2(signf(center.x), signf(center.z))
+	if corner == wet:
+		return 1.0
+	var same_bank := corner.x == wet.x if pattern % 8 < 4 else corner.y == wet.y
+	if same_bank:
+		return 0.46
+	return 0.15
+
+
 func _corner_moss(center: Vector3, size: Vector2, wear: RandomNumberGenerator) -> void:
-	const CELL := 0.095
-	var side := Vector2(-signf(center.x), -signf(center.z))
-	var offset := Vector2(wear.randf_range(-0.26, 0.69), wear.randf_range(-0.25, 0.66))
-	var anchor := side * offset
-	var scale_x := wear.randf_range(2.7, 6.2)
-	var scale_z := wear.randf_range(0.9, 2.6)
-	var spread := Vector2(scale_x, scale_z)
-	var slant := wear.randf_range(-0.66, 0.66)
-	var fleck := Vector2(wear.randf_range(-5.8, 5.8), wear.randf_range(-3.2, 3.2))
-	var moss := Color("#394a37")
-	for z in range(-6, 7):
-		for x in range(-8, 9):
-			var cell := Vector2(x, z)
-			var stem := Vector2(cell.x, cell.y - slant * cell.x)
-			var dist := minf((stem / spread).length(), ((cell - fleck) / Vector2(1.7, 1.15)).length())
-			var t := wear.randf()
-			var at := anchor + cell * CELL
-			if dist > 0.66 + 0.72 * t or absf(at.x) + CELL * 0.5 >= size.x * 0.5 or absf(at.y) + CELL * 0.5 >= size.y * 0.5:
+	const CELL := 0.09
+	var wet := _moisture(center)
+	var length := size.x * wear.randf_range(0.68, 0.91) * wet
+	var half_width := wear.randf_range(0.20, 0.31) * wet
+	# The two rows of coping stones meet on the centreline; the cushion follows that seam.
+	var start_x := wear.randf_range(-0.14, 0.14)
+	var phase := wear.randf_range(0.0, TAU)
+	var cross_joint := -start_x
+	var reach_z := 0.14 + 0.32 * wet
+	for col in range(-12, 13):
+		var x := col * CELL
+		var end_fade := maxf(0.0, 1.0 - pow(absf(x) / length * 2.0, 2))
+		var width := half_width * end_fade * (0.78 + 0.23 * sin(col * 0.59 + phase))
+		for row in range(-5, 6):
+			var z := row * CELL
+			var distance := absf(z - 0.052 * sin(col * 0.46 + phase))
+			var across_joint := maxf(0.0, 1.0 - absf(x - cross_joint) / (0.09 + 0.12 * wet)) * clampf(1.0 - z / reach_z, 0.0, 1.0) if z > 0.0 else 0.0
+			var cushion := maxf(clampf(1.0 - distance / maxf(0.01, width), 0, 1) * end_fade, across_joint)
+			if cushion < wear.randf_range(0.035, 0.20) or absf(start_x + x) + CELL * 0.5 > size.x * 0.5:
 				continue
-			var level := 0.022 + 0.045 * clampf(1.0 - dist, 0, 1) + wear.randf_range(0.0, 0.038)
-			var top := center + Vector3(at.x, WALL_HEIGHT + 0.160 + level * 0.5, at.y)
-			var tone := moss.lerp(Color("#78815a"), 0.10 + t * 0.56).darkened(0.08 * dist)
-			_box(top, Vector3(CELL, level, CELL), tone, "ArchitectureWallsMoss")
+			var h := 0.023 + 0.075 * cushion + wear.randf_range(0.0, 0.021)
+			var pos := center + Vector3(start_x + x, WALL_HEIGHT + 0.162 + h * 0.5, z)
+			_box(pos, Vector3(CELL, h, CELL), Color("#374732").lerp(Color("#74805a"), cushion * 0.71), "ArchitectureWallsMoss")
+
+
+func _moss_ledge(center: Vector3, basis: Basis, turn: float, anchor: float, inward: float, across: float, length: float, wet: float, wear: RandomNumberGenerator) -> void:
+	var reach := wear.randf_range(0.72, 1.30) * wet
+	var course := WALL_HEIGHT / roundi(WALL_HEIGHT / 0.30)
+	# One connected cushion rounds the lip. Vary its depth along the seam;
+	# the upright fringe remains on the exposed stone, just under the coping.
+	var phase := wear.randf_range(0.0, TAU)
+	for col in range(-14, 15):
+		var x := col * 0.10
+		var envelope := maxf(0.0, 1.0 - pow(absf(x) / reach, 1.65))
+		var pad := envelope * (0.69 + 0.24 * sin(phase + x * 4.2))
+		if pad < 0.09 or absf(anchor + x) > length * 0.5 - 0.36:
+			continue
+		var rock_edge := across * 0.5 + 0.064
+		var tone := Color("#364b37").lerp(Color("#737e4f"), pad * 0.78)
+		var cells := maxi(1, roundi(pad * wet * 4.8))
+		for row in cells:
+			var along := rock_edge - 0.045 - row * 0.09
+			var bed := WALL_HEIGHT + (0.199 if along >= across * 0.5 - 0.145 else 0.161)
+			var h := 0.020 + pad * (0.038 + 0.015 * sin(col * 1.41 + row))
+			var top := center + basis * Vector3(anchor + x, bed + h * 0.5, inward * along)
+			_box(top, Vector3(0.10, h, 0.09), tone, "ArchitectureWallsMoss", turn)
+		var fringe := 0.04 + pad * (0.09 + 0.055 * cos(phase + x * 8.0))
+		var rim := center + basis * Vector3(anchor + x, WALL_HEIGHT + 0.202 - fringe * 0.5, inward * (rock_edge + 0.013))
+		_box(rim, Vector3(0.10, fringe, 0.032), tone.darkened(0.12), "ArchitectureWallsMoss", turn)
+	for row in 2:
+		for col in range(-10, 11):
+			var x := col * 0.105
+			var spread := 1.0 - absf(x) / reach
+			if absf(anchor + x) > length * 0.5 - 0.4 or spread < 0.04 or wear.randf() > spread + 0.40:
+				continue
+			var thickness := wear.randf_range(0.032, 0.092) * (0.5 + spread)
+			var y := course * (1 + row) + 0.024
+			var point := center + basis * Vector3(anchor + x, y, inward * (across * 0.5 - 0.005))
+			_box(point, Vector3(0.105, thickness, 0.085), Color("#344737").lerp(Color("#66704c"), spread * 0.64), "ArchitectureWallsMoss", turn)
 
 
 func _chipped_coping(cap: Vector3, size: Vector3, tone: Color, turn: float, bevel: float, inward: float) -> void:
@@ -509,7 +595,7 @@ func _wall_ivy(center: Vector3, basis: Basis, turn: float, anchor: float, inward
 		var shoulder := center + basis * Vector3(branch_x, top + 0.012, inward * (lip - 0.07))
 		_box(shoulder, Vector3(0.075, 0.060, 0.41), stem, "ArchitectureWallsIvy", turn)
 		var root := center + basis * Vector3(branch_x, top, inward * (lip + 0.046))
-		var links := wear.randi_range(2, 6) if branch == 0 else wear.randi_range(1, 4)
+		var links := wear.randi_range(5, 7) if branch == 0 else wear.randi_range(1, 3)
 		var drift := direction if wear.randf() < 0.60 else -direction
 		for step in links:
 			var fall := wear.randf_range(0.12, 0.24)
@@ -522,9 +608,9 @@ func _wall_ivy(center: Vector3, basis: Basis, turn: float, anchor: float, inward
 			root += basis * Vector3(drift * run, 0, 0)
 			if wear.randf() < 0.34:
 				drift *= -1.0
-			if wear.randf() < 0.75:
+			if step == links - 1 or wear.randf() < 0.82 - float(step) * 0.075:
 				var hand := 1.0 if wear.randf() < 0.5 else -1.0
-				var width := wear.randf_range(0.13, 0.31)
+				var width := wear.randf_range(0.16, 0.30) * lerpf(1.0, 0.58, float(step) / links)
 				var tip := root + basis * Vector3(hand * width * 0.42, 0.024, inward * 0.054)
 				_box(tip, Vector3(width, 0.11, 0.107), shade.lerp(leaf, wear.randf_range(0.12, 0.77)), "ArchitectureWallsIvy", turn)
 				_box(tip + basis * Vector3(hand * width * 0.17, 0.077, 0), Vector3(width * 0.55, 0.044, 0.070), leaf, "ArchitectureWallsIvy", turn)

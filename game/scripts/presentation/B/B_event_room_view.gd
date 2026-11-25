@@ -334,14 +334,15 @@ func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInst
 	return obj
 
 func _build_gates() -> void:
-	for side in ["north", "east", "south", "west"]:
+	var directions := {"north": Vector2i.UP, "east": Vector2i.RIGHT, "south": Vector2i.DOWN, "west": Vector2i.LEFT}
+	for side: String in directions:
+		var direction: Vector2i = directions[side]
 		var gate := VoxelArt.new().build_gate()
 		gate.name = "B_Gate_" + side
-		gate.scale.x = 1.39
 		room_world.add_child(gate)
-		gate.position = {"north": Vector3(0, 0, -6.45), "south": Vector3(0, 0, 6.45), "east": Vector3(8.4, 0, 0), "west": Vector3(-8.4, 0, 0)}[side]
-		if side in ["east", "west"]:
-			gate.rotation.y = PI / 2
+		gate.rotation.y = PI * 0.5 if direction.x != 0 else 0.0
+		gate.scale = VoxelArt.gate_scale(direction)
+		gate.position = VoxelArt.gate_center(direction)
 		gate.position.y = -1.9
 		gate.hide()
 		gates[side] = gate
