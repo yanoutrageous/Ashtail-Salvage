@@ -410,6 +410,7 @@ func _rebuild_world_projection() -> void:
 		if not event_room.has("model_path"):
 			event_room = _voxel_room_entry(runtime_objects)
 		event_room["polished"] = true
+		event_room["growth_key"] = room_key + "/" + str(event_room.get("code", room_type))
 	if event_room.has("model_path") or bool(event_room.get("generated", false)):
 		if StringName(latest_room_snapshot.get("mode", &"")) != &"tutorial":
 			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot), room_key)
@@ -538,7 +539,7 @@ func _sync_door_visuals() -> void:
 			surroundings.z_index = -110
 			add_child(surroundings)
 		surroundings.show()
-		surroundings.sync(door_projections)
+		surroundings.sync(latest_room_snapshot, WorldObjectProjectionScript.known_public_cells(latest_room_snapshot))
 		b_room_view.call("apply_snapshot", latest_room_snapshot, door_projections)
 		b_room_view.call("update_player_depth", last_player_local_pos)
 	for projection_id in door_visuals.keys():

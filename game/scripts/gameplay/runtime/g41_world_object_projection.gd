@@ -306,7 +306,7 @@ static func _door_projections(snapshot: Dictionary, combat_snapshot: Dictionary,
 	var run_start_config: Dictionary = snapshot.get("run_start_config", {})
 	var requires_revealed := bool(snapshot.get("move_requires_revealed", run_start_config.get("move_requires_revealed", false)))
 	var combat_restricted := bool(combat_snapshot.get("door_locked", false))
-	var known_cells := _known_public_cells(snapshot)
+	var known_cells := known_public_cells(snapshot)
 	for door in DOOR_DIRECTIONS:
 		var direction: Vector2i = door.get("delta", Vector2i.ZERO)
 		var target := room_pos + direction
@@ -454,7 +454,7 @@ static func _descriptor(values: Dictionary) -> Dictionary:
 	return PresentationDescriptor.build(values)
 
 
-static func _known_public_cells(snapshot: Dictionary) -> Array:
+static func known_public_cells(snapshot: Dictionary) -> Array:
 	var run_map_snapshot: Dictionary = snapshot.get("run_map_snapshot", {})
 	var known_map: Dictionary = run_map_snapshot.get("KnownMap", snapshot.get("KnownMap", {}))
 	var cells: Variant = known_map.get("public_cells", [])

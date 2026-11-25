@@ -41,6 +41,7 @@ var _lid_progress := 0.0
 
 func configure(next_entry: Dictionary) -> void:
 	var next_key := String(next_entry.get("geometry_key", next_entry.get("model_path", "")))
+	next_key += "/" + str(next_entry.get("growth_key", ""))
 	if not (next_entry.get("breakables", []) as Array).is_empty():
 		next_key += "/with_furniture"
 	if _geometry_key == next_key and _ready_model:
@@ -98,7 +99,7 @@ func _build() -> void:
 	if entry.get("generated", false):
 		model = _build_generated()
 	else:
-		room_world.add_child(VoxelArt.new().build_event_shell(Layout.ROOM_WALL_RECTS))
+		room_world.add_child(VoxelArt.new().build_event_shell(Layout.ROOM_WALL_RECTS, str(entry.get("growth_key", _geometry_key))))
 		model = (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
 		_place_authored_furniture()
 	room_world.add_child(model)
@@ -235,7 +236,7 @@ func _index_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh := node as MeshInstance3D
 		var id := String(mesh.get_meta("B_assembly", ""))
-		mesh.layers = (1 | WALL_LIGHT_LAYER) if id == "ArchitectureWalls" else 1
+		mesh.layers = (1 | WALL_LIGHT_LAYER) if id.begins_with("ArchitectureWalls") else 1
 		if id.is_empty():
 			for unit: Dictionary in entry.units:
 				if String(mesh.name).contains("__" + String(unit.id) + "_"):
