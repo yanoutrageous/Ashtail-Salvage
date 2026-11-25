@@ -347,7 +347,7 @@ static func _door_projections(snapshot: Dictionary, combat_snapshot: Dictionary,
 			"depth_key": &"world.door",
 			"enabled": false,
 			"prompt_text": "",
-			"payload": {"direction": direction, "target": target, "orientation": orientation, "inner_floor_rect": room_floor_interior()},
+			"payload": {"direction": direction, "target": target, "explored": bool(public_cell.get("explored", false)), "orientation": orientation, "inner_floor_rect": room_floor_interior()},
 		}))
 	return result
 

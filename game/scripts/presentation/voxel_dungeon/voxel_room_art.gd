@@ -316,6 +316,13 @@ func _threshold(p: Vector3, side: bool) -> void:
 		_box(p + basis * Vector3(0, 0.142, offset), Vector3(3.08, 0.043, 0.13), METAL, "", turn, Finish.IRON)
 		for plate in range(-2, 3):
 			_box(p + basis * Vector3(plate * 0.43, 0.168, offset), Vector3(0.11, 0.014, 0.092), BRASS.darkened(0.18), "", turn, Finish.BRONZE)
+	# Cut away the high crossbeam on side doors in the fixed overhead view.
+	if side:
+		for offset in [-1.65, 1.65]:
+			var jamb := p + basis * Vector3(offset, 0, 0)
+			_stone_block(jamb + Vector3.UP * 0.53, Vector3(0.38, 1.06, 0.70), BRICK, 0.035, "ArchitectureWalls", turn)
+			_stone_block(jamb + Vector3.UP * 1.12, Vector3(0.46, 0.16, 0.78), WALL_CAP, 0.045, "ArchitectureWalls", turn)
+		return
 	# A lintel joins the wall ends above the gate, leaving the walkable floor open.
 	var outer := signf(p.x if side else p.z)
 	var lintel := p + (Vector3.RIGHT if side else Vector3.BACK) * outer * 0.24 + Vector3.UP * 1.91

@@ -75,6 +75,7 @@ const SOUTH_DOOR_PROMPT_LIFT_LOCAL := 0.13
 # back onto the authoritative attack origin instead of subtracting it twice.
 const SLASH_SOURCE_ORIGIN := Vector2(131.0, 95.0)
 const SLASH_SOURCE_RADIUS := 113.0
+var surroundings: Node2D
 var b_room_view: Node2D
 var combat_art: Node2D
 var room_key: String = ""
@@ -120,6 +121,11 @@ func _ready() -> void:
 
 
 func configure_room(snapshot: Dictionary) -> void:
+	if surroundings != null and not latest_room_snapshot.is_empty():
+		if snapshot.get("run_id") != latest_room_snapshot.get("run_id"):
+			surroundings.memory.clear()
+		elif snapshot.get("position") != latest_room_snapshot.get("position"):
+			surroundings.remember(latest_room_snapshot.position, b_room_view)
 	latest_room_snapshot = snapshot.duplicate(true)
 	var pos: Vector2i = snapshot.get("position", Vector2i.ZERO)
 	if not last_room_entry_result.is_empty() and Vector2i(last_room_entry_result.get("position", pos)) != pos:
@@ -342,6 +348,9 @@ func sync_breakable_props(hp_by_id: Dictionary, impacted_ids: Array = []) -> voi
 
 
 func clear_runtime() -> void:
+	if surroundings != null:
+		surroundings.memory.clear()
+		surroundings.hide()
 	_sync_event_room_art({})
 	latest_room_snapshot.clear()
 	combat_snapshot.clear()
@@ -459,6 +468,8 @@ func _sync_event_room_art(room: Dictionary) -> void:
 		return
 	if b_room_view != null:
 		b_room_view.call("deactivate")
+	if surroundings != null:
+		surroundings.hide()
 	var layer := get_node_or_null("EventRoomDecor") as Node2D
 	if room.is_empty():
 		if layer != null:
@@ -521,6 +532,13 @@ func _sync_door_visuals() -> void:
 		if b_room_view != null and b_room_view.visible:
 			sprite.hide()
 	if b_room_view != null and b_room_view.visible:
+		if surroundings == null:
+			surroundings = preload("res://scripts/presentation/voxel_dungeon/connected_room_surroundings.gd").new()
+			surroundings.name = "ConnectedRooms"
+			surroundings.z_index = -110
+			add_child(surroundings)
+		surroundings.show()
+		surroundings.sync(door_projections)
 		b_room_view.call("apply_snapshot", latest_room_snapshot, door_projections)
 		b_room_view.call("update_player_depth", last_player_local_pos)
 	for projection_id in door_visuals.keys():
