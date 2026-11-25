@@ -81,17 +81,17 @@
 		"res://scripts/gameplay/combat/g41_combat_simulation.gd": "425719ef3cce18cec5a477b77c008d393af80d8d471c617eedd9688909e0e3b7",
 		"res://scripts/gameplay/combat/g41_deterministic_rng.gd": "d20648c1d457b8d7bbbead2f08e377fe45a3b4dc4b0d8f7114047b6eecb67616",
 		"res://scripts/gameplay/combat/g41_monster_catalog.gd": "9a019ce5c7c41818578fee2acafaf0390488e0ee4b8686c451b03bdbc4c41936",
-		"res://scripts/gameplay/combat/voxel_breakable_combat.gd": "c6b3ab195d16a74df8cc495d19dd6b3457594fddda8924b0c0e726df3a23b3fc",
+		"res://scripts/gameplay/combat/voxel_breakable_combat.gd": "64122ec5177eb6089f76c4bc10182008144e3a08be5fc73e4d57920ee0a3cc7f",
 		"res://scripts/gameplay/combat/z1_monster_catalog.gd": "6d635a94ad3e7fc1a41394ab7abc5e2f11337e8a7ff548aed2cf60c5353b8746",
 		"res://scripts/gameplay/player/player_controller.gd": "a2b78626aee7905a0216f07e9ee4ff8d1a8e5bb81198960022c5739ae6271a64"
 	},
 	"digest_policy": "utf8_lf_authoring_paths_excluded_v1",
-	"generated_utc": "2026-11-20T11:47:59Z",
+	"generated_utc": "2026-11-25T03:06:47Z",
 	"godot_version": "4.6.3-stable (official)",
 	"schema_version": 1.0,
 	"script_export_mode": 2.0,
-	"source_fingerprint": "9e0d5e70cde2201cf5edc29cbdebac1e6e39b4108038696fc28b74c475ec581d",
-	"source_revision": "5a6e1dcf1244c081abe068b7f07551f3b8307983",
+	"source_fingerprint": "4fdfa22300f119e230113c5d2f907bf1d6d0245889b159760c4101a1d7e72fe8",
+	"source_revision": "58cdf1f8ccc4888910e5ae7aa89329fbaacd0804",
 	"source_sha256": {
 		"res://scripts/core/command/command_bus.gd": "b99b4a4f934bbe714247eb2a3a8d77b2f53a1fa9438afc6ebd29a402dacf73ed",
 		"res://scripts/core/command/command_result.gd": "60167b05dd67186711bc54d94b17e74d557224931d2e18e2358c3101b1f0707c",
@@ -174,7 +174,7 @@
 		"res://scripts/gameplay/combat/g41_combat_simulation.gd": "b53e2a669c7b3ae521adbedb1a3b42003aaae3afa54e000b4fd3af10ce59e362",
 		"res://scripts/gameplay/combat/g41_deterministic_rng.gd": "37e0cc2486008c13000f4000becbc6735fefd2b4ccb5ee321ca055d175d286d5",
 		"res://scripts/gameplay/combat/g41_monster_catalog.gd": "a9390767183d8963a57ca3114148ac91264ad7313dffc2c6fa141168b48c1b22",
-		"res://scripts/gameplay/combat/voxel_breakable_combat.gd": "9ca40822ae326b8b8e07456b882596468b62e27c0a75bb38ef685d127932627c",
+		"res://scripts/gameplay/combat/voxel_breakable_combat.gd": "b1f34aff663579206d6703f2426464fff571b580f8ea0d17213a1757a88f7b5a",
 		"res://scripts/gameplay/combat/z1_monster_catalog.gd": "0be4396defd0ad4c5a02641efb7ef98a449649cbfa4c1bae8455dc374ede382e",
 		"res://scripts/gameplay/player/player_controller.gd": "debd812d9e7db90009a998726c34934e004da972f4b756445000250a67d0ffed"
 	}

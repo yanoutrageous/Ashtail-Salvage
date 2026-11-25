@@ -50,4 +50,9 @@ static func _load_rooms() -> void:
 			if entry.has(key):
 				var value: Array = entry[key]
 				converted[key] = Vector2(float(value[0]), float(value[1]))
+		var body: Rect2 = converted.body_rect
+		var offset := Vector2(0.50, 0.50) - body.get_center()
+		converted.body_rect = Rect2(body.position + offset, body.size)
+		for key in ["station_anchor", "interaction_pos", "loot_anchor"]:
+			converted[key] += offset
 		_rooms[StringName(event_type)] = converted

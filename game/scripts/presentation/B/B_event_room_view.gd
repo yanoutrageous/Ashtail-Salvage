@@ -95,16 +95,15 @@ func _build() -> void:
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
 	room_world.add_child(environment)
-	if not String(entry.get("shell_path", "")).is_empty():
-		var shell := (load(String(entry.shell_path)) as PackedScene).instantiate() as Node3D
-		room_world.add_child(shell)
-		_finish_authored_walls(shell)
-	model = _build_generated() if entry.get("generated", false) else (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
+	if entry.get("generated", false):
+		model = _build_generated()
+	else:
+		room_world.add_child(VoxelArt.new().build_event_shell(Layout.ROOM_WALL_RECTS))
+		model = (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
+		_place_authored_furniture()
 	room_world.add_child(model)
 	if String(entry.get("code", "")) == "B26":
 		_replace_offering_altar()
-	if entry.get("polished", false) and not entry.get("generated", false):
-		room_world.add_child(VoxelArt.new().dress_existing(_geometry_key))
 	var props: Array = entry.get("breakables", [])
 	if not props.is_empty():
 		room_world.add_child(VoxelArt.new().build_breakables(props))
@@ -125,6 +124,10 @@ func _build() -> void:
 	front_camera = _camera(front_viewport, 2)
 	back_sprite = _sprite(viewport, -100)
 	front_sprite = _sprite(front_viewport, 650)
+	var occlusion := ShaderMaterial.new()
+	occlusion.shader = preload("res://scripts/presentation/B/B_foreground_color.gdshader")
+	occlusion.set_shader_parameter("lit_room", viewport.get_texture())
+	front_sprite.material = occlusion
 	_build_lights()
 	_build_gates()
 	status_lamp = _box(room_world, Vector3.ZERO, Vector3(0.12, 0.12, 0.12), Color("86b7a2"))
@@ -137,17 +140,19 @@ func _build() -> void:
 	show()
 
 
-func _finish_authored_walls(shell: Node3D) -> void:
-	var material := ShaderMaterial.new()
-	material.shader = VoxelArt.STONE_SHADER
-	material.set_shader_parameter("authored_wall", true)
-	for mesh: MeshInstance3D in shell.find_children("*", "MeshInstance3D", true, false):
-		var label := String(mesh.name)
-		var is_portal := label.begins_with("Portal_") and not label.ends_with("FlushThreshold")
-		if label.begins_with("Wall_") or label.begins_with("Corner_") or is_portal:
-			mesh.set_meta("B_wall_stone", true)
-			for surface in mesh.mesh.get_surface_count():
-				mesh.set_surface_override_material(surface, material)
+func _place_authored_furniture() -> void:
+	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var id := String(mesh.get_meta("B_assembly", ""))
+		var belongs_to_unit := false
+		for unit: Dictionary in entry.units:
+			if id == unit.id or String(mesh.name).contains("__" + String(unit.id) + "_"):
+				var offset: Array = unit.get("model_offset", [0.0, 0.0])
+				mesh.position += Vector3(offset[0] * X_SPAN, 0.0, offset[1] * Y_SPAN)
+				belongs_to_unit = true
+				break
+		# The shortcut asset also embeds its original shell.
+		if not belongs_to_unit:
+			mesh.hide()
 
 
 func _replace_offering_altar() -> void:
@@ -216,7 +221,7 @@ func _index_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh := node as MeshInstance3D
 		var id := String(mesh.get_meta("B_assembly", ""))
-		mesh.layers = (1 | WALL_LIGHT_LAYER) if mesh.has_meta("B_wall_stone") or id == "ArchitectureWalls" else 1
+		mesh.layers = (1 | WALL_LIGHT_LAYER) if id == "ArchitectureWalls" else 1
 		if id.is_empty():
 			for unit: Dictionary in entry.units:
 				if String(mesh.name).contains("__" + String(unit.id) + "_"):
@@ -249,7 +254,7 @@ func _build_lights() -> void:
 	masonry.name = "MasonryFill"
 	masonry.rotation_degrees = Vector3(-49.0, -37.0, 0.0)
 	masonry.light_color = Color("#b9cbd1")
-	masonry.light_energy = 0.24 if entry.get("generated", false) else 0.40
+	masonry.light_energy = 0.24
 	masonry.light_cull_mask = WALL_LIGHT_LAYER
 	room_world.add_child(masonry)
 	if entry.get("props", []).size() > 2 and entry.get("generated", false) and entry.get("room_type") in [&"Normal", &"Spawn", &"Chest"]:
@@ -260,11 +265,38 @@ func _build_lights() -> void:
 		lamp.light_energy = 0.72
 		lamp.omni_range = 5.2
 		room_world.add_child(lamp)
+	var kind := StringName(entry.get("room_type", &""))
 	var work := OmniLight3D.new()
+	work.name = "RoomSubjectLight"
 	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
 	work.light_color = Color(1.0, 0.76, 0.44)
-	work.light_energy = 0.55 if entry.get("room_type") in [&"Chest", &"Event", &"Exit"] else (0.38 if entry.get("room_type") in [&"Normal", &"Spawn"] else 0.0)
-	work.omni_range = 6.0
+	match kind:
+		&"Mine":
+			work.position = local_to_model(entry.interaction_pos) + Vector3(-0.45, 3.0, 0.65)
+			work.light_color = Color("#ffd59a")
+			work.light_energy = 1.36
+		&"Normal", &"Spawn":
+			work.position = local_to_model(Vector2(0.50, 0.5)) + Vector3(-0.7, 4.0, 0.6)
+			work.light_color = Color("#ecdac2")
+			work.light_energy = 0.86
+		&"Monster", &"Combat", &"Boss":
+			work.light_color = Color("#e5bad2") if kind == &"Boss" else Color("#ddd7c8")
+			work.light_energy = 0.64
+		&"Event":
+			work.position = local_to_model(Vector2(0.5, 0.5)) + Vector3(-0.45, 3.65, 0.55)
+			# The spot identifies the service while the door candles keep their shared color.
+			match String(entry.get("id", entry.get("event_type", ""))).trim_prefix("B_"):
+				"relief", "first_aid": work.light_color = Color("#b4e5cd")
+				"recon", "information", "seal": work.light_color = Color("#b8d9f0")
+				"altar", "dice": work.light_color = Color("#dbbce5")
+				"mechanism", "trap", "coil": work.light_color = Color("#ffbe82")
+			work.light_energy = 0.78
+		&"Exit":
+			work.light_color = Color("#b0e4ce")
+			work.light_energy = 0.78
+		_:
+			work.light_energy = 0.70
+	work.omni_range = 7.0
 	work.shadow_enabled = true
 	room_world.add_child(work)
 
@@ -326,7 +358,7 @@ func _apply_voxel_prop_state(snapshot: Dictionary) -> bool:
 			_lid_state = next_state
 	elif entry.get("room_type") == &"Mine":
 		var armed := not bool(snapshot.get("current_room_detail", {}).get("triggered", false))
-		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_teeth", []):
+		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_cover", []):
 			if part.visible != armed:
 				part.visible = armed
 				changed = true

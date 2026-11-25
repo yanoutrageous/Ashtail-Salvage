@@ -403,7 +403,7 @@ func _rebuild_world_projection() -> void:
 		event_room["polished"] = true
 	if event_room.has("model_path") or bool(event_room.get("generated", false)):
 		if StringName(latest_room_snapshot.get("mode", &"")) != &"tutorial":
-			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot))
+			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot), room_key)
 		world_projection["event_room"] = event_room
 	_sync_event_room_art(world_projection.get("event_room", {}))
 	door_projections = _dictionary_array(world_projection.get("doors", []))
@@ -425,7 +425,7 @@ func _voxel_room_entry(objects: Array[Dictionary]) -> Dictionary:
 	var walls := WorldObjectProjectionScript.ROOM_WALL_RECTS
 	var props: Array[Rect2] = []
 	var units: Array[Dictionary] = []
-	for rect: Rect2 in WorldObjectProjectionScript.room_solid_rects(room_type, event_type, true):
+	for rect: Rect2 in WorldObjectProjectionScript.room_solid_rects(room_type, event_type, true, room_key):
 		if rect in walls:
 			continue
 		units.append({"id": "fixture_%d" % props.size(), "ground_y": rect.end.y})
@@ -1520,7 +1520,7 @@ func _rebuild_obstacle_projection() -> void:
 		var b_room: Dictionary = world_projection.get("event_room", {})
 		var generated_voxel := _uses_generated_room()
 		var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
-		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel)
+		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel, room_key)
 		if generated_voxel and room_type == &"Chest":
 			rects.append(Rect2(b_room.get("object_rect", Rect2())))
 		var resolved := bool(b_room_view.call("debug_snapshot").get("model_loaded", false))

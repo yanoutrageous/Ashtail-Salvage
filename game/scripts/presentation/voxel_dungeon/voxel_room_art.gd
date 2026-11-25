@@ -43,11 +43,7 @@ func build(entry: Dictionary) -> Node3D:
 	}
 	var kind := String(entry["room_type"])
 	stone = Color(palette.get(kind, "#626b66"))
-	_add_dungeon_floor(scene)
-	default_group = "ArchitectureWalls"
-	for rect: Rect2 in entry["wall_rects"]:
-		_wall(rect)
-	default_group = ""
+	_build_shell(scene, entry.wall_rects)
 	for index in entry["props"].size():
 		var prop: Rect2 = entry["props"][index]
 		match kind:
@@ -72,21 +68,28 @@ func build(entry: Dictionary) -> Node3D:
 		"Event":
 			_floor_seal(station, TEAL, 2.85)
 	_room_inlay(kind, station)
-	_frame_dressing()
 	_finish(scene)
 	return scene
 
 
-func dress_existing(_key: String) -> Node3D:
+func build_event_shell(walls: Array) -> Node3D:
+	rng.seed = hash("event masonry")
 	boxes = BoxMesh.new().get_mesh_arrays()
-	var dressing := Node3D.new()
-	dressing.name = "VoxelDressing"
-	# Small hardware follows the shared GLB thresholds, clear of event furniture.
-	for side in [-1.0, 1.0]:
-		_authored_threshold(Vector3(0, 0, side * 6.40), 0.0)
-		_authored_threshold(Vector3(side * 8.40, 0, 0), PI * 0.5)
-	_finish(dressing)
-	return dressing
+	stone = Color("#626b66")
+	var shell := Node3D.new()
+	shell.name = "VoxelArchitecture"
+	_build_shell(shell, walls)
+	_finish(shell)
+	return shell
+
+
+func _build_shell(scene: Node3D, walls: Array) -> void:
+	_add_dungeon_floor(scene)
+	default_group = "ArchitectureWalls"
+	for rect: Rect2 in walls:
+		_wall(rect)
+	default_group = ""
+	_frame_dressing()
 
 
 func build_offering_altar(rect: Rect2) -> Node3D:
@@ -237,14 +240,6 @@ func _breakable_fragments(rect: Rect2, id: String, kind: StringName) -> void:
 		_box(p + Vector3(0.22 * span, 0.075, 0.08), Vector3(0.12, 0.07, span * 0.5),
 			METAL.lightened(0.10), id + "_debris", 0.44, Finish.IRON)
 
-
-func _authored_threshold(p: Vector3, yaw: float) -> void:
-	var basis := Basis(Vector3.UP, yaw)
-	for edge in [-1.01, 1.01]:
-		var socket := p + basis * Vector3(edge, 0.076, 0)
-		_box(socket, Vector3(0.15, 0.030, 0.33), METAL.darkened(0.13), "", yaw, Finish.IRON)
-		for fastener in [-0.10, 0.10]:
-			_box(socket + basis * Vector3(0, 0.020, fastener), Vector3(0.055, 0.015, 0.055), BRASS.darkened(0.13), "", yaw, Finish.BRONZE)
 
 func build_gate() -> Node3D:
 	var gate := Node3D.new()
@@ -484,14 +479,6 @@ func _room_inlay(kind: String, anchor: Vector2) -> void:
 					var mark := p + Vector3(direction * (1.16 + 0.15 * (i % 2)), 0, 0.98 + i * 0.48)
 					_box(mark, Vector3(0.13, 0.023, 0.32), tint)
 					_box(mark + Vector3(direction * 0.28, 0.012, 0.14), Vector3(0.093, 0.021, 0.091), tint.darkened(0.30))
-		"Mine":
-			var p := _point(anchor, 0.085)
-			for ray in 6:
-				var angle := ray * TAU / 6.0 + 0.28
-				for segment in 5:
-					var distance := 0.99 + segment * 0.33
-					var delta := Vector3(cos(angle) * distance, 0.013, sin(angle) * distance)
-					_box(p + delta + Vector3(0.08 * (segment % 2), 0, -0.07 * (segment % 2)), Vector3(0.31, 0.024, 0.082), MORTAR.darkened(0.28), "", -angle)
 		_:
 			pass
 
@@ -696,21 +683,24 @@ func _chest(rect: Rect2) -> void:
 	_box(seal + Vector3.UP * 0.075, Vector3(0.19, 0.034, 0.19), iron, "chest_lid", PI * 0.25, Finish.IRON)
 
 func _mine(local: Vector2) -> void:
-	var p := _point(local, 0.095)
-	_stone_block(p, Vector3(2.04, 0.13, 1.65), METAL.darkened(0.18), 0.047, "", 0.0, Finish.IRON)
-	for i in 10:
-		var x := -0.94 + float(i) * 0.207
-		for z in [-0.72, 0.72]:
-			var tint := BRASS.darkened(0.09) if i % 2 == 0 else METAL.darkened(0.19)
-			_box(p + Vector3(x, 0.069, z), Vector3(0.15, 0.032, 0.16), tint, "", 0.0, Finish.BRONZE if i % 2 == 0 else Finish.IRON)
-	for x in [-0.57, 0.0, 0.57]:
-		for z in [-0.36, 0.36]:
-			var socket := p + Vector3(x, 0.075, z)
-			_box(socket, Vector3(0.36, 0.033, 0.36), MORTAR.darkened(0.25), "", PI * 0.25, Finish.IRON)
-			_box(socket + Vector3.UP * 0.08, Vector3(0.23, 0.25, 0.23), METAL, "mine_teeth", PI * 0.25, Finish.IRON)
-			_stone_block(socket + Vector3.UP * 0.258, Vector3(0.13, 0.19, 0.13), BLOCK_EDGE, 0.041, "mine_teeth", PI * 0.25, Finish.IRON)
-	_box(p + Vector3.UP * 0.090, Vector3(0.46, 0.09, 0.41), METAL.lightened(0.12), "", 0.0, Finish.IRON)
-	_box(p + Vector3.UP * 0.191, Vector3(0.24, 0.16, 0.22), RED, "mine_signal")
+	var p := _point(local, 0.13)
+	var frame := Color("#966637")
+	var inset := Color("#28363e")
+	_stone_block(p, Vector3(2.36, 0.19, 2.08), frame, 0.075, "", 0.0, Finish.BRONZE)
+	_stone_block(p + Vector3.UP * 0.13, Vector3(2.12, 0.12, 1.84), inset, 0.048)
+	# One revealed board square, with an inlaid mine glyph readable from above.
+	for side in [-1.0, 1.0]:
+		for end in [-1.0, 1.0]:
+			_box(p + Vector3(side * 0.92, 0.215, end * 0.75), Vector3(0.24, 0.055, 0.14), BRASS, "", 0.0, Finish.BRONZE)
+	var amber := Color("#f6b24d")
+	for row in 3:
+		var width := 0.54 if row != 1 else 0.85
+		_box(p + Vector3(0, 0.226, (row - 1) * 0.25), Vector3(width, 0.055, 0.25), amber, "", 0.0, Finish.BRONZE)
+	_box(p + Vector3(-0.13, 0.264, -0.12), Vector3(0.13, 0.03, 0.12), Color("#ffe0ae"), "", 0.0, Finish.GLOW)
+	_box(p + Vector3(0, 0.225, -0.53), Vector3(0.15, 0.06, 0.22), amber, "", 0.0, Finish.BRONZE)
+	# A raised copper lid covers the glyph until the existing triggered state reveals it.
+	_stone_block(p + Vector3.UP * 0.32, Vector3(1.48, 0.15, 1.27), Color("#895938"), 0.06, "mine_cover", 0.0, Finish.BRONZE)
+	_box(p + Vector3.UP * 0.42, Vector3(0.33, 0.052, 0.33), AMBER, "mine_signal", PI * 0.25, Finish.GLOW)
 
 func _exit(local: Vector2) -> void:
 	var p := _point(local)

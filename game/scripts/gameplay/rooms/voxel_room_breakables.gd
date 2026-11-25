@@ -16,7 +16,7 @@ const SIZE := {
 const MAX_HP := {&"crate": 12, &"barrel": 14, &"urn": 7}
 
 
-static func for_room(room_type: StringName, event_type: StringName = &"") -> Array[Dictionary]:
+static func for_room(room_type: StringName, event_type: StringName = &"", room_key: String = "") -> Array[Dictionary]:
 	var occupants: Dictionary = {}
 	match room_type:
 		&"Spawn", &"Normal":
@@ -41,7 +41,7 @@ static func for_room(room_type: StringName, event_type: StringName = &"") -> Arr
 					occupants[&"south_east"] = &"crate"
 	if occupants.is_empty():
 		return []
-	var solids := RoomProjection.room_solid_rects(room_type, event_type, true)
+	var solids := RoomProjection.room_solid_rects(room_type, event_type, true, room_key)
 	var props: Array[Dictionary] = []
 	for slot: StringName in occupants:
 		var kind: StringName = occupants[slot]

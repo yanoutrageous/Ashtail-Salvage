@@ -1,8 +1,6 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-uniform bool authored_wall = false;
-
 varying vec3 block_point;
 varying vec3 block_normal;
 varying vec3 block_tint;
@@ -15,8 +13,8 @@ float grain(vec3 grid) {
 void vertex() {
 	block_point = VERTEX;
 	block_normal = NORMAL;
-	block_tint = authored_wall ? COLOR.rgb * vec3(1.30, 1.40, 1.44) + vec3(0.012, 0.016, 0.018) : COLOR.rgb;
-	block_finish = authored_wall ? 0.0 : UV.x;
+	block_tint = COLOR.rgb;
+	block_finish = UV.x;
 }
 
 void fragment() {
@@ -42,9 +40,6 @@ void fragment() {
 		vec3 tone = block_tint * (0.89 + 0.065 * speckle + 0.12 * strata + 0.10 * deposit - pores * 0.55);
 		vec3 patina = mix(vec3(0.87, 0.93, 1.06), vec3(1.09, 1.04, 0.91), strata);
 		ALBEDO = tone * mix(vec3(1.0), patina, 0.60);
-		if (authored_wall) {
-			EMISSION = ALBEDO * (0.048 + 0.038 * top);
-		}
 		ROUGHNESS = 0.91 - top * deposit * 0.18;
 		SPECULAR = 0.27;
 	} else if (block_finish < 1.5 || (block_finish > 2.5 && block_finish < 3.5)) {

@@ -15,7 +15,7 @@ static func breakable_hits(context: RunContext, fact: Dictionary, obstacles: Arr
 	var event_type := EventService.get_event_type(context, context.get_current_pos()) if context.current_room_type == &"Event" else &""
 	var health := room_health(context)
 	var impacted := {}
-	for prop: Dictionary in Layout.for_room(context.current_room_type, event_type):
+	for prop: Dictionary in Layout.for_room(context.current_room_type, event_type, context.cell_key(context.get_current_pos())):
 		var id: String = prop["id"]
 		var hp := int(health.get(id, prop["max_hp"]))
 		if hp > 0 and _contact(fact, prop["rect"], obstacles):

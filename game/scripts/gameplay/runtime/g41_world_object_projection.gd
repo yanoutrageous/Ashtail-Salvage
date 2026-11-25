@@ -23,15 +23,7 @@ const MINE_LOCAL_POS := Vector2(0.50, 0.51)
 const MINE_DISPLAY_SIZE := Vector2(72.0 / 560.0, 72.0 / 560.0)
 const EXIT_LOCAL_POS := Vector2(0.50, 0.45)
 const MONSTER_ALTAR_OCCLUDER_RECT := Rect2(Vector2(0.34, 0.36), Vector2(0.32, 0.28))
-# Measured solid footprints in the admitted room plates. The middle strip in
-# each wall is the existing door lane. Flat motifs, loose debris, mine spikes
-# and the exit platform remain floor; this does not create hazard rules.
-const ROOM_WALL_RECTS := [
-	Rect2(0.0, 0.0, 0.37, 0.15), Rect2(0.63, 0.0, 0.37, 0.15),
-	Rect2(0.0, 0.87, 0.37, 0.13), Rect2(0.63, 0.87, 0.37, 0.13),
-	Rect2(0.0, 0.15, 0.125, 0.22), Rect2(0.0, 0.63, 0.125, 0.24),
-	Rect2(0.875, 0.15, 0.125, 0.22), Rect2(0.875, 0.63, 0.125, 0.24),
-]
+const ROOM_WALL_RECTS := G41RuntimeLayout.ROOM_WALL_RECTS
 const NORMAL_REAR_PROP_RECTS := [
 	Rect2(0.145, 0.18, 0.055, 0.035), Rect2(0.795, 0.19, 0.06, 0.04),
 ]
@@ -377,7 +369,7 @@ static func room_floor_interior() -> Rect2:
 
 
 static func room_solid_rects(
-	room_type: StringName, event_type: StringName = &"", generated_voxel: bool = false
+	room_type: StringName, event_type: StringName = &"", generated_voxel: bool = false, room_key: String = ""
 ) -> Array[Rect2]:
 	var result: Array[Rect2] = []
 	match room_type:
@@ -385,12 +377,7 @@ static func room_solid_rects(
 			result.append(MONSTER_ALTAR_OCCLUDER_RECT)
 		&"Normal", &"Spawn", &"Chest":
 			if generated_voxel:
-				# The first two pieces share a store bay. The third is an inward-facing lamp bench.
-				var chest := room_type == &"Chest"
-				result.append(Rect2(0.59 if chest else 0.29, 0.32, 0.093, 0.06))
-				result.append(Rect2(0.70 if chest else 0.395, 0.346, 0.046, 0.065))
-				result.append(Rect2(0.27 if chest else 0.64, 0.61, 0.09, 0.047))
-				result.append(Rect2(0.38 if chest else 0.735, 0.665 if chest else 0.571, 0.056, 0.056))
+				result.assign(_perimeter_layout(room_key))
 			else:
 				result.assign(NORMAL_REAR_PROP_RECTS)
 				result.append_array(NORMAL_FRONT_PROP_RECTS)
@@ -405,6 +392,27 @@ static func room_solid_rects(
 	for wall: Rect2 in ROOM_WALL_RECTS:
 		result.append(wall)
 	return result
+
+
+# Slot pairs follow the outer walls. The seed keeps art and collision identical on revisits.
+static func _perimeter_layout(room_key: String) -> Array[Rect2]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(room_key)
+	var left_first := rng.randf() < 0.5
+	var back_x := rng.randf_range(0.26, 0.305) if left_first else rng.randf_range(0.64, 0.675)
+	var bench_x := rng.randf_range(0.62, 0.69) if left_first else rng.randf_range(0.28, 0.34)
+	var west_y := rng.randf_range(0.265, 0.296) if rng.randf() < 0.5 else rng.randf_range(0.675, 0.745)
+	var east_y := rng.randf_range(0.265, 0.296) if rng.randf() < 0.5 else rng.randf_range(0.675, 0.745)
+	var east_x := 0.825
+	if rng.randf() < 0.40:
+		east_x = 0.13
+		east_y = rng.randf_range(0.68, 0.74) if west_y < 0.5 else rng.randf_range(0.27, 0.30)
+	return [
+		Rect2(back_x, 0.155, 0.083, 0.043),
+		Rect2(0.13, west_y, 0.044, 0.056),
+		Rect2(bench_x, 0.785, 0.092, 0.045),
+		Rect2(east_x, east_y, 0.044, 0.056),
+	]
 
 
 static func _occluder_projections(room_type: StringName, room_key: String, dedicated_event_room: bool) -> Array[Dictionary]:
