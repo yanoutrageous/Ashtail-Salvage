@@ -10,10 +10,10 @@ const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
 const WALL_LIGHT_LAYER := 4
 const DOOR_LAMP_ENERGY := 2.65
 const DOOR_LIGHT_POSITIONS := {
-	"north": [Vector3(-2.12, 1.5, -5.85), Vector3(2.12, 1.5, -5.85)],
-	"east": [Vector3(7.65, 1.4, -1.85), Vector3(7.65, 1.4, 1.85)],
-	"south": [Vector3(-2.12, 1.4, 5.85), Vector3(2.12, 1.4, 5.85)],
-	"west": [Vector3(-7.65, 1.4, -1.85), Vector3(-7.65, 1.4, 1.85)],
+	"north": [Vector3(-2.12, 1.5, -4.89), Vector3(2.12, 1.5, -4.89)],
+	"east": [Vector3(7.00, 1.4, -1.85), Vector3(7.00, 1.4, 1.85)],
+	"south": [Vector3(-2.12, 1.4, 5.20), Vector3(2.12, 1.4, 5.20)],
+	"west": [Vector3(-7.00, 1.4, -1.85), Vector3(-7.00, 1.4, 1.85)],
 }
 const IMPACT_SECONDS := 0.24
 const CHEST_OPEN_SECONDS := 0.28
@@ -141,13 +141,27 @@ func _build() -> void:
 
 
 func _place_authored_furniture() -> void:
+	for unit: Dictionary in entry.units:
+		if not unit.has("source_unit"):
+			continue
+		var source_tag := "__%s_" % unit.source_unit
+		for source: MeshInstance3D in model.find_children("*" + source_tag + "*", "MeshInstance3D", true, false):
+			var copy := source.duplicate() as MeshInstance3D
+			copy.name = String(source.name).replace(source_tag, "__%s_" % unit.id)
+			copy.set_meta("B_assembly", unit.id)
+			source.get_parent().add_child(copy)
 	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		var id := String(mesh.get_meta("B_assembly", ""))
 		var belongs_to_unit := false
 		for unit: Dictionary in entry.units:
-			if id == unit.id or String(mesh.name).contains("__" + String(unit.id) + "_"):
+			if id == unit.id or (id.is_empty() and String(mesh.name).contains("__" + String(unit.id) + "_")):
 				var offset: Array = unit.get("model_offset", [0.0, 0.0])
 				mesh.position += Vector3(offset[0] * X_SPAN, 0.0, offset[1] * Y_SPAN)
+				if unit.has("yaw_degrees"):
+					var rect: Array = unit.footprint
+					var pivot := local_to_model(Vector2(rect[0] + rect[2] * 0.5, rect[1] + rect[3] * 0.5))
+					var turn := Basis(Vector3.UP, deg_to_rad(float(unit.yaw_degrees)))
+					mesh.transform = Transform3D(turn, pivot - turn * pivot) * mesh.transform
 				belongs_to_unit = true
 				break
 		# The shortcut asset also embeds its original shell.
@@ -322,6 +336,7 @@ func _build_gates() -> void:
 	for side in ["north", "east", "south", "west"]:
 		var gate := VoxelArt.new().build_gate()
 		gate.name = "B_Gate_" + side
+		gate.scale.x = 1.39
 		room_world.add_child(gate)
 		gate.position = {"north": Vector3(0, 0, -6.45), "south": Vector3(0, 0, 6.45), "east": Vector3(8.4, 0, 0), "west": Vector3(-8.4, 0, 0)}[side]
 		if side in ["east", "west"]:

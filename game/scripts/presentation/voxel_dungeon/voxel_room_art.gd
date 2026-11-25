@@ -311,16 +311,21 @@ func _add_dungeon_floor(scene: Node3D) -> void:
 func _threshold(p: Vector3, side: bool) -> void:
 	var turn := PI * 0.5 if side else 0.0
 	var basis := Basis(Vector3.UP, turn)
-	_stone_block(p + Vector3.UP * 0.06, Vector3(2.50, 0.13, 1.24), BRICK.lightened(0.16), 0.045, "", turn)
+	_stone_block(p + Vector3.UP * 0.06, Vector3(3.20, 0.13, 1.24), BRICK.lightened(0.16), 0.045, "", turn)
 	for offset in [-0.42, 0.38]:
-		_box(p + basis * Vector3(0, 0.142, offset), Vector3(2.36, 0.043, 0.13), METAL, "", turn, Finish.IRON)
+		_box(p + basis * Vector3(0, 0.142, offset), Vector3(3.08, 0.043, 0.13), METAL, "", turn, Finish.IRON)
 		for plate in range(-2, 3):
 			_box(p + basis * Vector3(plate * 0.43, 0.168, offset), Vector3(0.11, 0.014, 0.092), BRASS.darkened(0.18), "", turn, Finish.BRONZE)
-	for offset in [-1.36, 1.36]:
+	# A lintel joins the wall ends above the gate, leaving the walkable floor open.
+	var outer := signf(p.x if side else p.z)
+	var lintel := p + (Vector3.RIGHT if side else Vector3.BACK) * outer * 0.24 + Vector3.UP * 1.91
+	_stone_block(lintel, Vector3(3.72, 0.32, 0.66), WALL_CAP.lightened(0.08), 0.05, "ArchitectureWalls", turn)
+	_stone_block(lintel - Vector3.UP * 0.18, Vector3(3.54, 0.11, 0.57), BRICK.darkened(0.08), 0.025, "ArchitectureWalls", turn)
+	for offset in [-1.65, 1.65]:
 		var post := p + basis * Vector3(offset, 0.0, 0.08)
 		_box(post + Vector3.UP * 0.13, Vector3(0.47, 0.26, 0.87), MORTAR, "", turn)
-		_box(post + Vector3.UP * 0.52, Vector3(0.34, 1.04, 0.74), BRICK, "", turn)
-		_stone_block(post + Vector3.UP * 1.08, Vector3(0.48, 0.16, 0.89), BLOCK_EDGE, 0.058, "", turn)
+		_box(post + Vector3.UP * 0.89, Vector3(0.36, 1.78, 0.74), BRICK, "", turn)
+		_stone_block(post + Vector3.UP * 1.71, Vector3(0.48, 0.16, 0.89), BLOCK_EDGE, 0.058, "", turn)
 		_box(post + Vector3.UP * 0.76, Vector3(0.40, 0.14, 0.79), METAL, "", turn, Finish.IRON)
 		_box(post + basis * Vector3(0, 0.76, 0.408), Vector3(0.115, 0.081, 0.027), BRASS, "", turn, Finish.BRONZE)
 
@@ -434,7 +439,7 @@ func _wall_buttress(center: Vector3, basis: Basis, turn: float, x: float, z: flo
 
 func _frame_dressing() -> void:
 	for side in [-1.0, 1.0]:
-		for p: Vector3 in [Vector3(side * 2.22, 0.38, -6.00), Vector3(side * 7.68, 0.31, 1.90), Vector3(side * 7.68, 0.31, -1.90), Vector3(side * 2.22, 0.31, 6.00)]:
+		for p: Vector3 in [Vector3(side * 2.22, 0.38, -4.95), Vector3(side * 7.02, 0.31, 1.90), Vector3(side * 7.02, 0.31, -1.90), Vector3(side * 2.22, 0.31, 5.21)]:
 			_box(p + Vector3.DOWN * 0.13, Vector3(0.39, 0.26, 0.39), STONE.darkened(0.23))
 			_box(p + Vector3.UP * 0.29, Vector3(0.16, 0.62, 0.16), METAL, "", 0.0, Finish.IRON)
 			_box(p + Vector3.UP * 0.63, Vector3(0.40, 0.19, 0.40), METAL.darkened(0.16), "", 0.0, Finish.IRON)
