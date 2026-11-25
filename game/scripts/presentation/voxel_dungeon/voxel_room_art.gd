@@ -368,23 +368,16 @@ func _threshold(direction: Vector2i) -> void:
 	var cap := axis + outward * (cap_back + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
 	var stone_color := WALL_CAP.lerp(BRICK, 0.17)
 	_stone_block(cap, Vector3(half_open * 2, CAP_THICKNESS, cap_depth), stone_color, 0.028, frame_group, turn)
-	# A continuous inner coping meets the stone shoulders at both ends of a side gate.
-	# Its outer face bounds the narrow sightline onto the moving ironwork.
-	var rim_back := -0.15
 	if side:
+		# Run the cap over the iron track and into both jambs.
 		var rim_front := -0.40
-		var rim := axis + outward * (rim_front + rim_back) * 0.5 + Vector3.UP * CAP_CENTER
+		var rim := axis + outward * (rim_front + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
 		var edge_color := stone_color.lerp(Color("#637577"), 0.36)
-		_stone_block(rim, Vector3(half_open * 2, CAP_THICKNESS, rim_back - rim_front), edge_color, 0.020, frame_group, turn)
+		_stone_block(rim, Vector3(half_open * 2, CAP_THICKNESS, beam_front - rim_front), edge_color, 0.020, frame_group, turn)
 	var post_height := CAP_CENTER - CAP_THICKNESS * 0.5
 	for hand: float in [-1.0, 1.0]:
 		var jamb := axis + basis * Vector3(hand * (half_open - GATE_JAMB * 0.5), 0, 0)
 		_box(jamb + outward * (cap_back + cap_front) * 0.5 + Vector3.UP * post_height * 0.5, Vector3(GATE_JAMB, post_height, cap_back - cap_front), BRICK.darkened(0.12), frame_group, turn)
-		if side:
-			# Each end seat bridges the two continuous edges of the frame.
-			var seat_width := GATE_JAMB + 0.16
-			var seat := axis + basis * Vector3(hand * (half_open - seat_width * 0.5), CAP_CENTER, 0)
-			_stone_block(seat + outward * (rim_back + beam_front) * 0.5, Vector3(seat_width, CAP_THICKNESS, beam_front - rim_back), stone_color, 0.022, frame_group, turn)
 		var cheek := axis + basis * Vector3(hand * (half_open - GATE_JAMB - 0.055), post_height * 0.5, 0)
 		for face: float in [-1.0, 1.0]:
 			_box(cheek + outward * face * 0.241, Vector3(0.11, post_height, 0.06), METAL, frame_group, turn, Finish.IRON)
