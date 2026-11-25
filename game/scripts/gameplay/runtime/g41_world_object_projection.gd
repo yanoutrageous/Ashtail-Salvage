@@ -23,23 +23,13 @@ const MINE_LOCAL_POS := Vector2(0.50, 0.51)
 const MINE_DISPLAY_SIZE := Vector2(72.0 / 560.0, 72.0 / 560.0)
 const EXIT_LOCAL_POS := Vector2(0.50, 0.45)
 const MONSTER_ALTAR_OCCLUDER_RECT := Rect2(Vector2(0.34, 0.36), Vector2(0.32, 0.28))
-# Measured solid footprints in the admitted room plates. The middle strip in
-# each wall is the existing door lane. Flat motifs, loose debris, mine spikes
-# and the exit platform remain floor; this does not create hazard rules.
-const ROOM_WALL_RECTS := [
-	Rect2(0.0, 0.0, 0.37, 0.15), Rect2(0.63, 0.0, 0.37, 0.15),
-	Rect2(0.0, 0.87, 0.37, 0.13), Rect2(0.63, 0.87, 0.37, 0.13),
-	Rect2(0.0, 0.15, 0.125, 0.22), Rect2(0.0, 0.63, 0.125, 0.24),
-	Rect2(0.875, 0.15, 0.125, 0.22), Rect2(0.875, 0.63, 0.125, 0.24),
-]
+const ROOM_WALL_RECTS := G41RuntimeLayout.ROOM_WALL_RECTS
 const NORMAL_REAR_PROP_RECTS := [
 	Rect2(0.145, 0.18, 0.055, 0.035), Rect2(0.795, 0.19, 0.06, 0.04),
 ]
 const NORMAL_FRONT_PROP_RECTS := [
 	Rect2(0.135, 0.81, 0.06, 0.04), Rect2(0.79, 0.80, 0.07, 0.05),
 ]
-# The raised voxel wall cap projects farther into the room than its floor footprint.
-const VOXEL_FRONT_PROP_INSET := 0.055
 const EVENT_PROP_RECTS := [
 	Rect2(0.36, 0.445, 0.28, 0.14),
 ]
@@ -52,11 +42,11 @@ const DOOR_DIRECTIONS := [
 ]
 
 
-static func build(snapshot: Dictionary, combat_snapshot: Dictionary = {}) -> Dictionary:
+static func build(snapshot: Dictionary, combat_snapshot: Dictionary = {}, voxel := false) -> Dictionary:
 	var room_pos: Vector2i = snapshot.get("position", snapshot.get("player_pos", Vector2i.ZERO))
 	var room_type := StringName(snapshot.get("current_room", &"Unknown"))
 	var room_key := "%d,%d" % [room_pos.x, room_pos.y]
-	var event_room := EventRoomCatalog.from_snapshot(snapshot)
+	var event_room := EventRoomCatalog.from_snapshot(snapshot, voxel)
 	var world_objects: Array[Dictionary] = []
 	var chest_contents: Array[Dictionary] = []
 	var room_floor_items := _dictionary_array(snapshot.get("room_floor_items", []))
@@ -316,7 +306,7 @@ static func _door_projections(snapshot: Dictionary, combat_snapshot: Dictionary,
 	var run_start_config: Dictionary = snapshot.get("run_start_config", {})
 	var requires_revealed := bool(snapshot.get("move_requires_revealed", run_start_config.get("move_requires_revealed", false)))
 	var combat_restricted := bool(combat_snapshot.get("door_locked", false))
-	var known_cells := _known_public_cells(snapshot)
+	var known_cells := known_public_cells(snapshot)
 	for door in DOOR_DIRECTIONS:
 		var direction: Vector2i = door.get("delta", Vector2i.ZERO)
 		var target := room_pos + direction
@@ -357,7 +347,7 @@ static func _door_projections(snapshot: Dictionary, combat_snapshot: Dictionary,
 			"depth_key": &"world.door",
 			"enabled": false,
 			"prompt_text": "",
-			"payload": {"direction": direction, "target": target, "orientation": orientation, "inner_floor_rect": room_floor_interior()},
+			"payload": {"direction": direction, "target": target, "explored": bool(public_cell.get("explored", false)), "orientation": orientation, "inner_floor_rect": room_floor_interior()},
 		}))
 	return result
 
@@ -379,20 +369,20 @@ static func room_floor_interior() -> Rect2:
 
 
 static func room_solid_rects(
-	room_type: StringName, event_type: StringName = &"", generated_voxel: bool = false
+	room_type: StringName, event_type: StringName = &"", generated_voxel: bool = false, room_key: String = ""
 ) -> Array[Rect2]:
 	var result: Array[Rect2] = []
 	match room_type:
 		&"Monster":
 			result.append(MONSTER_ALTAR_OCCLUDER_RECT)
 		&"Normal", &"Spawn", &"Chest":
-			result.assign(NORMAL_REAR_PROP_RECTS)
-			for fixture: Rect2 in NORMAL_FRONT_PROP_RECTS:
-				if generated_voxel:
-					fixture.position.y -= VOXEL_FRONT_PROP_INSET
-				result.append(fixture)
+			if generated_voxel:
+				result.assign(_perimeter_layout(room_key))
+			else:
+				result.assign(NORMAL_REAR_PROP_RECTS)
+				result.append_array(NORMAL_FRONT_PROP_RECTS)
 		&"Event":
-			var event_room := EventRoomCatalog.room(event_type)
+			var event_room := EventRoomCatalog.room(event_type, generated_voxel)
 			if event_room.is_empty():
 				result.assign(EVENT_PROP_RECTS)
 			elif event_room.has("model_path"):
@@ -402,6 +392,27 @@ static func room_solid_rects(
 	for wall: Rect2 in ROOM_WALL_RECTS:
 		result.append(wall)
 	return result
+
+
+# Slot pairs follow the outer walls. The seed keeps art and collision identical on revisits.
+static func _perimeter_layout(room_key: String) -> Array[Rect2]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(room_key)
+	var left_first := rng.randf() < 0.5
+	var back_x := rng.randf_range(0.26, 0.305) if left_first else rng.randf_range(0.64, 0.675)
+	var bench_x := rng.randf_range(0.62, 0.69) if left_first else rng.randf_range(0.28, 0.34)
+	var west_y := rng.randf_range(0.265, 0.296) if rng.randf() < 0.5 else rng.randf_range(0.675, 0.745)
+	var east_y := rng.randf_range(0.265, 0.296) if rng.randf() < 0.5 else rng.randf_range(0.675, 0.745)
+	var east_x := 0.825
+	if rng.randf() < 0.40:
+		east_x = 0.13
+		east_y = rng.randf_range(0.68, 0.74) if west_y < 0.5 else rng.randf_range(0.27, 0.30)
+	return [
+		Rect2(back_x, 0.155, 0.083, 0.043),
+		Rect2(0.13, west_y, 0.044, 0.056),
+		Rect2(bench_x, 0.785, 0.092, 0.045),
+		Rect2(east_x, east_y, 0.044, 0.056),
+	]
 
 
 static func _occluder_projections(room_type: StringName, room_key: String, dedicated_event_room: bool) -> Array[Dictionary]:
@@ -443,7 +454,7 @@ static func _descriptor(values: Dictionary) -> Dictionary:
 	return PresentationDescriptor.build(values)
 
 
-static func _known_public_cells(snapshot: Dictionary) -> Array:
+static func known_public_cells(snapshot: Dictionary) -> Array:
 	var run_map_snapshot: Dictionary = snapshot.get("run_map_snapshot", {})
 	var known_map: Dictionary = run_map_snapshot.get("KnownMap", snapshot.get("KnownMap", {}))
 	var cells: Variant = known_map.get("public_cells", [])

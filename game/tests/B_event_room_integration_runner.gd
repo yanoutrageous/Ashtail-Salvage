@@ -25,6 +25,7 @@ func _run() -> void:
 		if entry.is_empty():
 			continue
 		var snapshot := {"position": Vector2i(2, 2), "width": 5, "height": 5, "current_room": &"Event", "event_state": {"event_type": id, "completed": false}, "KnownMap": {"public_cells": []}}
+		check(entry.body_rect.get_center().distance_to(Vector2(0.5, 0.5)) < 0.001, id + " station centered")
 		var original := snapshot.duplicate(true)
 		view.configure_room(snapshot)
 		await process_frame
@@ -32,6 +33,7 @@ func _run() -> void:
 		check(renderer != null and renderer.visible, id + " GLB renderer active")
 		if renderer == null:
 			continue
+		check(renderer.room_world.has_node("VoxelArchitecture") and renderer.assemblies.has("ArchitectureWalls"), id + " uses shared masonry")
 		var info: Dictionary = renderer.call("debug_snapshot")
 		check(info.model_loaded and info.assemblies.size() >= 2, id + " actual meshes loaded")
 		check(info.lights == 8, id + " eight candle lights")

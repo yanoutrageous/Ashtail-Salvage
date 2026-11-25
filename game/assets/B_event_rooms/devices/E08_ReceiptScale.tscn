@@ -1,0 +1,124 @@
+[gd_scene load_steps=17 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.38431, 0.44314, 0.41961, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.27059, 0.30588, 0.31373, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_oak"]
+albedo_color = Color(0.47451, 0.31373, 0.20000, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_bronze"]
+albedo_color = Color(0.70196, 0.51373, 0.27451, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_paper"]
+albedo_color = Color(0.84314, 0.77647, 0.60784, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_edge"]
+albedo_color = Color(0.50980, 0.55686, 0.54510, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_red"]
+albedo_color = Color(0.73333, 0.37255, 0.28235, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="Mesh_1"]
+material = SubResource("Mat_rock")
+size = Vector3(3, 0.24, 1.52)
+
+[sub_resource type="BoxMesh" id="Mesh_2"]
+material = SubResource("Mat_iron")
+size = Vector3(2.79, 0.13, 1.4136)
+
+[sub_resource type="BoxMesh" id="Mesh_3"]
+material = SubResource("Mat_oak")
+size = Vector3(2.72, 0.36, 1.18)
+
+[sub_resource type="CylinderMesh" id="Mesh_4"]
+material = SubResource("Mat_bronze")
+top_radius = 0.34
+bottom_radius = 0.34
+height = 0.24
+radial_segments = 8
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_5"]
+material = SubResource("Mat_paper")
+size = Vector3(0.045, 0.34, 0.05)
+
+[sub_resource type="CylinderMesh" id="Mesh_6"]
+material = SubResource("Mat_edge")
+top_radius = 0.47
+bottom_radius = 0.47
+height = 0.1
+radial_segments = 8
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_7"]
+material = SubResource("Mat_paper")
+size = Vector3(0.76, 0.09, 0.64)
+
+[sub_resource type="BoxMesh" id="Mesh_8"]
+material = SubResource("Mat_iron")
+size = Vector3(0.25, 0.2, 0.28)
+
+[sub_resource type="CylinderMesh" id="Mesh_9"]
+material = SubResource("Mat_red")
+top_radius = 0.11
+bottom_radius = 0.11
+height = 0.28
+radial_segments = 8
+rings = 1
+
+[node name="E08_ReceiptScale" type="Node3D"]
+
+[node name="E08_ReceiptScale__main_station_Plinth_0" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_1")
+
+[node name="E08_ReceiptScale__main_station_IronShoe_1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.31, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_2")
+
+[node name="E08_ReceiptScale__main_station_ScaleDeck_2" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.61, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_3")
+
+[node name="E08_ReceiptScale__main_station_ScaleDial_3" type="MeshInstance3D" parent="."]
+position = Vector3(-0.55, 0.94, 0.1)
+rotation = Vector3(1.5708, 0, 0)
+mesh = SubResource("Mesh_4")
+
+[node name="E08_ReceiptScale__main_station_Needle_4" type="MeshInstance3D" parent="."]
+position = Vector3(-0.57, 0.97, 0.25)
+rotation = Vector3(0, 0, -0.37)
+mesh = SubResource("Mesh_5")
+
+[node name="E08_ReceiptScale__main_station_ScalePan_5" type="MeshInstance3D" parent="."]
+position = Vector3(-0.57, 1.2, -0.1)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E08_ReceiptScale__main_station_Ledger_6" type="MeshInstance3D" parent="."]
+position = Vector3(0.64, 0.84, 0.04)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_7")
+
+[node name="E08_ReceiptScale__main_station_Stamp_7" type="MeshInstance3D" parent="."]
+position = Vector3(0.68, 1, -0.15)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E08_ReceiptScale__main_station_Handle_8" type="MeshInstance3D" parent="."]
+position = Vector3(0.68, 1.22, -0.15)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")

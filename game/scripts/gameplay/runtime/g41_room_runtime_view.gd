@@ -75,6 +75,7 @@ const SOUTH_DOOR_PROMPT_LIFT_LOCAL := 0.13
 # back onto the authoritative attack origin instead of subtracting it twice.
 const SLASH_SOURCE_ORIGIN := Vector2(131.0, 95.0)
 const SLASH_SOURCE_RADIUS := 113.0
+var surroundings: Node2D
 var b_room_view: Node2D
 var combat_art: Node2D
 var room_key: String = ""
@@ -120,6 +121,11 @@ func _ready() -> void:
 
 
 func configure_room(snapshot: Dictionary) -> void:
+	if surroundings != null and not latest_room_snapshot.is_empty():
+		if snapshot.get("run_id") != latest_room_snapshot.get("run_id"):
+			surroundings.memory.clear()
+		elif snapshot.get("position") != latest_room_snapshot.get("position"):
+			surroundings.remember(latest_room_snapshot.position, b_room_view)
 	latest_room_snapshot = snapshot.duplicate(true)
 	var pos: Vector2i = snapshot.get("position", Vector2i.ZERO)
 	if not last_room_entry_result.is_empty() and Vector2i(last_room_entry_result.get("position", pos)) != pos:
@@ -342,6 +348,9 @@ func sync_breakable_props(hp_by_id: Dictionary, impacted_ids: Array = []) -> voi
 
 
 func clear_runtime() -> void:
+	if surroundings != null:
+		surroundings.memory.clear()
+		surroundings.hide()
 	_sync_event_room_art({})
 	latest_room_snapshot.clear()
 	combat_snapshot.clear()
@@ -393,7 +402,7 @@ func _rebuild_world_projection() -> void:
 		focused_interaction_id = ""
 		focus_residence_elapsed = 0.0
 		focus_lost_elapsed = 0.0
-	world_projection = WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot)
+	world_projection = WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot, combat_art != null)
 	_merge_room_entry_result_into_projection()
 	var runtime_objects := _dictionary_array(world_projection.get("world_objects", []))
 	var event_room: Dictionary = world_projection.get("event_room", {}).duplicate(true)
@@ -401,9 +410,10 @@ func _rebuild_world_projection() -> void:
 		if not event_room.has("model_path"):
 			event_room = _voxel_room_entry(runtime_objects)
 		event_room["polished"] = true
+		event_room["growth_key"] = room_key + "/" + str(event_room.get("code", room_type))
 	if event_room.has("model_path") or bool(event_room.get("generated", false)):
 		if StringName(latest_room_snapshot.get("mode", &"")) != &"tutorial":
-			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot))
+			event_room["breakables"] = VoxelRoomBreakables.for_room(room_type, EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot), room_key)
 		world_projection["event_room"] = event_room
 	_sync_event_room_art(world_projection.get("event_room", {}))
 	door_projections = _dictionary_array(world_projection.get("doors", []))
@@ -421,11 +431,11 @@ func _rebuild_world_projection() -> void:
 
 
 func _voxel_room_entry(objects: Array[Dictionary]) -> Dictionary:
-	var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
+	var event_type := EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot)
 	var walls := WorldObjectProjectionScript.ROOM_WALL_RECTS
 	var props: Array[Rect2] = []
 	var units: Array[Dictionary] = []
-	for rect: Rect2 in WorldObjectProjectionScript.room_solid_rects(room_type, event_type, true):
+	for rect: Rect2 in WorldObjectProjectionScript.room_solid_rects(room_type, event_type, true, room_key):
 		if rect in walls:
 			continue
 		units.append({"id": "fixture_%d" % props.size(), "ground_y": rect.end.y})
@@ -459,6 +469,8 @@ func _sync_event_room_art(room: Dictionary) -> void:
 		return
 	if b_room_view != null:
 		b_room_view.call("deactivate")
+	if surroundings != null:
+		surroundings.hide()
 	var layer := get_node_or_null("EventRoomDecor") as Node2D
 	if room.is_empty():
 		if layer != null:
@@ -494,7 +506,7 @@ func _rebuild_door_projection() -> void:
 		door_projections.clear()
 		_sync_door_visuals()
 		return
-	var updated := WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot)
+	var updated := WorldObjectProjectionScript.build(latest_room_snapshot, combat_snapshot, combat_art != null)
 	door_projections = _dictionary_array(updated.get("doors", []))
 	world_projection["doors"] = door_projections.duplicate(true)
 	door_projection_revision += 1
@@ -521,6 +533,13 @@ func _sync_door_visuals() -> void:
 		if b_room_view != null and b_room_view.visible:
 			sprite.hide()
 	if b_room_view != null and b_room_view.visible:
+		if surroundings == null:
+			surroundings = preload("res://scripts/presentation/voxel_dungeon/connected_room_surroundings.gd").new()
+			surroundings.name = "ConnectedRooms"
+			surroundings.z_index = -110
+			add_child(surroundings)
+		surroundings.show()
+		surroundings.sync(latest_room_snapshot, WorldObjectProjectionScript.known_public_cells(latest_room_snapshot))
 		b_room_view.call("apply_snapshot", latest_room_snapshot, door_projections)
 		b_room_view.call("update_player_depth", last_player_local_pos)
 	for projection_id in door_visuals.keys():
@@ -874,7 +893,13 @@ func _apply_special_art(entity, projection: Dictionary) -> void:
 		sprite.hide()
 		entity.set_room_supplies_visual(true)
 		var old_readout := visual_root.get_node_or_null("DeviceReadout")
-		if old_readout != null:
+		if payload.has("B_model_path") and Z1Events.number(StringName(payload.get("event_type", ""))) > 0:
+			if old_readout == null:
+				old_readout = EventRoomDeviceView.new()
+				old_readout.name = "DeviceReadout"
+				visual_root.add_child(old_readout)
+			old_readout.call("configure", projection)
+		elif old_readout != null:
 			old_readout.queue_free()
 		_apply_special_prompt_visibility(entity)
 		return
@@ -1518,9 +1543,9 @@ func _rebuild_obstacle_projection() -> void:
 	logical_obstacles.clear()
 	if b_room_view != null and b_room_view.visible:
 		var b_room: Dictionary = world_projection.get("event_room", {})
-		var generated_voxel := _uses_generated_room()
-		var event_type := StringName(latest_room_snapshot.get("event_state", {}).get("event_type", ""))
-		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel)
+		var generated_voxel := _uses_generated_room() or b_room.has("numbered_id")
+		var event_type := EventRoomCatalog.event_type_from_snapshot(latest_room_snapshot)
+		var rects := WorldObjectProjectionScript.room_solid_rects(room_type, event_type, generated_voxel, room_key)
 		if generated_voxel and room_type == &"Chest":
 			rects.append(Rect2(b_room.get("object_rect", Rect2())))
 		var resolved := bool(b_room_view.call("debug_snapshot").get("model_loaded", false))

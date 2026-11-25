@@ -1,0 +1,137 @@
+[gd_scene load_steps=16 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.38431, 0.44314, 0.41961, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.27059, 0.30588, 0.31373, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_edge"]
+albedo_color = Color(0.50980, 0.55686, 0.54510, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_bronze"]
+albedo_color = Color(0.70196, 0.51373, 0.27451, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_blue"]
+albedo_color = Color(0.38431, 0.55686, 0.61569, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_green"]
+albedo_color = Color(0.32157, 0.70588, 0.65098, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="Mesh_1"]
+material = SubResource("Mat_rock")
+size = Vector3(2.44, 0.24, 1.63)
+
+[sub_resource type="BoxMesh" id="Mesh_2"]
+material = SubResource("Mat_iron")
+size = Vector3(2.2692, 0.13, 1.5159)
+
+[sub_resource type="CylinderMesh" id="Mesh_3"]
+material = SubResource("Mat_iron")
+top_radius = 0.43
+bottom_radius = 0.43
+height = 0.27
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_4"]
+material = SubResource("Mat_edge")
+top_radius = 0.22
+bottom_radius = 0.22
+height = 1.1
+radial_segments = 8
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_5"]
+material = SubResource("Mat_bronze")
+size = Vector3(1.04, 0.19, 0.22)
+
+[sub_resource type="CylinderMesh" id="Mesh_6"]
+material = SubResource("Mat_iron")
+top_radius = 0.095
+bottom_radius = 0.095
+height = 0.46
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_7"]
+material = SubResource("Mat_blue")
+top_radius = 0.24
+bottom_radius = 0.24
+height = 0.38
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_8"]
+material = SubResource("Mat_edge")
+top_radius = 0.27
+bottom_radius = 0.27
+height = 0.085
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_9"]
+material = SubResource("Mat_green")
+top_radius = 0.098
+bottom_radius = 0.098
+height = 0.34
+radial_segments = 8
+rings = 1
+
+[node name="E07_SampleStand" type="Node3D"]
+
+[node name="E07_SampleStand__main_station_Plinth_0" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_1")
+
+[node name="E07_SampleStand__main_station_IronShoe_1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.31, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_2")
+
+[node name="E07_SampleStand__main_station_SamplerFoot_2" type="MeshInstance3D" parent="."]
+position = Vector3(-0.53, 0.51, -0.14)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_3")
+
+[node name="E07_SampleStand__main_station_SampleColumn_3" type="MeshInstance3D" parent="."]
+position = Vector3(-0.53, 1.16, -0.14)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_4")
+
+[node name="E07_SampleStand__main_station_SamplingArm_4" type="MeshInstance3D" parent="."]
+position = Vector3(-0.15, 1.74, -0.14)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E07_SampleStand__main_station_Nozzle_5" type="MeshInstance3D" parent="."]
+position = Vector3(0.28, 1.45, -0.13)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E07_SampleStand__main_station_Receiver_6" type="MeshInstance3D" parent="."]
+position = Vector3(0.28, 0.69, -0.13)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_7")
+
+[node name="E07_SampleStand__main_station_Rim_7" type="MeshInstance3D" parent="."]
+position = Vector3(0.28, 0.91, -0.13)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E07_SampleStand__main_station_Vial_8" type="MeshInstance3D" parent="."]
+position = Vector3(0.51, 0.57, 0.45)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")
+
+[node name="E07_SampleStand__main_station_Vial_9" type="MeshInstance3D" parent="."]
+position = Vector3(0.78, 0.57, 0.45)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")

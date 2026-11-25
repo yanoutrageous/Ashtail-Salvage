@@ -3,10 +3,10 @@ extends RefCounted
 
 const RoomProjection := preload("res://scripts/gameplay/runtime/g41_world_object_projection.gd")
 const SLOTS := {
-	&"north_west": Vector2(0.226, 0.286),
-	&"north_east": Vector2(0.775, 0.284),
-	&"south_west": Vector2(0.224, 0.699),
-	&"south_east": Vector2(0.777, 0.694),
+	&"north_west": Vector2(0.188, 0.245),
+	&"north_east": Vector2(0.810, 0.243),
+	&"south_west": Vector2(0.181, 0.777),
+	&"south_east": Vector2(0.821, 0.795),
 }
 const SIZE := {
 	&"crate": Vector2(0.056, 0.072),
@@ -16,7 +16,7 @@ const SIZE := {
 const MAX_HP := {&"crate": 12, &"barrel": 14, &"urn": 7}
 
 
-static func for_room(room_type: StringName, event_type: StringName = &"") -> Array[Dictionary]:
+static func for_room(room_type: StringName, event_type: StringName = &"", room_key: String = "") -> Array[Dictionary]:
 	var occupants: Dictionary = {}
 	match room_type:
 		&"Spawn", &"Normal":
@@ -41,14 +41,18 @@ static func for_room(room_type: StringName, event_type: StringName = &"") -> Arr
 					occupants[&"south_east"] = &"crate"
 	if occupants.is_empty():
 		return []
-	var solids := RoomProjection.room_solid_rects(room_type, event_type, true)
+	var solids := RoomProjection.room_solid_rects(room_type, event_type, true, room_key)
 	var props: Array[Dictionary] = []
 	for slot: StringName in occupants:
 		var kind: StringName = occupants[slot]
 		var dimension: Vector2 = SIZE[kind]
-		var rect := Rect2(Vector2(SLOTS[slot]) - dimension * 0.5, dimension)
-		var clearance := rect.grow(0.015)
-		if solids.any(func(solid: Rect2) -> bool: return solid.intersects(clearance)):
-			continue
-		props.append({"id": "breakable_%s" % slot, "rect": rect, "kind": kind, "max_hp": MAX_HP[kind]})
+		var corner: Vector2 = SLOTS[slot]
+		var inward := (Vector2(0.5, 0.5) - corner).sign()
+		for offset in [Vector2.ZERO, Vector2(0.082 * inward.x, 0), Vector2(0, 0.078 * inward.y)]:
+			var rect := Rect2(corner + Vector2(offset) - dimension * 0.5, dimension)
+			var clearance := rect.grow(0.015)
+			if solids.any(func(solid: Rect2) -> bool: return solid.intersects(clearance)):
+				continue
+			props.append({"id": "breakable_%s" % slot, "rect": rect, "kind": kind, "max_hp": MAX_HP[kind]})
+			break
 	return props

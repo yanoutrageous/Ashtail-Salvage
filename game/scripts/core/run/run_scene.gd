@@ -148,6 +148,13 @@ var result_panel: ResultPanel
 var map_overlay_panel: MapOverlayPanel
 var tutorial_popup_panel: TutorialPopupPanel
 var room_controller: RoomSceneController
+const ConnectedRooms = preload("res://scripts/presentation/voxel_dungeon/connected_room_surroundings.gd")
+var stage_origin := Vector2.ZERO
+var follow_offset := Vector2.ZERO
+var crossing_offset := Vector2.ZERO
+var camera_cell := Vector2i(-1, -1)
+var camera_run := ""
+var follow_enabled := false
 var player_controller: PlayerController
 var room_runtime_view
 var combat_art: CombatArt
@@ -299,6 +306,7 @@ func _on_app_shell_ui_scale_changed(value: float) -> void:
 func _process(delta: float) -> void:
 	if player_controller == null or command_bus == null or run_context == null:
 		return
+	_update_room_camera(delta)
 	if runtime_controller.has_pending_combat_save():
 		runtime_controller.finish_pending_combat_save()
 		if runtime_controller.has_pending_combat_save():
@@ -2649,14 +2657,48 @@ func _apply_game_stage_layout(layout_profile: Dictionary) -> void:
 		stage_rect.size.y / maxf(1.0, room_visual_size.y)
 	)
 	# Keep the existing uniform mapping for room art, player and logical bodies.
-	scale_value = clampf(scale_value, 0.32, 1.82)
+	follow_enabled = b_aspect > 1.0
+	scale_value = clampf(scale_value, 0.32, 1.82) * (0.71 if follow_enabled else 1.0)
 	var gameplay_center := stage_rect.get_center()
 	var b_scale := Vector2(scale_value * b_aspect, scale_value)
-	var origin := gameplay_center - room_visual_center * b_scale
-	room_layer.position = origin
-	player_layer.position = origin
+	stage_origin = gameplay_center - room_visual_center * b_scale
 	room_layer.scale = b_scale
 	player_layer.scale = b_scale
+	_apply_camera_position()
+
+
+func _update_room_camera(delta: float) -> void:
+	if not follow_enabled or not run_context.run_active:
+		camera_cell = Vector2i(-1, -1)
+		crossing_offset = Vector2.ZERO
+		follow_offset = Vector2.ZERO
+		return
+	var cell := run_context.get_current_pos()
+	var centered := player_controller.get_local_position() - Vector2(0.5, 0.5)
+	# The slope falls continuously toward the walls, keeping doorways in frame.
+	var target := Vector2(tanh(centered.x * 3.8), tanh(centered.y * 3.8)) * Vector2(68, 61)
+	if camera_run != str(run_context.run_id) or camera_cell == Vector2i(-1, -1):
+		crossing_offset = Vector2.ZERO
+		follow_offset = target
+	elif cell != camera_cell:
+		var step := cell - camera_cell
+		if absi(step.x) + absi(step.y) == 1:
+			crossing_offset += Vector2(step) * ConnectedRooms.PITCH
+		else:
+			crossing_offset = Vector2.ZERO
+			follow_offset = target
+	camera_cell = cell
+	camera_run = str(run_context.run_id)
+	follow_offset = follow_offset.lerp(target, 1.0 - exp(-8.5 * delta))
+	crossing_offset *= exp(-10.0 * delta)
+	_apply_camera_position()
+
+
+func _apply_camera_position() -> void:
+	var room_layer := $RoomLayer as Node2D
+	var offset := crossing_offset - follow_offset if follow_enabled else Vector2.ZERO
+	room_layer.position = stage_origin + offset * room_layer.scale
+	$PlayerLayer.position = room_layer.position
 
 
 func _suppress_runtime_scene_labels() -> void:

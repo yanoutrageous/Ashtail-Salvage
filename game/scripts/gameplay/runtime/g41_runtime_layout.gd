@@ -7,6 +7,16 @@ class_name G41RuntimeLayout
 # (640, 360) and rendered at 0.45, which places their 560 px presentation plate
 # at roughly (360, 80).  Actors and hit tests therefore share the same plate.
 const ROOM_RECT := Rect2(Vector2(360, 80), Vector2(560, 560))
+# Measured solid footprints in the admitted room plates. The middle strip in
+# each wall is the existing door lane. Flat motifs, loose debris, mine spikes
+# and the exit platform remain floor; this does not create hazard rules.
+# The stone shoulders meet the jambs on either side of a gate passage.
+const ROOM_WALL_RECTS := [
+	Rect2(0.0, 0.0, 0.408, 0.15), Rect2(0.592, 0.0, 0.408, 0.15),
+	Rect2(0.0, 0.87, 0.408, 0.13), Rect2(0.592, 0.87, 0.408, 0.13),
+	Rect2(0.0, 0.15, 0.125, 0.235), Rect2(0.0, 0.615, 0.125, 0.255),
+	Rect2(0.875, 0.15, 0.125, 0.235), Rect2(0.875, 0.615, 0.125, 0.255),
+]
 const PLAYER_BODY_RADIUS := 0.055
 const CONTEXT_RESERVED_UI_GROUP := &"g41_context_reserved_ui"
 const CONTEXT_FEEDBACK_RESERVE_HEIGHT := 60.0

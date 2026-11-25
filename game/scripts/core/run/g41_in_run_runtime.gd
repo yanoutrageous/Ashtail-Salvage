@@ -653,7 +653,7 @@ func _start_current_encounter(player_local_pos: Vector2) -> void:
 		"z2_talents": Z2Talents.from_context(context),
 		"monster_types": monster_types,
 		"enemy_profiles": [mother_profile],
-		"arena_obstacles": G41WorldObjectProjection.room_solid_rects(context.current_room_type, event_type),
+		"arena_obstacles": G41WorldObjectProjection.room_solid_rects(context.current_room_type, event_type, Z1EventCatalog.number(event_type) > 0),
 	})
 	_bind_hit_resolver()
 	simulation.set_paused(paused)

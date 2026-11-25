@@ -1477,7 +1477,7 @@ func sync_room_transition(direction: Vector2i, preferred_entry: Vector2 = Vector
 			landing = Vector2(0.5, floor_rect.position.y if direction.y > 0 else floor_rect.end.y)
 	landing = landing.clamp(floor_rect.position, floor_rect.end)
 	var event_type := EventService.get_event_type(context, context.get_current_pos()) if context.current_room_type == &"Event" else &""
-	var solids := G41WorldObjectProjection.room_solid_rects(context.current_room_type, event_type)
+	var solids := G41WorldObjectProjection.room_solid_rects(context.current_room_type, event_type, Z1EventCatalog.number(event_type) > 0)
 	for point: Vector2 in [landing, Vector2(0.50, 0.72), Vector2(0.50, 0.28), Vector2(0.28, 0.72), Vector2(0.72, 0.72)]:
 		if not solids.any(func(rect: Rect2) -> bool: return rect.grow(G41RuntimeLayout.PLAYER_BODY_RADIUS).has_point(point)):
 			landing = point

@@ -10,10 +10,10 @@ const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
 const WALL_LIGHT_LAYER := 4
 const DOOR_LAMP_ENERGY := 2.65
 const DOOR_LIGHT_POSITIONS := {
-	"north": [Vector3(-2.12, 1.5, -5.85), Vector3(2.12, 1.5, -5.85)],
-	"east": [Vector3(7.65, 1.4, -1.85), Vector3(7.65, 1.4, 1.85)],
-	"south": [Vector3(-2.12, 1.4, 5.85), Vector3(2.12, 1.4, 5.85)],
-	"west": [Vector3(-7.65, 1.4, -1.85), Vector3(-7.65, 1.4, 1.85)],
+	"north": [Vector3(-2.12, 1.5, -4.89), Vector3(2.12, 1.5, -4.89)],
+	"east": [Vector3(7.00, 1.4, -1.85), Vector3(7.00, 1.4, 1.85)],
+	"south": [Vector3(-2.12, 1.4, 5.20), Vector3(2.12, 1.4, 5.20)],
+	"west": [Vector3(-7.00, 1.4, -1.85), Vector3(-7.00, 1.4, 1.85)],
 }
 const IMPACT_SECONDS := 0.24
 const CHEST_OPEN_SECONDS := 0.28
@@ -41,6 +41,7 @@ var _lid_progress := 0.0
 
 func configure(next_entry: Dictionary) -> void:
 	var next_key := String(next_entry.get("geometry_key", next_entry.get("model_path", "")))
+	next_key += "/" + str(next_entry.get("growth_key", ""))
 	if not (next_entry.get("breakables", []) as Array).is_empty():
 		next_key += "/with_furniture"
 	if _geometry_key == next_key and _ready_model:
@@ -90,21 +91,20 @@ func _build() -> void:
 	var settings := Environment.new()
 	settings.background_mode = Environment.BG_CLEAR_COLOR
 	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	settings.ambient_light_color = Color("#829fa1")
+	settings.ambient_light_color = Color("#8398a3")
 	settings.ambient_light_energy = 0.33 if entry.get("polished", false) else 0.25
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
 	room_world.add_child(environment)
-	if not String(entry.get("shell_path", "")).is_empty():
-		var shell := (load(String(entry.shell_path)) as PackedScene).instantiate() as Node3D
-		room_world.add_child(shell)
-		_finish_authored_walls(shell)
-	model = _build_generated() if entry.get("generated", false) else (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
+	if entry.get("generated", false):
+		model = _build_generated()
+	else:
+		room_world.add_child(VoxelArt.new().build_event_shell(Layout.ROOM_WALL_RECTS, str(entry.get("growth_key", _geometry_key))))
+		model = (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
+		_place_authored_furniture()
 	room_world.add_child(model)
 	if String(entry.get("code", "")) == "B26":
 		_replace_offering_altar()
-	if entry.get("polished", false) and not entry.get("generated", false):
-		room_world.add_child(VoxelArt.new().dress_existing(_geometry_key))
 	var props: Array = entry.get("breakables", [])
 	if not props.is_empty():
 		room_world.add_child(VoxelArt.new().build_breakables(props))
@@ -125,6 +125,10 @@ func _build() -> void:
 	front_camera = _camera(front_viewport, 2)
 	back_sprite = _sprite(viewport, -100)
 	front_sprite = _sprite(front_viewport, 650)
+	var occlusion := ShaderMaterial.new()
+	occlusion.shader = preload("res://scripts/presentation/B/B_foreground_color.gdshader")
+	occlusion.set_shader_parameter("lit_room", viewport.get_texture())
+	front_sprite.material = occlusion
 	_build_lights()
 	_build_gates()
 	status_lamp = _box(room_world, Vector3.ZERO, Vector3(0.12, 0.12, 0.12), Color("86b7a2"))
@@ -137,17 +141,33 @@ func _build() -> void:
 	show()
 
 
-func _finish_authored_walls(shell: Node3D) -> void:
-	var material := ShaderMaterial.new()
-	material.shader = VoxelArt.STONE_SHADER
-	material.set_shader_parameter("authored_wall", true)
-	for mesh: MeshInstance3D in shell.find_children("*", "MeshInstance3D", true, false):
-		var label := String(mesh.name)
-		var is_portal := label.begins_with("Portal_") and not label.ends_with("FlushThreshold")
-		if label.begins_with("Wall_") or label.begins_with("Corner_") or is_portal:
-			mesh.set_meta("B_wall_stone", true)
-			for surface in mesh.mesh.get_surface_count():
-				mesh.set_surface_override_material(surface, material)
+func _place_authored_furniture() -> void:
+	for unit: Dictionary in entry.units:
+		if not unit.has("source_unit"):
+			continue
+		var source_tag := "__%s_" % unit.source_unit
+		for source: MeshInstance3D in model.find_children("*" + source_tag + "*", "MeshInstance3D", true, false):
+			var copy := source.duplicate() as MeshInstance3D
+			copy.name = String(source.name).replace(source_tag, "__%s_" % unit.id)
+			copy.set_meta("B_assembly", unit.id)
+			source.get_parent().add_child(copy)
+	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var id := String(mesh.get_meta("B_assembly", ""))
+		var belongs_to_unit := false
+		for unit: Dictionary in entry.units:
+			if id == unit.id or (id.is_empty() and String(mesh.name).contains("__" + String(unit.id) + "_")):
+				var offset: Array = unit.get("model_offset", [0.0, 0.0])
+				mesh.position += Vector3(offset[0] * X_SPAN, 0.0, offset[1] * Y_SPAN)
+				if unit.has("yaw_degrees"):
+					var rect: Array = unit.footprint
+					var pivot := local_to_model(Vector2(rect[0] + rect[2] * 0.5, rect[1] + rect[3] * 0.5))
+					var turn := Basis(Vector3.UP, deg_to_rad(float(unit.yaw_degrees)))
+					mesh.transform = Transform3D(turn, pivot - turn * pivot) * mesh.transform
+				belongs_to_unit = true
+				break
+		# The shortcut asset also embeds its original shell.
+		if not belongs_to_unit:
+			mesh.hide()
 
 
 func _replace_offering_altar() -> void:
@@ -166,7 +186,7 @@ func _build_generated() -> Node3D:
 		var fresh := VoxelArt.new().build(entry)
 		var meshes: Array[Dictionary] = []
 		for part: MeshInstance3D in fresh.get_children():
-			meshes.append({"name": part.name, "mesh": part.mesh, "assembly": part.get_meta("B_assembly", &"")})
+			meshes.append({"name": part.name, "mesh": part.mesh, "transform": part.transform, "assembly": part.get_meta("B_assembly", &"")})
 		# Re-entering a room gets fresh transforms and depth masks. The static
 		# vertex and material resources are identical for the same layout.
 		if _generated_meshes.size() >= 12:
@@ -178,6 +198,7 @@ func _build_generated() -> Node3D:
 		var part := MeshInstance3D.new()
 		part.name = record.name
 		part.mesh = record.mesh
+		part.transform = record.transform
 		if record.assembly != &"":
 			part.set_meta("B_assembly", record.assembly)
 		reused.add_child(part)
@@ -215,7 +236,7 @@ func _index_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh := node as MeshInstance3D
 		var id := String(mesh.get_meta("B_assembly", ""))
-		mesh.layers = (1 | WALL_LIGHT_LAYER) if mesh.has_meta("B_wall_stone") or id == "ArchitectureWalls" else 1
+		mesh.layers = (1 | WALL_LIGHT_LAYER) if id.begins_with("ArchitectureWalls") else 1
 		if id.is_empty():
 			for unit: Dictionary in entry.units:
 				if String(mesh.name).contains("__" + String(unit.id) + "_"):
@@ -233,30 +254,69 @@ func _build_lights() -> void:
 		for point: Vector3 in DOOR_LIGHT_POSITIONS[side]:
 			var lamp := OmniLight3D.new()
 			lamp.position = point
-			lamp.light_color = Color("#ff9b56")
+			lamp.light_color = Color("#ff912f")
 			lamp.light_energy = DOOR_LAMP_ENERGY
 			lamp.omni_range = 4.15
 			lamp.omni_attenuation = 1.30
 			room_world.add_child(lamp)
 			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-65, -25, 0)
-	fill.light_color = Color("#81a6ad")
+	fill.rotation_degrees = Vector3(-76, -22, 0)
+	fill.light_color = Color("#9badb3")
+	fill.shadow_enabled = true
+	fill.shadow_opacity = 0.36
+	fill.directional_shadow_max_distance = 45.0
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
 	var masonry := DirectionalLight3D.new()
 	masonry.name = "MasonryFill"
 	masonry.rotation_degrees = Vector3(-49.0, -37.0, 0.0)
 	masonry.light_color = Color("#b9cbd1")
-	masonry.light_energy = 0.24 if entry.get("generated", false) else 0.40
+	masonry.light_energy = 0.24
 	masonry.light_cull_mask = WALL_LIGHT_LAYER
 	room_world.add_child(masonry)
+	if entry.get("props", []).size() > 2 and entry.get("generated", false) and entry.get("room_type") in [&"Normal", &"Spawn", &"Chest"]:
+		var bench: Rect2 = entry.props[2]
+		var lamp := OmniLight3D.new()
+		lamp.position = local_to_model(bench.get_center()) + Vector3(0.42, 1.25, 0.02)
+		lamp.light_color = Color("#ffbd75")
+		lamp.light_energy = 0.72
+		lamp.omni_range = 5.2
+		room_world.add_child(lamp)
+	var kind := StringName(entry.get("room_type", &""))
 	var work := OmniLight3D.new()
+	work.name = "RoomSubjectLight"
 	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
 	work.light_color = Color(1.0, 0.76, 0.44)
-	work.light_energy = 0.55 if entry.get("room_type") in [&"Chest", &"Event", &"Exit"] else 0.0
-	work.omni_range = 6.0
-	work.shadow_enabled = true
+	match kind:
+		&"Mine":
+			work.position = local_to_model(entry.interaction_pos) + Vector3(-0.45, 3.0, 0.65)
+			work.light_color = Color("#ffd59a")
+			work.light_energy = 1.36
+		&"Normal", &"Spawn":
+			work.position = local_to_model(Vector2(0.50, 0.5)) + Vector3(-0.7, 4.0, 0.6)
+			work.light_color = Color("#ecdac2")
+			work.light_energy = 0.86
+		&"Monster", &"Combat", &"Boss":
+			work.light_color = Color("#e5bad2") if kind == &"Boss" else Color("#ddd7c8")
+			work.light_energy = 0.64
+		&"Event":
+			work.position = local_to_model(Vector2(0.5, 0.5)) + Vector3(-0.60, 4.2, 2.1)
+			work.light_color = Color("#ffe2c1")
+			# The spot identifies the service while the door candles keep their shared color.
+			match String(entry.get("id", entry.get("event_type", ""))).trim_prefix("B_"):
+				"relief", "first_aid": work.light_color = Color("#b4e5cd")
+				"recon", "information", "seal": work.light_color = Color("#b8d9f0")
+				"altar", "dice": work.light_color = Color("#dbbce5")
+				"mechanism", "trap", "coil": work.light_color = Color("#ffbe82")
+			work.light_energy = 0.78
+		&"Exit":
+			work.light_color = Color("#b0e4ce")
+			work.light_energy = 0.78
+		_:
+			work.light_energy = 0.70
+	work.omni_range = 7.0
+	work.shadow_enabled = false
 	room_world.add_child(work)
 
 func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
@@ -274,13 +334,15 @@ func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInst
 	return obj
 
 func _build_gates() -> void:
-	for side in ["north", "east", "south", "west"]:
+	var directions := {"north": Vector2i.UP, "east": Vector2i.RIGHT, "south": Vector2i.DOWN, "west": Vector2i.LEFT}
+	for side: String in directions:
+		var direction: Vector2i = directions[side]
 		var gate := VoxelArt.new().build_gate()
 		gate.name = "B_Gate_" + side
 		room_world.add_child(gate)
-		gate.position = {"north": Vector3(0, 0, -6.45), "south": Vector3(0, 0, 6.45), "east": Vector3(8.4, 0, 0), "west": Vector3(-8.4, 0, 0)}[side]
-		if side in ["east", "west"]:
-			gate.rotation.y = PI / 2
+		gate.rotation.y = PI * 0.5 if direction.x != 0 else 0.0
+		gate.scale = VoxelArt.gate_scale(direction)
+		gate.position = VoxelArt.gate_center(direction)
 		gate.position.y = -1.9
 		gate.hide()
 		gates[side] = gate
@@ -293,6 +355,22 @@ func apply_snapshot(snapshot: Dictionary, doors: Array[Dictionary]) -> void:
 	var lamp_on := StringName(snapshot.get("current_room", &"")) == &"Event" and bool(state.get("completed", false))
 	var changed := status_lamp.visible != lamp_on
 	status_lamp.visible = lamp_on
+	match String(entry.get("numbered_id", "")):
+		"e06":
+			for piece: MeshInstance3D in assemblies.get("main_station", []):
+				if String(piece.name).contains("__main_station_Door") and piece.visible == lamp_on:
+					piece.visible = not lamp_on
+					changed = true
+		"e24":
+			var locked := bool(state.get("cage", {}).get("active", false))
+			for piece: MeshInstance3D in assemblies.get("main_station", []):
+				if String(piece.name).contains("__main_station_RaisedGate"):
+					if not piece.has_meta("raised_y"):
+						piece.set_meta("raised_y", piece.position.y)
+					var target := float(piece.get_meta("raised_y")) - (1.4 if locked else 0.0)
+					if not is_equal_approx(piece.position.y, target):
+						piece.position.y = target
+						changed = true
 	if entry.get("generated", false) and _apply_voxel_prop_state(snapshot):
 		changed = true
 	for d in doors:
@@ -317,7 +395,7 @@ func _apply_voxel_prop_state(snapshot: Dictionary) -> bool:
 			_lid_state = next_state
 	elif entry.get("room_type") == &"Mine":
 		var armed := not bool(snapshot.get("current_room_detail", {}).get("triggered", false))
-		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_teeth", []):
+		for part: MeshInstance3D in assemblies.get("mine_signal", []) + assemblies.get("mine_cover", []):
 			if part.visible != armed:
 				part.visible = armed
 				changed = true

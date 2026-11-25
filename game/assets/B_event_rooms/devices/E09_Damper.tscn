@@ -1,0 +1,129 @@
+[gd_scene load_steps=13 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.38431, 0.44314, 0.41961, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.27059, 0.30588, 0.31373, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_bronze"]
+albedo_color = Color(0.70196, 0.51373, 0.27451, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_dark"]
+albedo_color = Color(0.16078, 0.17647, 0.16863, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="Mesh_1"]
+material = SubResource("Mat_rock")
+size = Vector3(2.9, 0.24, 1.62)
+
+[sub_resource type="BoxMesh" id="Mesh_2"]
+material = SubResource("Mat_iron")
+size = Vector3(2.697, 0.13, 1.5066)
+
+[sub_resource type="CylinderMesh" id="Mesh_3"]
+material = SubResource("Mat_iron")
+top_radius = 0.53
+bottom_radius = 0.53
+height = 1.65
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_4"]
+material = SubResource("Mat_bronze")
+top_radius = 0.59
+bottom_radius = 0.59
+height = 0.13
+radial_segments = 8
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_5"]
+material = SubResource("Mat_dark")
+size = Vector3(0.28, 0.34, 0.79)
+
+[sub_resource type="BoxMesh" id="Mesh_6"]
+material = SubResource("Mat_bronze")
+size = Vector3(0.21, 0.57, 0.23)
+
+[sub_resource type="BoxMesh" id="Mesh_7"]
+material = SubResource("Mat_bronze")
+size = Vector3(1.29, 0.2, 0.22)
+
+[sub_resource type="BoxMesh" id="Mesh_8"]
+material = SubResource("Mat_dark")
+size = Vector3(0.55, 0.07, 0.08)
+
+[node name="E09_Damper" type="Node3D"]
+
+[node name="E09_Damper__main_station_Plinth_0" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_1")
+
+[node name="E09_Damper__main_station_IronShoe_1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.31, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_2")
+
+[node name="E09_Damper__main_station_Resonator_2" type="MeshInstance3D" parent="."]
+position = Vector3(-0.15, 0.92, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("Mesh_3")
+
+[node name="E09_Damper__main_station_DampingCollar_3" type="MeshInstance3D" parent="."]
+position = Vector3(-0.91, 0.92, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("Mesh_4")
+
+[node name="E09_Damper__main_station_DampingCollar_4" type="MeshInstance3D" parent="."]
+position = Vector3(-0.63, 0.92, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("Mesh_4")
+
+[node name="E09_Damper__main_station_DampingCollar_5" type="MeshInstance3D" parent="."]
+position = Vector3(0.37, 0.92, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("Mesh_4")
+
+[node name="E09_Damper__main_station_DampingCollar_6" type="MeshInstance3D" parent="."]
+position = Vector3(0.63, 0.92, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("Mesh_4")
+
+[node name="E09_Damper__main_station_DampingFoot_7" type="MeshInstance3D" parent="."]
+position = Vector3(-0.62, 0.5, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E09_Damper__main_station_DampingFoot_8" type="MeshInstance3D" parent="."]
+position = Vector3(0.3, 0.5, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E09_Damper__main_station_ReturnPipe_9" type="MeshInstance3D" parent="."]
+position = Vector3(-0.7, 1.47, -0.17)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E09_Damper__main_station_ReturnPipe_10" type="MeshInstance3D" parent="."]
+position = Vector3(0.4, 1.47, -0.17)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E09_Damper__main_station_Crossover_11" type="MeshInstance3D" parent="."]
+position = Vector3(-0.15, 1.74, -0.17)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_7")
+
+[node name="E09_Damper__main_station_Vent_12" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 1.41, -0.18)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E09_Damper__main_station_Vent_13" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 1.41, 0.18)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")

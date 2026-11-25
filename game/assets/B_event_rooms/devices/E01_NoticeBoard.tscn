@@ -1,0 +1,175 @@
+[gd_scene load_steps=19 format=3]
+
+[sub_resource type="StandardMaterial3D" id="Mat_rock"]
+albedo_color = Color(0.38431, 0.44314, 0.41961, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.27059, 0.30588, 0.31373, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_oak"]
+albedo_color = Color(0.47451, 0.31373, 0.20000, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_bronze"]
+albedo_color = Color(0.70196, 0.51373, 0.27451, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.63137, 0.41961, 0.25098, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_cloth"]
+albedo_color = Color(0.27451, 0.41961, 0.40000, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_paper"]
+albedo_color = Color(0.84314, 0.77647, 0.60784, 1)
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="Mat_ink"]
+albedo_color = Color(0.32549, 0.25098, 0.17255, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="Mesh_1"]
+material = SubResource("Mat_rock")
+size = Vector3(2.55, 0.24, 1.06)
+
+[sub_resource type="BoxMesh" id="Mesh_2"]
+material = SubResource("Mat_iron")
+size = Vector3(2.3715, 0.13, 0.9858)
+
+[sub_resource type="BoxMesh" id="Mesh_3"]
+material = SubResource("Mat_oak")
+size = Vector3(0.22, 1.72, 0.25)
+
+[sub_resource type="BoxMesh" id="Mesh_4"]
+material = SubResource("Mat_bronze")
+size = Vector3(0.28, 0.13, 0.28)
+
+[sub_resource type="BoxMesh" id="Mesh_5"]
+material = SubResource("Mat_wood")
+size = Vector3(2.16, 1.16, 0.15)
+
+[sub_resource type="BoxMesh" id="Mesh_6"]
+material = SubResource("Mat_cloth")
+size = Vector3(1.84, 0.96, 0.05)
+
+[sub_resource type="BoxMesh" id="Mesh_7"]
+material = SubResource("Mat_paper")
+size = Vector3(0.44, 0.43, 0.045)
+
+[sub_resource type="BoxMesh" id="Mesh_8"]
+material = SubResource("Mat_bronze")
+size = Vector3(0.065, 0.065, 0.045)
+
+[sub_resource type="BoxMesh" id="Mesh_9"]
+material = SubResource("Mat_ink")
+size = Vector3(0.23, 0.028, 0.022)
+
+[sub_resource type="BoxMesh" id="Mesh_10"]
+material = SubResource("Mat_ink")
+size = Vector3(0.185, 0.028, 0.022)
+
+[node name="E01_NoticeBoard" type="Node3D"]
+
+[node name="E01_NoticeBoard__main_station_Plinth_0" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.14, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_1")
+
+[node name="E01_NoticeBoard__main_station_IronShoe_1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.31, 0)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_2")
+
+[node name="E01_NoticeBoard__main_station_FramePost_2" type="MeshInstance3D" parent="."]
+position = Vector3(-0.98, 1.1, -0.16)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_3")
+
+[node name="E01_NoticeBoard__main_station_BronzeCap_3" type="MeshInstance3D" parent="."]
+position = Vector3(-0.98, 2, -0.16)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_4")
+
+[node name="E01_NoticeBoard__main_station_FramePost_4" type="MeshInstance3D" parent="."]
+position = Vector3(0.98, 1.1, -0.16)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_3")
+
+[node name="E01_NoticeBoard__main_station_BronzeCap_5" type="MeshInstance3D" parent="."]
+position = Vector3(0.98, 2, -0.16)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_4")
+
+[node name="E01_NoticeBoard__main_station_NoticeBoard_6" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.38, -0.13)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_5")
+
+[node name="E01_NoticeBoard__main_station_BoardRecess_7" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.38, -0.035)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_6")
+
+[node name="E01_NoticeBoard__main_station_PinnedNote_8" type="MeshInstance3D" parent="."]
+position = Vector3(-0.49, 1.48, 0.015)
+rotation = Vector3(0, 0, 0.09)
+mesh = SubResource("Mesh_7")
+
+[node name="E01_NoticeBoard__main_station_Tack_9" type="MeshInstance3D" parent="."]
+position = Vector3(-0.49, 1.64, 0.053)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E01_NoticeBoard__main_station_Ink_10" type="MeshInstance3D" parent="."]
+position = Vector3(-0.49, 1.52, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")
+
+[node name="E01_NoticeBoard__main_station_Ink_11" type="MeshInstance3D" parent="."]
+position = Vector3(-0.49, 1.41, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_10")
+
+[node name="E01_NoticeBoard__main_station_PinnedNote_12" type="MeshInstance3D" parent="."]
+position = Vector3(0.17, 1.28, 0.015)
+rotation = Vector3(0, 0, -0.12)
+mesh = SubResource("Mesh_7")
+
+[node name="E01_NoticeBoard__main_station_Tack_13" type="MeshInstance3D" parent="."]
+position = Vector3(0.17, 1.44, 0.053)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E01_NoticeBoard__main_station_Ink_14" type="MeshInstance3D" parent="."]
+position = Vector3(0.17, 1.32, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")
+
+[node name="E01_NoticeBoard__main_station_Ink_15" type="MeshInstance3D" parent="."]
+position = Vector3(0.17, 1.21, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_10")
+
+[node name="E01_NoticeBoard__main_station_PinnedNote_16" type="MeshInstance3D" parent="."]
+position = Vector3(0.54, 1.59, 0.015)
+rotation = Vector3(0, 0, 0.04)
+mesh = SubResource("Mesh_7")
+
+[node name="E01_NoticeBoard__main_station_Tack_17" type="MeshInstance3D" parent="."]
+position = Vector3(0.54, 1.75, 0.053)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_8")
+
+[node name="E01_NoticeBoard__main_station_Ink_18" type="MeshInstance3D" parent="."]
+position = Vector3(0.54, 1.63, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_9")
+
+[node name="E01_NoticeBoard__main_station_Ink_19" type="MeshInstance3D" parent="."]
+position = Vector3(0.54, 1.52, 0.049)
+rotation = Vector3(0, 0, 0)
+mesh = SubResource("Mesh_10")

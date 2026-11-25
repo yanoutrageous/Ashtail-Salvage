@@ -27,6 +27,7 @@ func _run() -> void:
 	_check(art_hashes.size() == 78, "26 retained raster rooms must load 78 distinct textures; the three shared canonical event ids now use B GLB")
 	_check_same_room_update(view)
 	_check_unresolved_event(view)
+	_check_voxel_devices(view)
 	player.free()
 	view.free()
 	if failures.is_empty():
@@ -242,6 +243,49 @@ func _check_unresolved_event(view: G41RoomRuntimeView) -> void:
 		_check(projected.get("event_room", {}).is_empty() and String(event.get("visual_key", "")).begins_with("ui.art25.long_term.event."), "unresolved event did not retain the compatible event badge")
 		var floor := view.get_node_or_null("EventRoomDecor/Floor") as CanvasItem
 		_check(floor == null or not floor.is_visible_in_tree() or floor.get("texture") == null, "unresolved event retained the previous room decor")
+
+
+func _check_voxel_devices(view: G41RoomRuntimeView) -> void:
+	var art := preload("res://scripts/presentation/voxel_a1/voxel_combat_overlay.gd").new()
+	view.add_child(art)
+	view.combat_art = art
+	var models := {}
+	for number in range(1, 26):
+		var event_type := StringName("z1_event_e%02d" % number)
+		var snapshot := _event_snapshot(event_type)
+		view.configure_room(snapshot)
+		var station := _object_of_kind(view.world_projection, &"event")
+		var entity = view.special_entities[station.projection_id]
+		var sprite := entity.get_node("VisualRoot/ArtVisual") as Sprite2D
+		var renderer = view.b_room_view
+		var entry: Dictionary = renderer.entry
+		var model_path := String(entry.get("model_path", ""))
+		_check(not sprite.is_visible_in_tree(), "%s displays retired station sprite" % event_type)
+		_check(renderer.visible and renderer.assemblies.has("main_station") and not renderer.assemblies.has("fixture_0"), "%s needs a dedicated 3D station" % event_type)
+		_check(not model_path.is_empty() and not models.has(model_path), "%s repeats a station model" % event_type)
+		models[model_path] = true
+		_check(entry.body_rect.get_center().distance_to(Vector2(0.5, 0.5)) < 0.001, "%s station center" % event_type)
+		_check(_clear_point(entry.interaction_pos, _clearance_rects(view.get_logical_obstacles())), "%s station approach" % event_type)
+		if number in [6, 24]:
+			snapshot.event_state.merge({"completed": number == 6, "cage": {"active": number == 24}}, true)
+			view.configure_room(snapshot)
+			var tested := false
+			for piece: MeshInstance3D in renderer.assemblies.main_station:
+				if number == 6 and String(piece.name).contains("__main_station_Door"):
+					_check(not piece.visible, "fuse cabinet stays closed")
+					tested = true
+				if number == 24 and String(piece.name).contains("__main_station_RaisedGate"):
+					_check(piece.position.y < float(piece.get_meta("raised_y")), "cage gate stays raised")
+					tested = true
+			_check(tested, "%s missing moving pieces" % event_type)
+	_check(models.size() == 25, "all numbered events need distinct 3D devices")
+
+
+static func _clearance_rects(solids: Array[Rect2]) -> Array[Rect2]:
+	var result: Array[Rect2] = []
+	for rect in solids:
+		result.append(rect.grow(Layout.PLAYER_BODY_RADIUS - 0.0001))
+	return result
 
 
 func _event_snapshot(event_type: StringName) -> Dictionary:

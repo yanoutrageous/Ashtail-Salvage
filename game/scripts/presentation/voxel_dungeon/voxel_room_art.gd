@@ -5,13 +5,13 @@ const X_SPAN := 19.3
 const Z_SPAN := 14.77
 const FLOOR_Y := 0.06
 const STONE := Color("#666c68")
-const MORTAR := Color("#343836")
+const MORTAR := Color("#292e30")
 const BRICK := Color("#69706c")
-const WALL_CAP := Color("#283e3d")
+const WALL_CAP := Color("#102a2c")
 const BLOCK_EDGE := Color("#8b8c7e")
 const METAL := Color("#465354")
 const BRASS := Color("#ad8a5b")
-const OAK := Color("#77543d")
+const OAK := Color("#865334")
 const DARK_OAK := Color("#503529")
 const AMBER := Color("#ffc47b")
 const TEAL := Color("#62d9bf")
@@ -20,8 +20,19 @@ const STONE_SHADER := preload("res://scripts/presentation/voxel_dungeon/voxel_bl
 
 enum Finish { STONE, IRON, WOOD, BRONZE, GLOW, PAVING }
 
+const DUNGEON_SHELL := preload("res://assets/B_event_rooms/B_room_shell.glb")
+static var floor_meshes: Array[Mesh] = []
 static var gate_mesh: ArrayMesh
 
+const WALL_HEIGHT := 1.55
+const GATE_TRACK := 0.15
+const GATE_JAMB := 0.24
+const GATE_SIDE_PLAY := 0.018
+const GATE_HALF_WIDTH := 1.075
+const GATE_HEIGHT := 1.64
+const CAP_CENTER := WALL_HEIGHT + 0.075
+const CAP_THICKNESS := 0.175
+var growth_key := ""
 var rng := RandomNumberGenerator.new()
 var boxes: Array
 var stone := STONE
@@ -32,6 +43,7 @@ var default_group := ""
 
 func build(entry: Dictionary) -> Node3D:
 	rng.seed = hash(entry["geometry_key"])
+	growth_key = str(entry.get("growth_key", entry["geometry_key"])) if entry.get("room_type") != "Shell" else ""
 	boxes = BoxMesh.new().get_mesh_arrays()
 	var scene := Node3D.new()
 	scene.name = "VoxelArchitecture"
@@ -41,11 +53,7 @@ func build(entry: Dictionary) -> Node3D:
 	}
 	var kind := String(entry["room_type"])
 	stone = Color(palette.get(kind, "#626b66"))
-	_floor(kind)
-	default_group = "ArchitectureWalls"
-	for rect: Rect2 in entry["wall_rects"]:
-		_wall(rect)
-	default_group = ""
+	_build_shell(scene, entry.wall_rects)
 	for index in entry["props"].size():
 		var prop: Rect2 = entry["props"][index]
 		match kind:
@@ -70,21 +78,38 @@ func build(entry: Dictionary) -> Node3D:
 		"Event":
 			_floor_seal(station, TEAL, 2.85)
 	_room_inlay(kind, station)
-	_frame_dressing()
 	_finish(scene)
 	return scene
 
 
-func dress_existing(_key: String) -> Node3D:
+func build_event_shell(walls: Array, room_key := "event masonry") -> Node3D:
+	growth_key = room_key
+	rng.seed = hash("event masonry")
 	boxes = BoxMesh.new().get_mesh_arrays()
-	var dressing := Node3D.new()
-	dressing.name = "VoxelDressing"
-	# Small hardware follows the shared GLB thresholds, clear of event furniture.
-	for side in [-1.0, 1.0]:
-		_authored_threshold(Vector3(0, 0, side * 6.40), 0.0)
-		_authored_threshold(Vector3(side * 8.40, 0, 0), PI * 0.5)
-	_finish(dressing)
-	return dressing
+	stone = Color("#626b66")
+	var shell := Node3D.new()
+	shell.name = "VoxelArchitecture"
+	_build_shell(shell, walls)
+	_finish(shell)
+	return shell
+
+
+func _build_shell(scene: Node3D, walls: Array) -> void:
+	_add_dungeon_floor(scene)
+	default_group = "ArchitectureWalls"
+	for rect: Rect2 in walls:
+		if rect.size.x > 0.30 and (is_zero_approx(rect.position.x) or is_equal_approx(rect.end.x, 1.0)):
+			# Give the return its own footprint. Both adjoining wall runs stop at its faces.
+			var west := is_zero_approx(rect.position.x)
+			var side_width := 0.125
+			var corner_x := rect.position.x if west else rect.end.x - side_width
+			var bay_x := rect.position.x + side_width if west else rect.position.x
+			_wall(Rect2(corner_x, rect.position.y, side_width, rect.size.y), true)
+			_wall(Rect2(bay_x, rect.position.y, rect.size.x - side_width, rect.size.y))
+		else:
+			_wall(rect)
+	default_group = ""
+	_frame_dressing()
 
 
 func build_offering_altar(rect: Rect2) -> Node3D:
@@ -236,14 +261,6 @@ func _breakable_fragments(rect: Rect2, id: String, kind: StringName) -> void:
 			METAL.lightened(0.10), id + "_debris", 0.44, Finish.IRON)
 
 
-func _authored_threshold(p: Vector3, yaw: float) -> void:
-	var basis := Basis(Vector3.UP, yaw)
-	for edge in [-1.01, 1.01]:
-		var socket := p + basis * Vector3(edge, 0.076, 0)
-		_box(socket, Vector3(0.15, 0.030, 0.33), METAL.darkened(0.13), "", yaw, Finish.IRON)
-		for fastener in [-0.10, 0.10]:
-			_box(socket + basis * Vector3(0, 0.020, fastener), Vector3(0.055, 0.015, 0.055), BRASS.darkened(0.13), "", yaw, Finish.BRONZE)
-
 func build_gate() -> Node3D:
 	var gate := Node3D.new()
 	if gate_mesh != null:
@@ -283,67 +300,96 @@ func _rect_fill(rect: Rect2, height: float, color: Color, group := "", inset := 
 	_box(_point(rect.get_center(), base + height * 0.5), Vector3(size.x, height, size.y), color, group)
 
 
-func _floor(_kind: String) -> void:
-	_box(Vector3(0, -0.36, 0), Vector3(19.48, 0.40, 14.96), Color("#282b2c"))
-	_box(Vector3(0, -0.17, 0), Vector3(19.37, 0.38, 14.83), MORTAR.darkened(0.18))
-	var z := -Z_SPAN * 0.5
-	for row in 12:
-		var depth := Z_SPAN / 12.0 + 0.10 * sin(row * 2.3)
-		if row == 11:
-			depth = Z_SPAN * 0.5 - z
-		var x := -X_SPAN * 0.5
-		while x < X_SPAN * 0.5 - 0.01:
-			var remaining := X_SPAN * 0.5 - x
-			var width := rng.randf_range(1.12, 1.97)
-			if x == -X_SPAN * 0.5 and row % 2 == 1:
-				width *= 0.66
-			if remaining < width + 0.65:
-				width = remaining
-			var p := Vector3(x + width * 0.5, -0.023, z + depth * 0.5)
-			var perimeter := absf(p.x) > 6.2 or absf(p.z) > 4.9
-			var tint := _shade(stone, 0.065 if perimeter else 0.045)
-			if perimeter:
-				p.y += rng.randf_range(-0.016, 0.004)
-				tint = tint.lerp(MORTAR, rng.randf_range(0.04, 0.16))
-			var size := Vector3(width - 0.025, 0.16, depth - 0.027)
-			if perimeter and rng.randf() < 0.26:
-				_chipped_flagstone(p, size, tint)
-			else:
-				_box(p, size, tint, "", 0.0, Finish.PAVING)
-			x += width
-		z += depth
-	for side in [-1.0, 1.0]:
-		_threshold(Vector3(0.0, FLOOR_Y, side * 6.72), false)
-		_threshold(Vector3(side * 8.55, FLOOR_Y, 0.0), true)
+func _add_dungeon_floor(scene: Node3D) -> void:
+	# Reuse the carved slabs and their painted mineral/roughness atlases from the event-room kit.
+	if floor_meshes.is_empty():
+		var shell := DUNGEON_SHELL.instantiate()
+		for part: MeshInstance3D in shell.find_children("Floor_*", "MeshInstance3D", true, false):
+			if part.name != &"Floor_Substrate":
+				var slab: Mesh = part.mesh.duplicate()
+				for surface in slab.get_surface_count():
+					var original := slab.surface_get_material(surface) as BaseMaterial3D
+					if original != null:
+						var stone := original.duplicate() as BaseMaterial3D
+						stone.albedo_color *= Color("#ebe8e0")
+						slab.surface_set_material(surface, stone)
+				floor_meshes.append(slab)
+		shell.free()
+	_box(Vector3(0, -0.17, 0), Vector3(X_SPAN, 0.33, Z_SPAN), MORTAR.darkened(0.24))
+	for mesh in floor_meshes:
+		var floor_piece := MeshInstance3D.new()
+		floor_piece.mesh = mesh
+		floor_piece.name = mesh.resource_name
+		floor_piece.scale = Vector3(X_SPAN / 16.0, 1.0, Z_SPAN / 12.0)
+		scene.add_child(floor_piece)
+
+	for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+		_threshold(direction)
 
 
-func _chipped_flagstone(center: Vector3, size: Vector3, tint: Color) -> void:
-	var chip := Vector2(rng.randf_range(0.14, 0.29), rng.randf_range(0.10, 0.19))
-	var dx := -1.0 if rng.randf() < 0.5 else 1.0
-	var dz := -1.0 if rng.randf() < 0.5 else 1.0
-	# Two flush prisms leave a stepped corner and expose the recessed mortar.
-	_box(center - Vector3(dx * chip.x * 0.5, 0, 0), Vector3(size.x - chip.x, size.y, size.z), tint, "", 0.0, Finish.PAVING)
-	var edge := center + Vector3(dx * (size.x - chip.x) * 0.5, 0, -dz * chip.y * 0.5)
-	_box(edge, Vector3(chip.x, size.y, size.z - chip.y), tint, "", 0.0, Finish.PAVING)
+static func gate_center(direction: Vector2i) -> Vector3:
+	var radius := 8.55 if direction.x != 0 else 6.72
+	return Vector3(direction.x, 0, direction.y) * (radius + GATE_TRACK)
 
 
-func _threshold(p: Vector3, side: bool) -> void:
+static func opening_half_width(direction: Vector2i) -> float:
+	return Z_SPAN * 0.115 if direction.x != 0 else X_SPAN * 0.092
+
+
+static func gate_scale(direction: Vector2i) -> Vector3:
+	var width := opening_half_width(direction) - GATE_JAMB - GATE_SIDE_PLAY
+	var top := FLOOR_Y + CAP_CENTER - CAP_THICKNESS * 0.5 - 0.020
+	return Vector3(width / GATE_HALF_WIDTH, top / GATE_HEIGHT, 1.0)
+
+
+func _threshold(direction: Vector2i) -> void:
+	var side := direction.x != 0
 	var turn := PI * 0.5 if side else 0.0
 	var basis := Basis(Vector3.UP, turn)
-	_stone_block(p + Vector3.UP * 0.06, Vector3(2.50, 0.13, 1.24), BRICK.lightened(0.16), 0.045, "", turn)
-	for offset in [-0.42, 0.38]:
-		_box(p + basis * Vector3(0, 0.142, offset), Vector3(2.36, 0.043, 0.13), METAL, "", turn, Finish.IRON)
+	var outward := Vector3(direction.x, 0, direction.y)
+	var axis := gate_center(direction) + Vector3.UP * FLOOR_Y
+	var p := axis - outward * GATE_TRACK
+	var track := GATE_TRACK
+	for interval: Vector2 in [Vector2(-0.62, track - 0.17), Vector2(track + 0.17, 0.62)]:
+		var center := p + outward * (interval.x + interval.y) * 0.5 + Vector3.UP * 0.06
+		_stone_block(center, Vector3(3.20, 0.13, interval.y - interval.x), BRICK.lightened(0.16), 0.034, "", turn)
+	for offset in [-0.54, 0.54]:
+		_box(p + basis * Vector3(0, 0.142, offset), Vector3(3.08, 0.043, 0.13), METAL, "", turn, Finish.IRON)
 		for plate in range(-2, 3):
 			_box(p + basis * Vector3(plate * 0.43, 0.168, offset), Vector3(0.11, 0.014, 0.092), BRASS.darkened(0.18), "", turn, Finish.BRONZE)
-	for offset in [-1.36, 1.36]:
-		var post := p + basis * Vector3(offset, 0.0, 0.08)
-		_box(post + Vector3.UP * 0.13, Vector3(0.47, 0.26, 0.87), MORTAR, "", turn)
-		_box(post + Vector3.UP * 0.52, Vector3(0.34, 1.04, 0.74), BRICK, "", turn)
-		_stone_block(post + Vector3.UP * 1.08, Vector3(0.48, 0.16, 0.89), BLOCK_EDGE, 0.058, "", turn)
-		_box(post + Vector3.UP * 0.76, Vector3(0.40, 0.14, 0.79), METAL, "", turn, Finish.IRON)
-		_box(post + basis * Vector3(0, 0.76, 0.408), Vector3(0.115, 0.081, 0.027), BRASS, "", turn, Finish.BRONZE)
+	# The lintel bears on the jambs, with the ironwork centered in their two U-channels.
+	var frame_group := "ArchitectureWallsFrame" + (("East" if p.x > 0 else "West") if side else ("South" if p.z > 0 else "North"))
+	var half_open := opening_half_width(direction)
+	var outer_edge := X_SPAN * 0.5 - absf(p.x) if side else Z_SPAN * 0.5 - absf(p.z)
+	var cap_front := -0.23
+	var cap_back := outer_edge - GATE_TRACK
+	var beam_front := 0.16 if side else cap_front
+	var cap_depth := cap_back - beam_front
+	var cap := axis + outward * (cap_back + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
+	var stone_color := WALL_CAP.lerp(BRICK, 0.17)
+	_stone_block(cap, Vector3(half_open * 2, CAP_THICKNESS, cap_depth), stone_color, 0.028, frame_group, turn)
+	if side:
+		# Run the cap over the iron track and into both jambs.
+		var rim_front := -0.40
+		var rim := axis + outward * (rim_front + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
+		var edge_color := stone_color.lerp(Color("#637577"), 0.36)
+		_stone_block(rim, Vector3(half_open * 2, CAP_THICKNESS, beam_front - rim_front), edge_color, 0.020, frame_group, turn)
+	var post_height := CAP_CENTER - CAP_THICKNESS * 0.5
+	for hand: float in [-1.0, 1.0]:
+		var jamb := axis + basis * Vector3(hand * (half_open - GATE_JAMB * 0.5), 0, 0)
+		_box(jamb + outward * (cap_back + cap_front) * 0.5 + Vector3.UP * post_height * 0.5, Vector3(GATE_JAMB, post_height, cap_back - cap_front), BRICK.darkened(0.12), frame_group, turn)
+		var cheek := axis + basis * Vector3(hand * (half_open - GATE_JAMB - 0.055), post_height * 0.5, 0)
+		for face: float in [-1.0, 1.0]:
+			_box(cheek + outward * face * 0.241, Vector3(0.11, post_height, 0.06), METAL, frame_group, turn, Finish.IRON)
+		for collar_y: float in [0.24, post_height - 0.19]:
+			_box(jamb + outward * (cap_front - 0.024) + Vector3.UP * collar_y, Vector3(GATE_JAMB, 0.11, 0.048), BRASS.darkened(0.25), frame_group, turn, Finish.BRONZE)
+	# A stone landing beyond the north throat is visible through the open frame.
+	if not side and p.z < 0:
+		var landing := Vector3(0, -0.075, -Z_SPAN * 0.5 - 0.53)
+		_stone_block(landing, Vector3(half_open * 2 + 0.28, 0.15, 1.06), BRICK.darkened(0.34), 0.025, "ArchitectureWalls")
 
-func _wall(rect: Rect2) -> void:
+
+func _wall(rect: Rect2, corner := false) -> void:
 	var center := _point(rect.get_center())
 	var size := rect.size * Vector2(X_SPAN, Z_SPAN)
 	var along_x := size.x >= size.y
@@ -352,20 +398,20 @@ func _wall(rect: Rect2) -> void:
 	var length := maxf(size.x, size.y)
 	var across := minf(size.x, size.y)
 	var north := rect.position.y < 0.12
-	var height := 1.73 if north else (0.56 if rect.end.y > 0.90 and along_x else 1.06)
+	var height := WALL_HEIGHT
 	var inward := 1.0 if (basis * Vector3.BACK).dot(center) < 0.0 else -1.0
 	var cols := maxi(2, roundi(length / 0.94))
 	var tiers := maxi(2, roundi(height / 0.30))
 	var run := length / cols
-	var wall_tint := BRICK.lerp(stone, 0.30)
+	var wall_tint := Color("#303f47").lerp(stone, 0.08)
 	# The right-hand north bay contains one recessed cupboard. Its backing
 	# continues behind the opening and keeps the outside face closed.
-	var has_niche := along_x and north and center.x > 0.0 and length > 5.0 and across > 0.90
-	var niche_x := -length * 0.20
+	var has_niche := not corner and along_x and north and center.x > 0.0 and length > 5.0 and across > 0.90
+	var niche_x := -length * 0.10
 	var niche_half := 0.94
 	var core_inset := 0.52 if has_niche else 0.14
 	var core_center := center + basis * Vector3(0, height * 0.5 - 0.05, -inward * core_inset * 0.5)
-	_box(core_center, Vector3(length - 0.045, height + 0.08, across - core_inset - 0.05), MORTAR.darkened(0.27), "", turn)
+	_box(core_center, Vector3(length - 0.045, height + 0.08, across - core_inset - 0.18), MORTAR.darkened(0.27), "", turn)
 	for tier in tiers:
 		for col in cols + 1:
 			var left := maxf(0.0, (col - 0.5 * (tier % 2)) * run)
@@ -390,6 +436,17 @@ func _wall(rect: Rect2) -> void:
 		var sill := center + Vector3(niche_x, course + 0.02, across * 0.5)
 		_north_wall_niche(sill, niche_half, height - 2.0 * course, wall_tint)
 
+	# A projecting foot and a sloped coping reveal the wall depth from the fixed camera.
+	for course_index in cols:
+		var offset := (course_index + 0.5) * run - length * 0.5
+		var foot := center + basis * Vector3(offset, 0.14, inward * (across * 0.5 - 0.02))
+		_stone_block(foot, Vector3(run - 0.028, 0.24, 0.21), wall_tint.darkened(0.18), 0.035, "", turn)
+		var coping := center + basis * Vector3(offset, height + 0.12, inward * (across * 0.5 - 0.04))
+		_stone_block(coping, Vector3(run - 0.024, 0.16, 0.21), Color("#42595a"), 0.035, "", turn)
+
+	# Keep wear stable and independent of the room-prop random sequence.
+	var wear := RandomNumberGenerator.new()
+	wear.seed = hash(rect)
 	var cap_depth := across / 2.0
 	for row in 2:
 		var row_shift := 0.5 * row * run
@@ -401,13 +458,165 @@ func _wall(rect: Rect2) -> void:
 			var lip := (float(row) - 0.5) * cap_depth
 			var cap := center + basis * Vector3((left + right - length) * 0.5, height + 0.075, lip)
 			var tone := _shade(WALL_CAP.lerp(wall_tint, 0.12 if lip * inward > 0.0 else 0.03), 0.045)
-			_stone_block(cap, Vector3(right - left - 0.035, 0.175, cap_depth - 0.038), tone, rng.randf_range(0.037, 0.073), "", turn)
+			var block_size := Vector3(right - left - 0.035, 0.175, cap_depth - 0.038)
+			var bevel := rng.randf_range(0.037, 0.073)
+			if not corner and block_size.x > 0.6 and wear.randf() < 0.16:
+				_chipped_coping(cap, block_size, tone, turn, bevel, inward)
+			else:
+				_stone_block(cap, block_size, tone, bevel, "", turn)
 
+	if corner:
+		if not growth_key.is_empty() and _moisture(center) > 0.28:
+			wear.seed = hash([growth_key, rect, "corner moss"])
+			_corner_moss(center, size, wear)
+		return
 	for end: float in [-1.0, 1.0]:
 		var x := end * (length * 0.5 - 0.39)
 		_wall_buttress(center, basis, turn, x, inward * (across * 0.5 - 0.20), height, wall_tint)
 	if length > 4.5:
 		_wall_buttress(center, basis, turn, length * 0.11, inward * (across * 0.5 - 0.20), height, wall_tint)
+
+
+	if growth_key.is_empty():
+		return
+	var moisture := _moisture(center)
+	if moisture < 0.30:
+		return
+	wear.seed = hash([growth_key, rect])
+	# Start on a real brick joint toward the damp corner, away from the door shoulders.
+	var corner_dir := Vector3(signf(center.x) * X_SPAN * 0.5, 0, signf(center.z) * Z_SPAN * 0.5) - center
+	var hand := signf((basis.inverse() * corner_dir).x)
+	var anchor := hand * (length * 0.5 - run * (1.0 if length < 4.0 else 1.5))
+	anchor = clampf(roundf((anchor + length * 0.5) / run) * run - length * 0.5, -length * 0.5 + 0.72, length * 0.5 - 0.72)
+	if has_niche and absf(anchor - niche_x) < niche_half + 0.60:
+		return
+	_moss_ledge(center, basis, turn, anchor, inward, across, length, moisture, wear)
+	if wear.randf() < moisture:
+		_wall_ivy(center, basis, turn, anchor, inward, across, height, length, wear)
+
+
+func _moisture(center: Vector3) -> float:
+	var pattern := absi(hash(growth_key))
+	var wet := Vector2(1 if pattern % 2 == 0 else -1, 1 if pattern % 4 < 2 else -1)
+	var corner := Vector2(signf(center.x), signf(center.z))
+	if corner == wet:
+		return 1.0
+	var same_bank := corner.x == wet.x if pattern % 8 < 4 else corner.y == wet.y
+	if same_bank:
+		return 0.46
+	return 0.15
+
+
+func _corner_moss(center: Vector3, size: Vector2, wear: RandomNumberGenerator) -> void:
+	const CELL := 0.09
+	var wet := _moisture(center)
+	var length := size.x * wear.randf_range(0.68, 0.91) * wet
+	var half_width := wear.randf_range(0.20, 0.31) * wet
+	# The two rows of coping stones meet on the centreline; the cushion follows that seam.
+	var start_x := wear.randf_range(-0.14, 0.14)
+	var phase := wear.randf_range(0.0, TAU)
+	var cross_joint := -start_x
+	var reach_z := 0.14 + 0.32 * wet
+	for col in range(-12, 13):
+		var x := col * CELL
+		var end_fade := maxf(0.0, 1.0 - pow(absf(x) / length * 2.0, 2))
+		var width := half_width * end_fade * (0.78 + 0.23 * sin(col * 0.59 + phase))
+		for row in range(-5, 6):
+			var z := row * CELL
+			var distance := absf(z - 0.052 * sin(col * 0.46 + phase))
+			var across_joint := maxf(0.0, 1.0 - absf(x - cross_joint) / (0.09 + 0.12 * wet)) * clampf(1.0 - z / reach_z, 0.0, 1.0) if z > 0.0 else 0.0
+			var cushion := maxf(clampf(1.0 - distance / maxf(0.01, width), 0, 1) * end_fade, across_joint)
+			if cushion < wear.randf_range(0.035, 0.20) or absf(start_x + x) + CELL * 0.5 > size.x * 0.5:
+				continue
+			var h := 0.023 + 0.075 * cushion + wear.randf_range(0.0, 0.021)
+			var pos := center + Vector3(start_x + x, WALL_HEIGHT + 0.162 + h * 0.5, z)
+			_box(pos, Vector3(CELL, h, CELL), Color("#374732").lerp(Color("#74805a"), cushion * 0.71), "ArchitectureWallsMoss")
+
+
+func _moss_ledge(center: Vector3, basis: Basis, turn: float, anchor: float, inward: float, across: float, length: float, wet: float, wear: RandomNumberGenerator) -> void:
+	var reach := wear.randf_range(0.72, 1.30) * wet
+	var course := WALL_HEIGHT / roundi(WALL_HEIGHT / 0.30)
+	# One connected cushion rounds the lip. Vary its depth along the seam;
+	# the upright fringe remains on the exposed stone, just under the coping.
+	var phase := wear.randf_range(0.0, TAU)
+	for col in range(-14, 15):
+		var x := col * 0.10
+		var envelope := maxf(0.0, 1.0 - pow(absf(x) / reach, 1.65))
+		var pad := envelope * (0.69 + 0.24 * sin(phase + x * 4.2))
+		if pad < 0.09 or absf(anchor + x) > length * 0.5 - 0.36:
+			continue
+		var rock_edge := across * 0.5 + 0.064
+		var tone := Color("#364b37").lerp(Color("#737e4f"), pad * 0.78)
+		var cells := maxi(1, roundi(pad * wet * 4.8))
+		for row in cells:
+			var along := rock_edge - 0.045 - row * 0.09
+			var bed := WALL_HEIGHT + (0.199 if along >= across * 0.5 - 0.145 else 0.161)
+			var h := 0.020 + pad * (0.038 + 0.015 * sin(col * 1.41 + row))
+			var top := center + basis * Vector3(anchor + x, bed + h * 0.5, inward * along)
+			_box(top, Vector3(0.10, h, 0.09), tone, "ArchitectureWallsMoss", turn)
+		var fringe := 0.04 + pad * (0.09 + 0.055 * cos(phase + x * 8.0))
+		var rim := center + basis * Vector3(anchor + x, WALL_HEIGHT + 0.202 - fringe * 0.5, inward * (rock_edge + 0.013))
+		_box(rim, Vector3(0.10, fringe, 0.032), tone.darkened(0.12), "ArchitectureWallsMoss", turn)
+	for row in 2:
+		for col in range(-10, 11):
+			var x := col * 0.105
+			var spread := 1.0 - absf(x) / reach
+			if absf(anchor + x) > length * 0.5 - 0.4 or spread < 0.04 or wear.randf() > spread + 0.40:
+				continue
+			var thickness := wear.randf_range(0.032, 0.092) * (0.5 + spread)
+			var y := course * (1 + row) + 0.024
+			var point := center + basis * Vector3(anchor + x, y, inward * (across * 0.5 - 0.005))
+			_box(point, Vector3(0.105, thickness, 0.085), Color("#344737").lerp(Color("#66704c"), spread * 0.64), "ArchitectureWallsMoss", turn)
+
+
+func _chipped_coping(cap: Vector3, size: Vector3, tone: Color, turn: float, bevel: float, inward: float) -> void:
+	var basis := Basis(Vector3.UP, turn)
+	var chip := Vector2(size.x * 0.25, size.z * 0.28)
+	var lower := 0.09
+	_stone_block(cap + Vector3.DOWN * (size.y - lower) * 0.5, Vector3(size.x, lower, size.z), tone.darkened(0.14), bevel, "", turn)
+	var ledge := cap + Vector3.UP * lower * 0.5
+	_box(ledge + basis * Vector3(-chip.x * 0.5, 0, 0), Vector3(size.x - chip.x, size.y - lower, size.z), tone, "", turn)
+	_box(ledge + basis * Vector3((size.x - chip.x) * 0.5, 0, -inward * chip.y * 0.5), Vector3(chip.x, size.y - lower, size.z - chip.y), tone, "", turn)
+
+
+func _wall_ivy(center: Vector3, basis: Basis, turn: float, anchor: float, inward: float, across: float, height: float, length: float, wear: RandomNumberGenerator) -> void:
+	var stem := Color("#46503b")
+	var shade := Color("#364e39")
+	var leaf := Color("#64794b")
+	var lip := across * 0.5
+	var top := height + 0.182
+	var start := center + basis * Vector3(anchor, top, inward * (lip - 0.25))
+	var direction := -1.0 if anchor > 0.0 else 1.0
+	var reach := wear.randf_range(0.30, 0.98)
+	_box(start + basis * Vector3(direction * reach * 0.5, 0, 0), Vector3(reach, 0.055, 0.073), stem, "ArchitectureWallsIvy", turn)
+	var branches := wear.randi_range(1, 3)
+	for branch in branches:
+		var fraction := (branch + wear.randf_range(0.12, 0.88)) / branches
+		var branch_x := anchor + reach * fraction * direction
+		var shoulder := center + basis * Vector3(branch_x, top + 0.012, inward * (lip - 0.07))
+		_box(shoulder, Vector3(0.075, 0.060, 0.41), stem, "ArchitectureWallsIvy", turn)
+		var root := center + basis * Vector3(branch_x, top, inward * (lip + 0.046))
+		var links := wear.randi_range(5, 7) if branch == 0 else wear.randi_range(1, 3)
+		var drift := direction if wear.randf() < 0.60 else -direction
+		for step in links:
+			var fall := wear.randf_range(0.12, 0.24)
+			var run := wear.randf_range(0.055, 0.18)
+			if absf((basis.inverse() * (root - center)).x + drift * run) > length * 0.5 - 0.30:
+				drift *= -1.0
+			_box(root + Vector3.DOWN * fall * 0.5, Vector3(0.057, fall, 0.095), stem, "ArchitectureWallsIvy", turn)
+			root += Vector3.DOWN * fall
+			_box(root + basis * Vector3(drift * run * 0.5, 0, 0), Vector3(run, 0.057, 0.082), stem, "ArchitectureWallsIvy", turn)
+			root += basis * Vector3(drift * run, 0, 0)
+			if wear.randf() < 0.34:
+				drift *= -1.0
+			if step == links - 1 or wear.randf() < 0.82 - float(step) * 0.075:
+				var hand := 1.0 if wear.randf() < 0.5 else -1.0
+				var width := wear.randf_range(0.16, 0.30) * lerpf(1.0, 0.58, float(step) / links)
+				var tip := root + basis * Vector3(hand * width * 0.42, 0.024, inward * 0.054)
+				_box(tip, Vector3(width, 0.11, 0.107), shade.lerp(leaf, wear.randf_range(0.12, 0.77)), "ArchitectureWallsIvy", turn)
+				_box(tip + basis * Vector3(hand * width * 0.17, 0.077, 0), Vector3(width * 0.55, 0.044, 0.070), leaf, "ArchitectureWallsIvy", turn)
+		var crown := shoulder + basis * Vector3(direction * 0.065, 0.045, -inward * 0.04)
+		_box(crown, Vector3(wear.randf_range(0.10, 0.26), 0.05, 0.17), shade, "ArchitectureWallsIvy", turn)
 
 
 func _north_wall_niche(sill: Vector3, half_width: float, opening_height: float, tint: Color) -> void:
@@ -445,7 +654,7 @@ func _wall_buttress(center: Vector3, basis: Basis, turn: float, x: float, z: flo
 
 func _frame_dressing() -> void:
 	for side in [-1.0, 1.0]:
-		for p: Vector3 in [Vector3(side * 2.22, 0.38, -6.00), Vector3(side * 7.68, 0.31, 1.90), Vector3(side * 7.68, 0.31, -1.90), Vector3(side * 2.22, 0.31, 6.00)]:
+		for p: Vector3 in [Vector3(side * 2.22, 0.38, -4.95), Vector3(side * 7.02, 0.31, 1.90), Vector3(side * 7.02, 0.31, -1.90), Vector3(side * 2.22, 0.31, 5.21)]:
 			_box(p + Vector3.DOWN * 0.13, Vector3(0.39, 0.26, 0.39), STONE.darkened(0.23))
 			_box(p + Vector3.UP * 0.29, Vector3(0.16, 0.62, 0.16), METAL, "", 0.0, Finish.IRON)
 			_box(p + Vector3.UP * 0.63, Vector3(0.40, 0.19, 0.40), METAL.darkened(0.16), "", 0.0, Finish.IRON)
@@ -460,9 +669,6 @@ func _frame_dressing() -> void:
 				var p := Vector3(side * (8.0 - offset), 0.09, corner * rng.randf_range(5.05, 5.88))
 				var cube := rng.randf_range(0.06, 0.24)
 				_box(p + Vector3.UP * cube * 0.2, Vector3(cube, cube * 0.55, cube * 1.4), _shade(STONE, 0.23), "", rng.randf_range(-0.3, 0.3))
-			var corner_block := Vector3(side * 8.89, 0.28, corner * 6.58)
-			for tier in 3:
-				_box(corner_block + Vector3.UP * tier * 0.28, Vector3(1.24 - tier * 0.13, 0.30, 1.14 - tier * 0.12), _shade(BRICK, 0.12))
 
 func _room_inlay(kind: String, anchor: Vector2) -> void:
 	match kind:
@@ -490,14 +696,6 @@ func _room_inlay(kind: String, anchor: Vector2) -> void:
 					var mark := p + Vector3(direction * (1.16 + 0.15 * (i % 2)), 0, 0.98 + i * 0.48)
 					_box(mark, Vector3(0.13, 0.023, 0.32), tint)
 					_box(mark + Vector3(direction * 0.28, 0.012, 0.14), Vector3(0.093, 0.021, 0.091), tint.darkened(0.30))
-		"Mine":
-			var p := _point(anchor, 0.085)
-			for ray in 6:
-				var angle := ray * TAU / 6.0 + 0.28
-				for segment in 5:
-					var distance := 0.99 + segment * 0.33
-					var delta := Vector3(cos(angle) * distance, 0.013, sin(angle) * distance)
-					_box(p + delta + Vector3(0.08 * (segment % 2), 0, -0.07 * (segment % 2)), Vector3(0.31, 0.024, 0.082), MORTAR.darkened(0.28), "", -angle)
 		_:
 			pass
 
@@ -519,7 +717,17 @@ func _floor_seal(local: Vector2, tint: Color, width: float) -> void:
 func _perimeter_prop(rect: Rect2, id: String, index: int) -> void:
 	var p := _point(rect.get_center())
 	var size := rect.size * Vector2(X_SPAN, Z_SPAN)
-	if index % 2 == 0:
+	if index == 2:
+		# Low repair bench: stacked timber offcuts, a copper lamp and a small tool.
+		for rail in [-0.32, 0.32]:
+			_box(p + Vector3(rail * size.x, 0.19, 0), Vector3(0.16, 0.38, size.y * 0.74), DARK_OAK, id, 0.0, Finish.WOOD)
+		_box(p + Vector3.UP * 0.42, Vector3(size.x, 0.13, size.y), OAK, id, 0.0, Finish.WOOD)
+		for board in 2:
+			_box(p + Vector3(-0.28, 0.52 + board * 0.07, -0.03), Vector3(0.70, 0.07, 0.20), OAK.lightened(0.12), id, 0.09 * board, Finish.WOOD)
+		var wick := p + Vector3(0.42, 0.56, 0.02)
+		_stone_block(wick, Vector3(0.34, 0.15, 0.30), BRASS, 0.04, id, 0.0, Finish.BRONZE)
+		_box(wick + Vector3.UP * 0.20, Vector3(0.14, 0.28, 0.15), AMBER, id, 0.0, Finish.GLOW)
+	elif index % 2 == 0:
 		_box(p + Vector3.UP * 0.33, Vector3(size.x * 0.97, 0.66, size.y * 0.96), DARK_OAK, id, 0.0, Finish.WOOD)
 		for i in 5:
 			var x := (i - 2) * size.x * 0.18
@@ -599,8 +807,8 @@ func _ratchet_workstation(rect: Rect2, id: String) -> void:
 	var span := rect.size * Vector2(X_SPAN, Z_SPAN)
 	var iron := Color("#596669")
 	var iron_shadow := Color("#323d3e")
-	var ochre := Color("#b8905a")
-	var rust := Color("#99533e")
+	var ochre := Color("#c49242")
+	var rust := Color("#ae5131")
 	for side: float in [-1.0, 1.0]:
 		var foot := p + Vector3(side * span.x * 0.36, 0, 0)
 		_stone_block(foot + Vector3.UP * 0.09, Vector3(0.64, 0.18, span.y * 0.92), BRICK, 0.035, id)
@@ -692,21 +900,24 @@ func _chest(rect: Rect2) -> void:
 	_box(seal + Vector3.UP * 0.075, Vector3(0.19, 0.034, 0.19), iron, "chest_lid", PI * 0.25, Finish.IRON)
 
 func _mine(local: Vector2) -> void:
-	var p := _point(local, 0.095)
-	_stone_block(p, Vector3(2.04, 0.13, 1.65), METAL.darkened(0.18), 0.047, "", 0.0, Finish.IRON)
-	for i in 10:
-		var x := -0.94 + float(i) * 0.207
-		for z in [-0.72, 0.72]:
-			var tint := BRASS.darkened(0.09) if i % 2 == 0 else METAL.darkened(0.19)
-			_box(p + Vector3(x, 0.069, z), Vector3(0.15, 0.032, 0.16), tint, "", 0.0, Finish.BRONZE if i % 2 == 0 else Finish.IRON)
-	for x in [-0.57, 0.0, 0.57]:
-		for z in [-0.36, 0.36]:
-			var socket := p + Vector3(x, 0.075, z)
-			_box(socket, Vector3(0.36, 0.033, 0.36), MORTAR.darkened(0.25), "", PI * 0.25, Finish.IRON)
-			_box(socket + Vector3.UP * 0.08, Vector3(0.23, 0.25, 0.23), METAL, "mine_teeth", PI * 0.25, Finish.IRON)
-			_stone_block(socket + Vector3.UP * 0.258, Vector3(0.13, 0.19, 0.13), BLOCK_EDGE, 0.041, "mine_teeth", PI * 0.25, Finish.IRON)
-	_box(p + Vector3.UP * 0.090, Vector3(0.46, 0.09, 0.41), METAL.lightened(0.12), "", 0.0, Finish.IRON)
-	_box(p + Vector3.UP * 0.191, Vector3(0.24, 0.16, 0.22), RED, "mine_signal")
+	var p := _point(local, 0.13)
+	var frame := Color("#966637")
+	var inset := Color("#28363e")
+	_stone_block(p, Vector3(2.36, 0.19, 2.08), frame, 0.075, "", 0.0, Finish.BRONZE)
+	_stone_block(p + Vector3.UP * 0.13, Vector3(2.12, 0.12, 1.84), inset, 0.048)
+	# One revealed board square, with an inlaid mine glyph readable from above.
+	for side in [-1.0, 1.0]:
+		for end in [-1.0, 1.0]:
+			_box(p + Vector3(side * 0.92, 0.215, end * 0.75), Vector3(0.24, 0.055, 0.14), BRASS, "", 0.0, Finish.BRONZE)
+	var amber := Color("#f6b24d")
+	for row in 3:
+		var width := 0.54 if row != 1 else 0.85
+		_box(p + Vector3(0, 0.226, (row - 1) * 0.25), Vector3(width, 0.055, 0.25), amber, "", 0.0, Finish.BRONZE)
+	_box(p + Vector3(-0.13, 0.264, -0.12), Vector3(0.13, 0.03, 0.12), Color("#ffe0ae"), "", 0.0, Finish.GLOW)
+	_box(p + Vector3(0, 0.225, -0.53), Vector3(0.15, 0.06, 0.22), amber, "", 0.0, Finish.BRONZE)
+	# A raised copper lid covers the glyph until the existing triggered state reveals it.
+	_stone_block(p + Vector3.UP * 0.32, Vector3(1.48, 0.15, 1.27), Color("#895938"), 0.06, "mine_cover", 0.0, Finish.BRONZE)
+	_box(p + Vector3.UP * 0.42, Vector3(0.33, 0.052, 0.33), AMBER, "mine_signal", PI * 0.25, Finish.GLOW)
 
 func _exit(local: Vector2) -> void:
 	var p := _point(local)
