@@ -361,32 +361,48 @@ func _threshold(direction: Vector2i) -> void:
 	var frame_group := "ArchitectureWallsFrame" + (("East" if p.x > 0 else "West") if side else ("South" if p.z > 0 else "North"))
 	var half_open := opening_half_width(direction)
 	var outer_edge := X_SPAN * 0.5 - absf(p.x) if side else Z_SPAN * 0.5 - absf(p.z)
-	var cap_front := -0.23
+	var cap_front := -0.44
 	var cap_back := outer_edge - GATE_TRACK
-	var beam_front := 0.16 if side else cap_front
-	var cap_depth := cap_back - beam_front
-	var cap := axis + outward * (cap_back + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
-	var stone_color := WALL_CAP.lerp(BRICK, 0.17)
-	_stone_block(cap, Vector3(half_open * 2, CAP_THICKNESS, cap_depth), stone_color, 0.028, frame_group, turn)
-	if side:
-		# Run the cap over the iron track and into both jambs.
-		var rim_front := -0.40
-		var rim := axis + outward * (rim_front + beam_front) * 0.5 + Vector3.UP * CAP_CENTER
-		var edge_color := stone_color.lerp(Color("#637577"), 0.36)
-		_stone_block(rim, Vector3(half_open * 2, CAP_THICKNESS, beam_front - rim_front), edge_color, 0.020, frame_group, turn)
+	var depth := cap_back - cap_front
+	var mid_depth := (cap_front + cap_back) * 0.5
+	var wall_face := _wall_face_tint()
+	var stone_color := _wall_cap_tint(0.12)
+	var seat_width := 0.42
+	var clear_span := (half_open - seat_width) * 2.0
 	var post_height := CAP_CENTER - CAP_THICKNESS * 0.5
+	var cap := axis + outward * mid_depth + Vector3.UP * CAP_CENTER
+	_stone_block(cap, Vector3(clear_span, CAP_THICKNESS, depth), stone_color, 0.028, frame_group, turn)
+	# Recess the gate between the front and rear masonry faces of the lintel.
+	for face_depth: float in [cap_front + 0.07, cap_back - 0.07]:
+		var soffit := axis + outward * face_depth + Vector3.UP * (post_height - 0.11)
+		_stone_block(soffit, Vector3(clear_span, 0.22, 0.14), wall_face, 0.025, frame_group, turn)
 	for hand: float in [-1.0, 1.0]:
+		var seat := axis + basis * Vector3(hand * (half_open - seat_width * 0.5), 0, 0)
+		var crown := seat + outward * mid_depth + Vector3.UP * (CAP_CENTER + 0.0325)
+		_stone_block(crown, Vector3(seat_width, CAP_THICKNESS + 0.065, depth), stone_color, 0.034, frame_group, turn)
 		var jamb := axis + basis * Vector3(hand * (half_open - GATE_JAMB * 0.5), 0, 0)
-		_box(jamb + outward * (cap_back + cap_front) * 0.5 + Vector3.UP * post_height * 0.5, Vector3(GATE_JAMB, post_height, cap_back - cap_front), BRICK.darkened(0.12), frame_group, turn)
+		# A narrow spine beside the track and broader dressed blocks on either face.
+		_box(jamb + Vector3.UP * post_height * 0.5, Vector3(GATE_JAMB, post_height, 0.56), wall_face.darkened(0.15), frame_group, turn)
+		for section: Vector2 in [Vector2(cap_front - 0.30, -0.28), Vector2(0.28, cap_back)]:
+			var course_height := post_height / 3.0
+			for course in 3:
+				var pillar := seat + outward * (section.x + section.y) * 0.5 + Vector3.UP * ((course + 0.5) * course_height)
+				_stone_block(pillar, Vector3(seat_width, course_height, section.y - section.x), wall_face.darkened(0.04 * (course % 2)), 0.032, frame_group, turn)
 		var cheek := axis + basis * Vector3(hand * (half_open - GATE_JAMB - 0.055), post_height * 0.5, 0)
 		for face: float in [-1.0, 1.0]:
 			_box(cheek + outward * face * 0.241, Vector3(0.11, post_height, 0.06), METAL, frame_group, turn, Finish.IRON)
-		for collar_y: float in [0.24, post_height - 0.19]:
-			_box(jamb + outward * (cap_front - 0.024) + Vector3.UP * collar_y, Vector3(GATE_JAMB, 0.11, 0.048), BRASS.darkened(0.25), frame_group, turn, Finish.BRONZE)
 	# A stone landing beyond the north throat is visible through the open frame.
 	if not side and p.z < 0:
 		var landing := Vector3(0, -0.075, -Z_SPAN * 0.5 - 0.53)
 		_stone_block(landing, Vector3(half_open * 2 + 0.28, 0.15, 1.06), BRICK.darkened(0.34), 0.025, "ArchitectureWalls")
+
+
+func _wall_face_tint() -> Color:
+	return Color("#293841").lerp(stone, 0.04)
+
+
+func _wall_cap_tint(face_mix: float) -> Color:
+	return WALL_CAP.lerp(_wall_face_tint(), face_mix).darkened(0.09)
 
 
 func _wall(rect: Rect2, corner := false) -> void:
@@ -403,7 +419,14 @@ func _wall(rect: Rect2, corner := false) -> void:
 	var cols := maxi(2, roundi(length / 0.94))
 	var tiers := maxi(2, roundi(height / 0.30))
 	var run := length / cols
-	var wall_tint := Color("#303f47").lerp(stone, 0.08)
+	var wear := RandomNumberGenerator.new()
+	wear.seed = hash([growth_key, rect, "weathering"])
+	var worn_joint := wear.randf_range(length * 0.15, length * 0.85)
+	var weather_width := wear.randf_range(1.05, 2.1)
+	var damaged_bay := not corner and wear.randf() < 0.46
+	var cracked_row := wear.randi_range(0, 1)
+	var weather_strength := wear.randf_range(0.62, 0.86) if damaged_bay else wear.randf_range(0.14, 0.42)
+	var wall_tint := _wall_face_tint()
 	# The right-hand north bay contains one recessed cupboard. Its backing
 	# continues behind the opening and keeps the outside face closed.
 	var has_niche := not corner and along_x and north and center.x > 0.0 and length > 5.0 and across > 0.90
@@ -421,6 +444,10 @@ func _wall(rect: Rect2, corner := false) -> void:
 			var p := center + basis * Vector3((left + right - length) * 0.5, 0.017 + height / tiers * (tier + 0.5), 0)
 			var block := Vector3(right - left - 0.028, height / tiers - 0.032, across - rng.randf_range(0.0, 0.07))
 			var tint := _shade(wall_tint, 0.11).darkened(0.13 if tier == 0 else 0.0)
+			var exposure := 1.0 - smoothstep(0.0, weather_width, absf((left + right) * 0.5 - worn_joint + 0.12 * tier))
+			# Moisture collects in the lower courses, following staggered mortar joints.
+			var damp := exposure * weather_strength * _moisture(center) * (1.0 - 0.58 * tier / tiers)
+			tint = tint.lerp(Color("#142b2c"), damp)
 			if has_niche and tier > 0 and tier < tiers - 1:
 				var opening_left := length * 0.5 + niche_x - niche_half
 				var opening_right := opening_left + niche_half * 2.0
@@ -442,11 +469,16 @@ func _wall(rect: Rect2, corner := false) -> void:
 		var foot := center + basis * Vector3(offset, 0.14, inward * (across * 0.5 - 0.02))
 		_stone_block(foot, Vector3(run - 0.028, 0.24, 0.21), wall_tint.darkened(0.18), 0.035, "", turn)
 		var coping := center + basis * Vector3(offset, height + 0.12, inward * (across * 0.5 - 0.04))
-		_stone_block(coping, Vector3(run - 0.024, 0.16, 0.21), Color("#42595a"), 0.035, "", turn)
+		if damaged_bay and absf(offset + length * 0.5 - worn_joint) < run * 0.5:
+			var stump := coping + basis * Vector3(-run * 0.16, 0, 0)
+			_stone_block(stump, Vector3(run * 0.66, 0.16, 0.21), wall_tint, 0.03, "", turn)
+			var break_face := coping + basis * Vector3(run * 0.33, -0.04, -inward * 0.055)
+			_box(break_face, Vector3(run * 0.29, 0.08, 0.10), wall_tint.darkened(0.28), "", turn)
+		else:
+			_stone_block(coping, Vector3(run - 0.024, 0.16, 0.21), Color("#344849"), 0.035, "", turn)
 
 	# Keep wear stable and independent of the room-prop random sequence.
-	var wear := RandomNumberGenerator.new()
-	wear.seed = hash(rect)
+	wear.seed = hash([rect, growth_key, "cap chips"])
 	var cap_depth := across / 2.0
 	for row in 2:
 		var row_shift := 0.5 * row * run
@@ -457,15 +489,22 @@ func _wall(rect: Rect2, corner := false) -> void:
 				continue
 			var lip := (float(row) - 0.5) * cap_depth
 			var cap := center + basis * Vector3((left + right - length) * 0.5, height + 0.075, lip)
-			var tone := _shade(WALL_CAP.lerp(wall_tint, 0.12 if lip * inward > 0.0 else 0.03), 0.045)
+			var tone := _shade(_wall_cap_tint(0.12 if lip * inward > 0.0 else 0.03), 0.045)
+			var patina := 1.0 - smoothstep(0.0, weather_width, absf((left + right) * 0.5 - worn_joint))
+			tone = tone.lerp(Color("#132327"), patina * weather_strength)
 			var block_size := Vector3(right - left - 0.035, 0.175, cap_depth - 0.038)
 			var bevel := rng.randf_range(0.037, 0.073)
-			if not corner and block_size.x > 0.6 and wear.randf() < 0.16:
+			if damaged_bay and row == cracked_row and left <= worn_joint and worn_joint < right and block_size.x > 0.55:
+				_fractured_cap(cap, block_size, tone, turn, inward if col % 2 == 0 else -inward)
+			elif not corner and block_size.x > 0.6 and wear.randf() < 0.12 + 0.44 * patina:
 				_chipped_coping(cap, block_size, tone, turn, bevel, inward)
 			else:
 				_stone_block(cap, block_size, tone, bevel, "", turn)
 
 	if corner:
+		var fall_side := 1.0 if (hash(growth_key) & 1) == 0 else -1.0
+		if not growth_key.is_empty() and signf(center.x * center.z) == fall_side:
+			_corner_scree(center, size, wear)
 		if not growth_key.is_empty() and _moisture(center) > 0.28:
 			wear.seed = hash([growth_key, rect, "corner moss"])
 			_corner_moss(center, size, wear)
@@ -569,6 +608,44 @@ func _moss_ledge(center: Vector3, basis: Basis, turn: float, anchor: float, inwa
 			_box(point, Vector3(0.105, thickness, 0.085), Color("#344737").lerp(Color("#66704c"), spread * 0.64), "ArchitectureWallsMoss", turn)
 
 
+# A recessed bed and two stepped pieces expose the fracture across the top course.
+func _fractured_cap(cap: Vector3, size: Vector3, tone: Color, turn: float, inward: float) -> void:
+	var basis := Basis(Vector3.UP, turn)
+	var base_h := 0.045
+	var upper_h := size.y - base_h
+	_box(cap - Vector3.UP * upper_h * 0.5, Vector3(size.x, base_h, size.z), tone.darkened(0.60), "", turn)
+	for band in 3:
+		var depth := size.z / 3.0
+		var split := size.x * (0.30 + 0.16 * band)
+		var gap := minf(size.x * 0.15, 0.105)
+		var z := inward * (band - 1) * depth
+		var left := Vector3(split * 0.5 - size.x * 0.5, base_h * 0.5, z)
+		_box(cap + basis * left, Vector3(split, upper_h, depth), tone, "", turn)
+		var width := size.x - split - gap
+		var right := Vector3((split + gap) * 0.5, base_h * 0.5 - 0.027, z)
+		_box(cap + basis * right, Vector3(width, upper_h - 0.054, depth), tone.darkened(0.21), "", turn)
+
+
+func _corner_scree(center: Vector3, size: Vector2, wear: RandomNumberGenerator) -> void:
+	var inward := Vector3(-signf(center.x), 0, -signf(center.z))
+	var toe := center + inward * Vector3(size.x * 0.5 + 0.20, 0, size.y * 0.5 + 0.24)
+	# Cluster the larger fallen stones by the wall and spread smaller chips into the room.
+	if center.z > 0:
+		toe.z -= 0.65
+	var offsets := [Vector2(0.18, 0.25), Vector2(0.78, 0.18), Vector2(0.36, 0.72), Vector2(1.16, 0.51), Vector2(0.12, 1.10), Vector2(1.48, 0.16)]
+	var stone_chip := Color("#515951")
+	for i in offsets.size():
+		var offset: Vector2 = offsets[i]
+		var at := toe + inward * Vector3(offset.x + wear.randf_range(-0.06, 0.06), 0, offset.y)
+		var scale_factor := wear.randf_range(0.88, 1.08) * (1.0 - 0.115 * i)
+		var block := Vector3(0.62, 0.28, 0.46) * scale_factor
+		var tint := stone_chip.lerp(Color("#353e3c"), wear.randf_range(0.06, 0.72))
+		at.y = FLOOR_Y + block.y * 0.5
+		_stone_block(at, block, tint, 0.042, "", wear.randf_range(-0.22, 0.22))
+		if i == 0:
+			_stone_block(at + Vector3(0, block.y * 0.5 + 0.075, 0), Vector3(0.41, 0.15, 0.27), stone_chip, 0.028, "", 0.24)
+
+
 func _chipped_coping(cap: Vector3, size: Vector3, tone: Color, turn: float, bevel: float, inward: float) -> void:
 	var basis := Basis(Vector3.UP, turn)
 	var chip := Vector2(size.x * 0.25, size.z * 0.28)
@@ -648,9 +725,7 @@ func _wall_buttress(center: Vector3, basis: Basis, turn: float, x: float, z: flo
 	_box(base + Vector3.UP * (height - 0.015), Vector3(0.63, 0.15, 0.40), tint.darkened(0.07), "", turn)
 	var crest := base + Vector3.UP * (height + 0.102)
 	_stone_block(crest, Vector3(0.65, 0.174, 0.40), WALL_CAP.lerp(accent, 0.20), 0.066, "", turn)
-	for rail in [-0.16, 0.16]:
-		_box(crest + basis * Vector3(rail, 0.093, 0), Vector3(0.052, 0.025, 0.31), METAL, "", turn, Finish.IRON)
-		_box(crest + basis * Vector3(rail, 0.109, 0.0), Vector3(0.078, 0.017, 0.071), BRASS.darkened(0.12), "", turn, Finish.BRONZE)
+
 
 func _frame_dressing() -> void:
 	for side in [-1.0, 1.0]:
@@ -857,9 +932,10 @@ func _chest(rect: Rect2) -> void:
 	var chestnut := Color("#814235")
 	var iron := Color("#303b3c")
 	var brass := Color("#d5a15b")
-	var lining := Color("#314346")
+	var rim_wood := chestnut.lerp(DARK_OAK, 0.16)
+	var lining := chestnut.lerp(DARK_OAK, 0.45)
 	var lip := 0.12
-	_box(p + Vector3.UP * 0.08, Vector3(size.x, 0.16, size.y), iron, "chest", 0.0, Finish.IRON)
+	_box(p + Vector3.UP * 0.08, Vector3(size.x, 0.16, size.y), rim_wood, "chest", 0.0, Finish.WOOD)
 	_box(p + Vector3.UP * 0.17, Vector3(size.x - 2.0 * lip, 0.04, size.y - 2.0 * lip), lining, "chest", 0.0, Finish.WOOD)
 	for course in 3:
 		var y := 0.244 + course * 0.168
@@ -868,8 +944,8 @@ func _chest(rect: Rect2) -> void:
 			_box(p + Vector3(0, y, side * (size.y - lip) * 0.5), Vector3(size.x, 0.165, lip), tone, "chest", 0.0, Finish.WOOD)
 			_box(p + Vector3(side * (size.x - lip) * 0.5, y, 0), Vector3(lip, 0.165, size.y - 2.0 * lip), tone, "chest", 0.0, Finish.WOOD)
 	for side in [-1.0, 1.0]:
-		_box(p + Vector3(0, 0.689, side * (size.y - lip) * 0.5), Vector3(size.x, 0.05, lip), iron, "chest", 0.0, Finish.IRON)
-		_box(p + Vector3(side * (size.x - lip) * 0.5, 0.689, 0), Vector3(lip, 0.05, size.y - 2.0 * lip), iron, "chest", 0.0, Finish.IRON)
+		_box(p + Vector3(0, 0.689, side * (size.y - lip) * 0.5), Vector3(size.x, 0.05, lip), rim_wood, "chest", 0.0, Finish.WOOD)
+		_box(p + Vector3(side * (size.x - lip) * 0.5, 0.689, 0), Vector3(lip, 0.05, size.y - 2.0 * lip), rim_wood, "chest", 0.0, Finish.WOOD)
 		for end in [-1.0, 1.0]:
 			var band := p + Vector3(side * size.x * 0.32, 0.41, end * size.y * 0.5)
 			_box(band, Vector3(0.20, 0.61, 0.055), iron, "chest", 0.0, Finish.IRON)

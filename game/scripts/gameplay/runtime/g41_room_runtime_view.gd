@@ -111,6 +111,8 @@ var mine_feedback_elapsed := 0.0
 var mine_feedback_frame := -1
 var exit_pulse_elapsed := 0.0
 var exit_pulse_frame := -1
+var doorway_light: Tween
+var fading_neighbor: Sprite2D
 var nearby_available_door := Vector2i.ZERO
 var nearby_door_direction := Vector2i.ZERO
 var nearby_door_state: StringName = &""
@@ -121,11 +123,21 @@ func _ready() -> void:
 
 
 func configure_room(snapshot: Dictionary) -> void:
+	var departing := Vector2i.ZERO
+	var incoming_light := Color.WHITE
 	if surroundings != null and not latest_room_snapshot.is_empty():
 		if snapshot.get("run_id") != latest_room_snapshot.get("run_id"):
 			surroundings.memory.clear()
 		elif snapshot.get("position") != latest_room_snapshot.get("position"):
+			departing = Vector2i(latest_room_snapshot.position) - Vector2i(snapshot.position)
+			var incoming := surroundings.neighbors.get(-departing) as Sprite2D
+			if incoming != null and incoming.visible:
+				incoming_light = incoming.self_modulate * incoming.modulate
 			surroundings.remember(latest_room_snapshot.position, b_room_view)
+		if departing != Vector2i.ZERO or snapshot.get("run_id") != latest_room_snapshot.get("run_id"):
+			if doorway_light != null: doorway_light.kill()
+			if is_instance_valid(fading_neighbor): fading_neighbor.modulate = Color.WHITE
+			if is_instance_valid(b_room_view): b_room_view.modulate = Color.WHITE
 	latest_room_snapshot = snapshot.duplicate(true)
 	var pos: Vector2i = snapshot.get("position", Vector2i.ZERO)
 	if not last_room_entry_result.is_empty() and Vector2i(last_room_entry_result.get("position", pos)) != pos:
@@ -143,6 +155,15 @@ func configure_room(snapshot: Dictionary) -> void:
 		exit_pulse_frame = -1
 	_ensure_layers()
 	_rebuild_world_projection()
+	if absi(departing.x) + absi(departing.y) == 1 and b_room_view != null and b_room_view.visible:
+		fading_neighbor = surroundings.neighbors.get(departing) as Sprite2D
+		b_room_view.modulate = incoming_light
+		doorway_light = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		doorway_light.tween_property(b_room_view, "modulate", Color.WHITE, 0.46)
+		if fading_neighbor != null and fading_neighbor.visible:
+			var tint := fading_neighbor.self_modulate
+			fading_neighbor.modulate = Color(1.0 / tint.r, 1.0 / tint.g, 1.0 / tint.b)
+			doorway_light.tween_property(fading_neighbor, "modulate", Color.WHITE, 0.46)
 	_update_available_door_cue(last_player_local_pos)
 	_update_visual_depths(last_player_local_pos)
 	if room_type == &"Mine" and not last_room_entry_result.is_empty():
@@ -1815,7 +1836,13 @@ func _draw_door_projection(door: Dictionary) -> void:
 		return
 	var direction := Vector2(direction_i).normalized()
 	var tangent := Vector2(-direction.y, direction.x)
-	var center := ActorViewScript.local_to_world(body_rect.get_center())
+	var anchor := body_rect.get_center()
+	if b_room_view != null and b_room_view.visible:
+		# Boundary gates already have solid ironwork. Put actionable cues on the landing.
+		if state == &"blocked_out_of_bounds":
+			return
+		anchor = anchor.clamp(Vector2(0.145, 0.175), Vector2(0.855, 0.835))
+	var center := ActorViewScript.local_to_world(anchor)
 	var body_size := G41RuntimeLayout.local_size_to_world(body_rect.size)
 	var half_span := (body_size.x if absf(tangent.x) > 0.5 else body_size.y) * 0.5
 	var from := center - tangent * half_span

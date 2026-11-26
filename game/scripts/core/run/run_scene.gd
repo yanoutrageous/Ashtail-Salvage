@@ -151,7 +151,11 @@ var room_controller: RoomSceneController
 const ConnectedRooms = preload("res://scripts/presentation/voxel_dungeon/connected_room_surroundings.gd")
 var stage_origin := Vector2.ZERO
 var follow_offset := Vector2.ZERO
+const CROSSING_SECONDS := 0.46
 var crossing_offset := Vector2.ZERO
+var crossing_start := Vector2.ZERO
+var player_crossing_start := Vector2.ZERO
+var crossing_left := 0.0
 var camera_cell := Vector2i(-1, -1)
 var camera_run := ""
 var follow_enabled := false
@@ -2669,6 +2673,7 @@ func _apply_game_stage_layout(layout_profile: Dictionary) -> void:
 
 func _update_room_camera(delta: float) -> void:
 	if not follow_enabled or not run_context.run_active:
+		crossing_left = 0.0
 		camera_cell = Vector2i(-1, -1)
 		crossing_offset = Vector2.ZERO
 		follow_offset = Vector2.ZERO
@@ -2678,19 +2683,24 @@ func _update_room_camera(delta: float) -> void:
 	# The slope falls continuously toward the walls, keeping doorways in frame.
 	var target := Vector2(tanh(centered.x * 3.8), tanh(centered.y * 3.8)) * Vector2(68, 61)
 	if camera_run != str(run_context.run_id) or camera_cell == Vector2i(-1, -1):
+		crossing_left = 0.0
 		crossing_offset = Vector2.ZERO
 		follow_offset = target
 	elif cell != camera_cell:
 		var step := cell - camera_cell
 		if absi(step.x) + absi(step.y) == 1:
-			crossing_offset += Vector2(step) * ConnectedRooms.PITCH
+			crossing_start = crossing_offset + Vector2(step) * ConnectedRooms.PITCH
+			crossing_left = CROSSING_SECONDS
+			player_crossing_start = Vector2.ZERO
 		else:
+			crossing_left = 0.0
 			crossing_offset = Vector2.ZERO
 			follow_offset = target
 	camera_cell = cell
 	camera_run = str(run_context.run_id)
 	follow_offset = follow_offset.lerp(target, 1.0 - exp(-8.5 * delta))
-	crossing_offset *= exp(-10.0 * delta)
+	crossing_left = maxf(0.0, crossing_left - delta)
+	crossing_offset = crossing_start * smoothstep(0.0, CROSSING_SECONDS, crossing_left)
 	_apply_camera_position()
 
 
@@ -2699,6 +2709,10 @@ func _apply_camera_position() -> void:
 	var offset := crossing_offset - follow_offset if follow_enabled else Vector2.ZERO
 	room_layer.position = stage_origin + offset * room_layer.scale
 	$PlayerLayer.position = room_layer.position
+	var draw_offset := player_crossing_start * smoothstep(0.0, CROSSING_SECONDS, crossing_left) if follow_enabled else Vector2.ZERO
+	$PlayerLayer.position += draw_offset * room_layer.scale
+	if combat_art != null:
+		combat_art.player_draw_offset = draw_offset
 
 
 func _suppress_runtime_scene_labels() -> void:
@@ -3030,6 +3044,7 @@ func _attempt_room_transition(direction: Vector2i) -> void:
 		player_controller.block_transition(direction)
 		return
 	var before := run_context.get_current_pos()
+	var previous_screen_position := player_controller.global_position
 	var entry_position := player_controller.entry_local_position(direction)
 	var result: Dictionary = command_bus.dispatch(&"attempt_room_transition", {"direction": direction, "entry_position": entry_position})
 	last_command_result = result.duplicate(true)
@@ -3043,6 +3058,11 @@ func _attempt_room_transition(direction: Vector2i) -> void:
 		player_controller.set_facing_vector(Vector2(direction))
 		player_controller.set_runtime_visual_state(&"idle")
 		player_controller.set_local_position(runtime_controller.get_restored_local_position(entry_position))
+		if follow_enabled:
+			_update_room_camera(0.0)
+			if crossing_left > 0.0:
+				player_crossing_start = (previous_screen_position - player_controller.global_position) / $PlayerLayer.scale
+				_apply_camera_position()
 	else:
 		_present_transition_rejection(direction, result)
 		player_controller.block_transition(direction)

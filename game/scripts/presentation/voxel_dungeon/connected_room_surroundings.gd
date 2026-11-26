@@ -4,8 +4,8 @@ const Layout = preload("res://scripts/gameplay/runtime/g41_runtime_layout.gd")
 const RoomModel = preload("res://scripts/presentation/B/B_event_room_view.gd")
 const SHELL = preload("res://assets/rooms/unexplored_masonry.png")
 # The transparent camera frame extends beyond the stone silhouette.
-# Interlock the outer bevels by a few logical pixels on each axis.
-const PITCH := Vector2(554, 606)
+# Overlap the return course so the shaded bottom fascia sits behind the next wall.
+const PITCH := Vector2(548, 574)
 const EXPLORED := Color(0.52, 0.58, 0.65)
 const UNEXPLORED := Color(0.28, 0.33, 0.40)
 

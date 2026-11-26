@@ -33,6 +33,7 @@ var effects_view: SubViewport
 var effects_picture: Sprite2D
 var shared_world: World3D
 var player_canvas: Dictionary
+var player_draw_offset := Vector2.ZERO
 var occupied_layers: Dictionary = {}
 var last_local := Vector2(0.5, 0.5)
 var actor_heading := Vector3.BACK
@@ -265,6 +266,7 @@ func advance(delta: float, position_local: Vector2, facing: Vector2, snapshot: D
 	if not had_firearm and actor.firearm != null:
 		_assign_render_layer(actor, int(player_canvas["layer"]))
 	_position_model_view(player_canvas, actor.position, position_local.y)
+	(player_canvas["sprite"] as Sprite2D).position += player_draw_offset
 	if attack_advanced and strike <= SWING_END:
 		fx.trace(_clip_blade(actor.blade_points(), origin, obstacles), variant)
 	last_attack = strike
