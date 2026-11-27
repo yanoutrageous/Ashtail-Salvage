@@ -117,27 +117,26 @@ func _tutorial_journey() -> bool:
 	if not _walk(Vector2i(0, 1)):
 		return false
 	_check(str(scene.run_context.tutorial_popup.get("id", "")) == "number_rule", "tutorial number lesson reached by real movement without learning")
-	var learn := scene.tutorial_popup_panel.get_node_or_null("Panel/Content/LearnFlagButton") as Button
-	if not _check(learn != null and learn.is_visible_in_tree() and not learn.disabled, "independent learning action remains available outside spawn"):
-		return false
-	learn.pressed.emit()
-	_check(_data().talent_flags == ["z2_talent_01"] and _data().talent_points == 0 and _data().talent_spent == 100, "explicit remote learning purchases the flag node once")
-	_check(_cmd(&"toggle_flag_cell", {"pos": Vector2i(1, 1)}).get("ok", false), "learned flag uses the real player command")
+	_check(_data().talent_flags.is_empty() and _data().talent_points == 100, "real early tutorial movement leaves the teaching point budget available")
 	if not _walk(Vector2i(0, 2)) or not _walk(Vector2i(0, 3)):
 		return false
-	_check(scene.run_context.hp < 100 and scene.run_context.run_stats.get("mine_hits", 0) == 1, "tutorial mine actually causes damage and a hit fact")
+	_check(scene.run_context.hp == 85 and scene.run_context.run_stats.get("mine_hits", 0) == 1, "tutorial mine causes exactly 15 HP loss and a hit fact")
 	_check(scene.run_context.current_room_type == &"Event", "tutorial event room reached without editing the map")
 	var teaching_id: String = scene.run_context.run_id
 	await _reopen()
 	_check(scene.run_context.run_id == teaching_id and scene.run_context.get_current_pos() == Vector2i(0, 3), "Main restart resumes the exact unfinished teaching room")
-	_check(_data().talent_earned == 100 and _data().talent_spent == 100 and not _data().tutorial_completed, "restart neither grants teaching points again nor completes teaching")
+	_check(_data().talent_earned == 100 and _data().talent_spent == 0 and not _data().tutorial_completed, "restart preserves unused teaching points before entering a chest")
 	_check(scene._show_run_screen(), "resumed teaching screen opens")
 	if not _walk(Vector2i(0, 4)):
 		return false
 	_check(scene.in_run_runtime.has_active_combat(), "fixed teaching monster starts the real encounter")
 	if not _check(scene.in_run_runtime.request_flee().get("ok", false), "public combat flee resolves the actual teaching encounter"):
 		return false
-	if not _walk(Vector2i(1, 4)) or not _walk(Vector2i(2, 4)) or not _walk(Vector2i(3, 4)) or not _walk(Vector2i(4, 4)):
+	if not _walk(Vector2i(1, 4)):
+		return false
+	_check(_data().talent_flags == ["z2_talent_01"] and _data().talent_points == 0 and _data().talent_spent == 100, "real first chest entry automatically learns flag marking once")
+	_check(_cmd(&"toggle_flag_cell", {"pos": Vector2i(1, 1)}).get("ok", false), "learned flag uses the real player command")
+	if not _walk(Vector2i(2, 4)) or not _walk(Vector2i(3, 4)) or not _walk(Vector2i(4, 4)):
 		return false
 	if not _confirm_popup("exit_goal"):
 		return false
@@ -264,14 +263,14 @@ func _ordinary_death() -> void:
 	var context: RunContext = scene.run_context
 	var visited: Array[Vector2i] = [context.get_current_pos()]
 	var corridor: Array[Vector2i] = []
-	for index in range(4):
+	for index in range(5):
 		for direction: Vector2i in DIRECTIONS:
 			var candidate: Vector2i = visited.back() + direction
 			if context.truth_map.is_inside(candidate) and not visited.has(candidate) and not context.truth_map.get_exits().has(candidate):
 				visited.append(candidate)
 				corridor.append(candidate)
 				break
-	_check(corridor.size() == 4 and context.hp == 100, "death fixture controls four map cells only; starts with natural 100 HP")
+	_check(corridor.size() == 5 and context.hp == 100, "death fixture controls five 20-damage simple-map mines and starts with natural 100 HP")
 	for target: Vector2i in corridor:
 		context.truth_map.set_room_type(target, &"Mine")
 	_check(scene.runtime_controller.save_current_checkpoint().get("ok", false), "controlled mine corridor saved by the actual checkpoint service")

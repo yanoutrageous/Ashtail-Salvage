@@ -280,7 +280,9 @@ func _test_tutorial_profile_scrub() -> void:
 	var context := Context.new()
 	context.start_run(config)
 	_check(context.max_hp == 100 and context.hp == 100, "teaching always starts at baseline100 health")
-	_check(context.profile_fields == {"ruleset_id": "z2", "z2_progression_version": 1, "flag_unlocked": true}, "teaching profile keeps only ruleset/version/flag capability")
+	_check(context.profile_fields == {"ruleset_id": "z2", "z2_progression_version": 1, "flag_unlocked": true,
+		"tutorial_chest_learning": true, "content_eligibility": Z2ContentEligibility.freeze_profile({"profile_level": 0})},
+		"teaching profile only keeps required capabilities and frozen Lv0 content")
 	_check(context.active_talent_effects.is_empty(), "teaching capability uses flag field, not passive effect descriptors")
 	_check(context.run_start_config.get("profile_fields") == context.profile_fields and context.run_start_config.get("active_talent_effects") == [] and context.run_start_config.get("max_hp") == 100, "frozen teaching config has the same sanitized profile")
 	_check(config == before, "teaching scrub does not mutate caller's profile/config")

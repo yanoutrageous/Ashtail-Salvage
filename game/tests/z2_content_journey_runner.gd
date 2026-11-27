@@ -65,9 +65,11 @@ func _open(profile: String) -> bool:
 
 func _stage(level: int, predecessors: int, clears: Dictionary = {}) -> bool:
 	var data: Dictionary = Goals.initial_state(meta.data)
+	# These midgame fixtures have already passed the first five guided departures.
 	data.merge({"tutorial_completed": true, "profile_level": level, "profile_exp": Rules.exp_for_level(level),
 		"talent_flags": ["z2_talent_01"], "talent_earned": 100, "talent_spent": 100, "talent_points": 0,
-		"gold": 1000, "map_success_counts": clears.duplicate(true)}, true)
+		"gold": 1000, "map_success_counts": clears.duplicate(true),
+		"run_count": Z2EventRuntime.EARLY_DISCOVERY_RUNS}, true)
 	for number in range(1, predecessors + 1):
 		var id := "M%02d" % number
 		data.z2_goals.states[id].unlocked = true
