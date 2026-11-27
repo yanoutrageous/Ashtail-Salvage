@@ -169,8 +169,8 @@ func _reinvestment() -> void:
 	for id in ["M01", "M02", "M03"]:
 		meta.data.z2_goals.states[id].unlocked = true
 		meta.data.z2_goals.states[id].progress = 1
-	meta.data.profile_exp = 30
-	meta.data.profile_level = 2
+	meta.data.profile_level = 4
+	meta.data.profile_exp = Rules.exp_for_level(4)
 	meta.data.gold = 1000
 	Service.sync_z2_quests(meta.data)
 	var old: Dictionary = Service.add_item_instance(meta.data, "col_01", "fixture_setup")

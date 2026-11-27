@@ -187,6 +187,8 @@ func _visit_hidden_exit(scene) -> void:
 	ready.profile_level = 6
 	ready.profile_exp = 250
 	ready.map_success_counts = {SIMPLE: 1}
+	# This advanced fixture uses ordinary map generation after the first five departures.
+	ready.run_count = maxi(int(ready.run_count), Z2EventRuntime.EARLY_DISCOVERY_RUNS)
 	if not ready.unlocked_map_ids.has(NORMAL):
 		ready.unlocked_map_ids.append(NORMAL)
 	adapter.data = ready
