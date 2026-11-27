@@ -416,6 +416,21 @@ static func authorize_with_meta(config: Dictionary, meta_summary: Dictionary) ->
 	normalized["failure_salvage_capacity"] = failure_salvage_capacity
 	normalized["profile_fields"] = profile.duplicate(true)
 	if Z2Rules.applies_to(meta_summary):
+		normalized["profile_fields"]["cage_requires_acceptance"] = true
+		var ordinal := int(meta_summary.get("run_count", 0)) + 1
+		normalized["profile_fields"]["early_discovery_run"] = ordinal if meta_summary.get("tutorial_completed", false) and ordinal <= Z2EventRuntime.EARLY_DISCOVERY_RUNS else 0
+		var offered: Array[String] = []
+		var seen: Array = meta_summary.get("tutorial_completion_receipt", {}).get("visited_event_types", []).duplicate()
+		if ordinal <= Z2EventRuntime.EARLY_DISCOVERY_RUNS:
+			for record: Dictionary in meta_summary.get("history_records", []):
+				for event: String in record.get("early_offered_events", []):
+					if not offered.has(event):
+						offered.append(event)
+				for event: String in record.get("visited_event_types", []):
+					if not seen.has(event):
+						seen.append(event)
+		normalized["profile_fields"]["visited_event_types"] = seen
+		normalized["profile_fields"]["earlier_offers"] = offered
 		normalized["profile_fields"]["content_eligibility"] = Z2ContentEligibility.freeze_profile(meta_summary)
 		normalized["profile_fields"]["z2_fact_sequence_base"] = int(meta_summary.get("z2_fact_sequence", 0))
 		# Honor a paid or closed pre-upgrade camp offer only for its original departure.

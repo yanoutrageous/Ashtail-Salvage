@@ -170,6 +170,13 @@ static func trigger_for(context: RunContext, pos: Vector2i) -> StringName:
 		context.tutorial_popup = {}
 		return &""
 	var popup_def := popup_definition(trigger_id)
+	if context.profile_fields.get("tutorial_chest_learning", false) and trigger_id == &"event_rule":
+		popup_def["title"] = "急救柜"
+		popup_def["message_template"] = "按 {interact} 查看急救贴的价格。买到后打开作业包使用，最多恢复25点生命。"
+	if trigger_id == &"chest_rule" and context.profile_fields.get("tutorial_chest_learning", false):
+		popup_def["title"] = "已学习插旗"
+		popup_def["message_template"] = "插旗已点亮，天赋树已开放。按 {open_map} 打开地图，点未知格标记疑点。靠近箱子，按 {interact} 搜索。"
+		popup_def["action_ids"] = [&"open_map", &"interact"]
 	if popup_def.is_empty():
 		context.tutorial_popup = {}
 		return &""
@@ -191,7 +198,10 @@ static func trigger_for(context: RunContext, pos: Vector2i) -> StringName:
 		"confirm_action_hint": SemanticActionHintScript.descriptor(confirm_action),
 	}
 	if trigger_id == &"spawn_intro" and context.profile_fields.get("z2_progression_version") == 1 and not context.profile_fields.get("flag_unlocked", false):
-		context.tutorial_popup["message"] += "\n\n有100点教学天赋点可用。先走出起点、看懂房间数字，再用“100点 · 学习插旗”学习标记。撤离前完成学习即可。"
+		if context.profile_fields.get("tutorial_chest_learning", false):
+			context.tutorial_popup["message"] += "\n\n首次走进任一宝箱房时，系统会用100点教学天赋点学习插旗。随后可打开地图标记疑点。"
+		else:
+			context.tutorial_popup["message"] += "\n\n有100点教学天赋点可用。先走出起点、看懂房间数字，再用“100点 · 学习插旗”学习标记。撤离前完成学习即可。"
 		context.tutorial_popup["confirm_text"] = "收起说明"
 	return trigger_id
 

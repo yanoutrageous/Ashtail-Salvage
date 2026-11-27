@@ -1,9 +1,8 @@
 extends SceneTree
 
 # Focused production-input regression, NOT a natural Lv0 -> Lv50 journey.
-# Tutorial uses real fresh-profile admission and the unchanged fixed map. The
-# ordinary 22-event/shortcut cases explicitly use a saved Lv50 stage fixture and
-# atomic room fixtures (including a cage presentation without its auto-entry).
+# Tutorial uses a fresh-profile admission and the fixed teaching map. The
+# ordinary 22-event, shortcut and voluntary cage cases use a Lv50 stage profile.
 # Run only in the parent's disposable mirror and fresh isolated user directory.
 const Events := preload("res://scripts/core/run/z2_event_runtime.gd")
 const Hooks := preload("res://scripts/core/run/z2_run_hooks.gd")
@@ -11,7 +10,6 @@ const Service := preload("res://scripts/core/run/event_service.gd")
 const Tutorial := preload("res://scripts/core/run/tutorial_map_catalog.gd")
 const Growth := preload("res://scripts/core/progression/z2_progression_rules.gd")
 const EXPECTED_EVENTS := ["shop", "savings", "seal", "relief", "first_aid", "consign", "expand", "compress", "trader", "pawn", "information", "shortcut", "demine", "recon", "mechanism", "recycle", "coil", "clock_in", "rps", "cage", "dice", "altar"]
-const TEACHING_EVENTS := [[Vector2i(0, 3), "trap", "disarm"], [Vector2i(1, 2), "dice", "bet_small"], [Vector2i(2, 1), "altar", "offer_hp"], [Vector2i(3, 0), "trader", "buy_info"]]
 const DIAGONALS := [Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1)]
 
 var checks := 0
@@ -33,7 +31,7 @@ func _run() -> void:
 	root.content_scale_size = root.size
 	_test_level_pools()
 	if await _open_main("event_input_tutorial"):
-		await _test_tutorial_legacy_and_error_fallback()
+		await _test_tutorial_event_dialogue()
 	await _close_main()
 	if await _open_main("event_input_level2"):
 		await _test_natural_level2_path()
@@ -45,6 +43,12 @@ func _run() -> void:
 			await _test_global_event_cleanup()
 			await _test_shortcut_cleanup(false)
 			await _test_shortcut_cleanup(true)
+	await _close_main()
+	if await _open_main("event_input_cage") and _start_stage_run() and _fixture_event("cage"):
+		if await _open_world_event(true, "voluntary cage") and await _choose_new("challenge", true, "voluntary cage"):
+			_check(scene.in_run_runtime.has_active_combat() and not scene._is_runtime_modal_open(), "accepted cage starts combat and releases dialogue inputs")
+			var refused: Dictionary = scene.in_run_runtime.request_flee()
+			_check(not refused.get("ok", true) and scene.in_run_runtime.has_active_combat(), "accepted cage remains sealed during real combat")
 	await _close_main()
 	_finish()
 
@@ -60,8 +64,8 @@ func _isolated_save_directory() -> bool:
 
 func _test_level_pools() -> void:
 	var expected_by_level := {
-		2: ["information", "relief", "first_aid", "altar", "recycle"],
-		3: ["information", "relief", "first_aid", "altar", "recycle", "shop", "demine", "clock_in"],
+		6: ["information", "relief", "first_aid", "recycle", "demine"],
+		7: ["information", "relief", "first_aid", "recycle", "demine", "shop"],
 		26: EXPECTED_EVENTS, 50: EXPECTED_EVENTS,
 	}
 	for level: int in expected_by_level:
@@ -77,16 +81,16 @@ func _test_level_pools() -> void:
 			_check(is_equal_approx(float(entry.get("roll_weight", 0.0)), 29.0 / expected.size()), "Lv%d equal normalized event weight: %s" % [level, entry.get("event_type", "")])
 			_check(is_equal_approx(float(entry.get("probability", 0.0)), 1.0 / expected.size()), "Lv%d equal event probability: %s" % [level, entry.get("event_type", "")])
 			if str(entry.get("event_type", "")) == "shop":
-				_check(int(entry.get("min_level", 0)) == 3, "exploration shop advertises minimum Lv3")
+				_check(int(entry.get("min_level", 0)) == 7, "exploration shop advertises minimum Lv7")
 		ids.sort()
 		var sorted_expected := expected.duplicate()
 		sorted_expected.sort()
 		_check(ids == sorted_expected, "Lv%d exact unique event pool" % level)
 		_check(is_equal_approx(total_weight, 29.0) and is_equal_approx(total_probability, 1.0), "Lv%d normalized total29/probability1" % level)
-	_check(Events.event_pool({"profile_level": 0}).is_empty(), "Lv0 has no exploration event pool")
+	_check(Events.event_pool({"profile_level": 0}).size() == 4, "Lv0 has four teaching events")
 	# Real seeded assignment, not just a projected min-level label. This fixture
 	# deliberately bypasses profile growth; it changes no shop goods/camp pool.
-	for level in [2, 3]:
+	for level in [6, 7]:
 		var context := RunContext.new()
 		var profile := {"ruleset_id": "z2", "z2_progression_version": 1, "content_eligibility": {"profile_level": level}}
 		context.start_run({"id": "event_level_fixture", "width": 5, "height": 5, "profile_fields": profile,
@@ -99,9 +103,9 @@ func _test_level_pools() -> void:
 			_check(bool(assigned.get("ok", false)), "Lv%d actual event assignment seed%d" % [level, seed_pick])
 			var is_shop := str(assigned.get("event_type", "")) == "shop"
 			saw_shop = saw_shop or is_shop
-			if level == 2:
-				_check(not is_shop, "Lv2 cannot assign shop seed%d" % seed_pick)
-		_check(saw_shop == (level == 3), "shop unreachable at Lv2 and reachable at Lv3: Lv%d" % level)
+			if level == 6:
+				_check(not is_shop, "Lv6 cannot assign shop seed%d" % seed_pick)
+		_check(saw_shop == (level == 7), "shop unreachable at Lv6 and reachable at Lv7: Lv%d" % level)
 
 
 func _open_main(profile_id: String) -> bool:
@@ -138,45 +142,28 @@ func _close_main() -> void:
 	scene = null
 
 
-func _test_tutorial_legacy_and_error_fallback() -> void:
+func _test_tutorial_event_dialogue() -> void:
 	var start: Dictionary = _command(&"start_standard_run", {"run_start_config": {"map_config_id": Tutorial.MAP_ID, "difficulty": "tutorial"}})
 	if not _check(start.get("ok", false) and scene.run_context.mode == &"tutorial" and scene._show_run_screen(), "actual fresh-profile tutorial admission; result=%s meta_error=%s" % [str(start), scene.meta_progress_adapter.last_error]):
 		return
 	var context: RunContext = scene.run_context
-	_check(not Events.applies_to(context) and not Hooks.applies_to(context), "both Z2 event and run hooks exclude teaching")
-	_check(_has_z2_profile(context.profile_fields) and _has_z2_profile(context.run_start_config.get("profile_fields", {})), "tutorial retains Z2 identity/version in both profile snapshots")
-	for entry: Array in TEACHING_EVENTS:
-		var state: Dictionary = Service.get_event_state(context, entry[0])
-		_check(str(state.get("event_type", "")) == entry[1] and str(state.get("ruleset_id", "")) != "z2", "fixed teaching legacy event " + entry[1])
-		_check(state.get("options", []).any(func(option: Dictionary) -> bool: return str(option.get("id", "")) == entry[2]), "fixed teaching keeps real legacy action " + entry[2])
+	_check(Events.applies_to(context) and not Hooks.applies_to(context), "teaching uses complete events with isolated growth and opening hooks")
+	_check(_has_z2_profile(context.profile_fields) and _has_z2_profile(context.run_start_config.get("profile_fields", {})), "both teaching profiles preserve Z2 identity")
 	_close_tutorial_prompt()
-	for target: Vector2i in [Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]:
-		var moved: Dictionary = _command(&"attempt_room_transition", {"direction": target - context.get_current_pos()})
-		if not _check(moved.get("ok", false) and context.get_current_pos() == target, "real fixed tutorial route enters " + str(target)):
-			return
-		_close_tutorial_prompt()
-	_check(str(context.event_state.get("event_type", "")) == "trap", "actual teaching entry resolves trap rather than a Z2 error")
-	if await _open_world_event(false, "tutorial-trap"):
-		await _close_open_event("button", false, "tutorial legacy close")
-	# Reproduce the historical fallback with an actual rejected Z2 query, not a
-	# hand-built {visible:true} panel or invented failure dictionary. Admission,
-	# proximity, legacy content and its close button still belong to real Main.
-	var error_state: Dictionary = Events.public_state(context, context.get_current_pos(), "trap")
-	_check(error_state.get("ok") == false and str(error_state.get("reason", "")) == "unassigned_z2_event", "tutorial Z2-only query returns the actual error fallback state")
-	for mode in ["button", "escape"]:
-		if not _move_to_event():
-			return
-		scene._show_event_panel(error_state)
-		if _check(scene.event_panel.is_visible_in_tree() and scene.event_panel.visible and scene._runtime_modal_is_top(&"event"), "real tutorial error fallback mounts the old panel: " + mode):
-			await _close_open_event(mode, false, "tutorial error fallback " + mode)
-	if await _open_world_event(false, "tutorial-legacy-leave"):
-		await _close_open_event("leave", false, "tutorial legacy leave option")
-	if await _open_world_event(false, "tutorial-legacy-disarm"):
-		if _activate_legacy_option("disarm"):
-			await _until(func() -> bool: return not scene._runtime_modal_is_top(&"event"), "completed legacy option closes its presentation")
-			_check(scene.last_command_result.get("ok", false) and context.interacted_cells.has("0,3"), "actual tutorial disarm executes the legacy service")
-			await _assert_recovered("tutorial legacy completed option")
-	_check(_has_z2_profile(context.profile_fields) and _has_z2_profile(context.run_start_config.get("profile_fields", {})), "closing/using legacy tutorial never strips profile Z2 fields")
+	var moved: Dictionary = _command(&"attempt_room_transition", {"direction": Vector2i.DOWN})
+	if not _check(moved.get("ok", false) and context.event_state.get("event_type") == "information", "first event is the prepared teaching information desk"):
+		return
+	_close_tutorial_prompt()
+	for mode in ["button", "escape", "leave"]:
+		if await _open_world_event(true, "teaching information " + mode):
+			await _close_open_event(mode, true, "teaching information " + mode)
+	var invalid := Events.public_state(context, context.get_current_pos(), "invalid_event_id")
+	scene._show_event_panel(invalid)
+	_check(not scene._runtime_modal_is_top(&"event") and not scene.event_panel.visible, "an invalid Z2 projection never mounts a legacy teaching panel")
+	if await _open_world_event(true, "teaching information actual operation"):
+		if await _choose_new("mine_count", false, "teaching information"):
+			_key(KEY_ESCAPE)
+			await _assert_recovered("completed free teaching query")
 
 
 func _has_z2_profile(profile: Dictionary) -> bool:
@@ -198,7 +185,7 @@ func _close_tutorial_prompt() -> void:
 func _test_natural_level2_path() -> void:
 	print("Z2_EVENT_INPUT_FIXTURE=Lv2_saved_qualification_not_natural_growth;unaltered_seed7_map_and_event_bindings")
 	var meta = scene.meta_progress_adapter
-	meta.data.merge({"tutorial_completed": true, "profile_level": 2, "profile_exp": Growth.exp_for_level(2),
+	meta.data.merge({"tutorial_completed": true, "run_count": 5, "profile_level": 2, "profile_exp": Growth.exp_for_level(2),
 		"talent_flags": ["z2_talent_01"], "talent_earned": 100, "talent_spent": 100, "talent_points": 0,
 		"unlocked_map_ids": ["tutorial_5x5", "classic_7x7_simple"]}, true)
 	if not _check(meta.save(), "save validated Lv2 qualification; error=%s" % meta.last_error):

@@ -21,6 +21,7 @@ var _last_popup_id: StringName = &""
 var _presentation_occluded := false
 var _training_active := false
 var _learning_required := false
+var _automatic_learning := false
 var _learning_enabled := false
 var _training_scope := ""
 var _last_guidance: Dictionary = {}
@@ -41,6 +42,7 @@ func apply_training_state(snapshot: Dictionary, durable_learning_required: bool 
 	# checkpoint retains its runtime flag. Keep explicit learning reachable;
 	# only the controller's durable business action may reconcile that state.
 	_learning_required = _training_active and profile.get("z2_progression_version") == 1 and (not bool(profile.get("flag_unlocked", false)) or durable_learning_required)
+	_automatic_learning = bool(profile.get("tutorial_chest_learning", false))
 	_learning_enabled = _learning_required and str(snapshot.get("phase", "")) == "running" and not TutorialService.is_blocking_popup(snapshot.get("tutorial_popup", {}))
 	if was_required and not _learning_required and str(_last_guidance.get("id", "")) == "spawn_intro":
 		_last_guidance.clear()
@@ -59,7 +61,7 @@ func apply_popup(next_popup: Dictionary) -> void:
 			display = _last_guidance.duplicate(true)
 		else:
 			display = {"id": &"tutorial_objective", "title": "教学目标", "blocking": false,
-				"message": "先学习插旗，再朝地图上的出口图标前进。" if _learning_required else "朝右上角地图的出口图标前进，找到撤离信标。"}
+				"message": "进入任一宝箱房，用100教学点自动学习插旗。" if _automatic_learning and _learning_required else "先学习插旗，再朝地图上的出口图标前进。" if _learning_required else "朝右上角地图的出口图标前进，找到撤离信标。"}
 			_guidance_expanded = false
 	var next_id := StringName(display.get("id", &""))
 	var popup_changed := next_id != _last_popup_id
@@ -306,7 +308,7 @@ func _refresh(reset_scroll: bool = false) -> void:
 			call_deferred("_grab_confirm_focus_if_valid", _last_popup_id)
 	var learn := get_node_or_null("Panel/Content/LearnFlagButton") as Button
 	if learn != null:
-		learn.visible = _learning_required and not blocking and _last_popup_id != &"spawn_intro"
+		learn.visible = _learning_required and not _automatic_learning and not blocking and _last_popup_id != &"spawn_intro"
 		learn.disabled = not _learning_enabled
 		learn.add_theme_font_size_override("font_size", Art10UISkinKitScript.scaled_font_size(Art10UISkinKitScript.font_size(&"body"), ui_scale_factor))
 		_reserve_button_focus_inset(learn)

@@ -148,7 +148,9 @@ static func project(event: String, state: Dictionary, hints: Dictionary = {}) ->
 			elif not state.get("rounds", []).is_empty():
 				keys = ["rps.pending"]
 		"cage":
-			if not complete:
+			if state.get("challenge_available", false):
+				keys = ["cage.open328"]
+			elif not complete:
 				keys = ["cage.open328", "cage.open329", "cage.open330", "cage.open331"]
 		"dice":
 			if not complete and not state.get("rounds", []).is_empty():

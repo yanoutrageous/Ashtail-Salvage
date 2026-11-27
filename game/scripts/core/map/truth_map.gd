@@ -97,10 +97,28 @@ func setup_standard_map(config: Dictionary) -> void:
 	_append_generation_log(&"standard_grid_initialized", {"width": width, "height": height, "seed": rng.seed})
 	spawn_pos = _take_random_candidate(_all_positions(), rng)
 	_set_cell(spawn_pos, {"spawn": true, "room_type": ROOM_NORMAL, "reserved": true})
+	var event_count := int(config.get("event_room_count", 10))
+	var chest_count := int(config.get("chest_room_count", 10))
+	var ordinal := int(config.get("profile_fields", {}).get("early_discovery_run", 0))
+	if ordinal > 0 and event_count >= 2 and chest_count >= 1:
+		var neighbors: Array[Vector2i] = []
+		for direction: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			if is_inside(spawn_pos + direction):
+				neighbors.append(spawn_pos + direction)
+		if neighbors.size() >= 2:
+			var event_pos := _take_random_candidate(neighbors, rng)
+			neighbors.erase(event_pos)
+			_set_cell(event_pos, {"room_type": ROOM_EVENT})
+			var other := _take_random_candidate(neighbors, rng)
+			var second_event := ordinal == Z2EventRuntime.EARLY_DISCOVERY_RUNS
+			_set_cell(other, {"room_type": ROOM_EVENT if second_event else ROOM_CHEST})
+			map_profile["early_event_positions"] = [event_pos, other] if second_event else [event_pos]
+			event_count -= 2 if second_event else 1
+			chest_count -= 0 if second_event else 1
 	_place_rooms(ROOM_MINE, int(config.get("mine_count", 20)), rng)
 	_place_rooms(ROOM_MONSTER, int(config.get("monster_room_count", 10)), rng)
-	_place_rooms(ROOM_CHEST, int(config.get("chest_room_count", 10)), rng)
-	_place_rooms(ROOM_EVENT, int(config.get("event_room_count", 10)), rng)
+	_place_rooms(ROOM_CHEST, chest_count, rng)
+	_place_rooms(ROOM_EVENT, event_count, rng)
 	for i in range(int(config.get("visible_exit_count", 0))):
 		var pos := _take_random_candidate(_safe_normal_candidates(), rng)
 		_set_cell(pos, {"room_type": ROOM_EXIT, "exit_id": StringName("visible_%d" % [i + 1]), "random_exit": false})

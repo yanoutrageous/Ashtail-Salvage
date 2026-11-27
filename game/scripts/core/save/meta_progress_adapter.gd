@@ -615,6 +615,7 @@ func get_summary() -> Dictionary:
 		"talent_budget_granted": maxi(0, int(data.get("talent_budget_granted", 0))),
 		"talent_catalog_version": maxi(0, int(data.get("talent_catalog_version", 0))),
 		"tutorial_completed": bool(data.get("tutorial_completed", false)),
+		"tutorial_completion_receipt": _dictionary_from(data.get("tutorial_completion_receipt", {})),
 		"run_count": int(data.get("run_count", 0)),
 		"extract_count": int(data.get("extract_count", 0)),
 		"fail_count": int(data.get("fail_count", 0)),
@@ -1347,7 +1348,7 @@ func _apply_tutorial_settlement(result_snapshot: Dictionary, result_id: String) 
 			return {"ok": false, "status": "teaching_purchase_required"}
 		data["profile_level"] = 1
 		data["tutorial_purchase_available"] = false
-		data["tutorial_completion_receipt"] = {"result_id": result_id}
+		data["tutorial_completion_receipt"] = {"result_id": result_id, "visited_event_types": _visited_event_types(result_snapshot)}
 	var new_unlocks := M7ProgressionServiceScript.refresh_map_unlocks(data)
 	var saved := save()
 	if not saved:
@@ -1370,6 +1371,15 @@ func _result_id(result_snapshot: Dictionary) -> String:
 		return explicit_id
 	var run_id := str(result_snapshot.get("run_id", result_snapshot.get("mode", "run")))
 	return "%s:%s:%s" % [run_id, str(result_snapshot.get("outcome", "")), int(result_snapshot.get("turn", 0))]
+
+
+func _visited_event_types(result_snapshot: Dictionary) -> Array[String]:
+	var seen: Array[String] = []
+	var stats: Dictionary = result_snapshot.get("run_stats", result_snapshot.get("RunResult", {}).get("run_stats", {}))
+	for event: String in Z2EventRuntime.EVENT_LEVELS:
+		if stats.get("visited_event_" + event, false):
+			seen.append(event)
+	return seen
 
 
 func _history_record(result_id: String, outcome: String, result_snapshot: Dictionary, settlement: Dictionary) -> Dictionary:
@@ -1395,6 +1405,8 @@ func _history_record(result_id: String, outcome: String, result_snapshot: Dictio
 		"commission_label": str(run_start.get("selected_objective_label", "")),
 		"seed": recorded_seed,
 		"recorded_at_unix": int(Time.get_unix_time_from_system()),
+		"visited_event_types": _visited_event_types(result_snapshot),
+		"early_offered_events": _array_from(run_start.get("early_offered_events", [])),
 		"carried_equipment": _array_from(run_start.get("selected_equipment_items", [])),
 		"carried_consumables": _array_from(run_start.get("selected_consumable_items", [])),
 		"extracted_items": _array_from(settlement.get("extracted_items", settlement.get("warehouse_items", []))),

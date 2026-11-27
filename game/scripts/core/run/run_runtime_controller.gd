@@ -228,7 +228,8 @@ func is_tutorial_learning_required() -> bool:
 
 
 func _tutorial_learning_rejection() -> Dictionary:
-	return _with_actor({"ok": false, "status": &"teaching_purchase_required", "reason": "teaching_purchase_required", "reason_code": "teaching_purchase_required", "message": "请先通过教学目标中的“100点 · 学习插旗”完成学习，再完成训练。收起说明不会扣点，你仍可继续探索或暂停。"})
+	var message := "请先进入一间宝箱房学习插旗，再到撤离点完成训练。" if context.profile_fields.get("tutorial_chest_learning", false) else "请先通过教学目标中的“100点 · 学习插旗”完成学习，再完成训练。收起说明不会扣点，你仍可继续探索或暂停。"
+	return _with_actor({"ok": false, "status": &"teaching_purchase_required", "reason": "teaching_purchase_required", "reason_code": "teaching_purchase_required", "message": message})
 
 
 func request_extract(room_resolver: RoomResolver, command_id: String, actor_id: StringName) -> Dictionary:
@@ -1102,10 +1103,11 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 		stale["action_result"] = stale.duplicate(true)
 		return stale
 	if kind == &"learn_tutorial_flag":
-		# This explicit business action remains reachable in every tutorial room.
-		# Validate before the durable purchase; closing a lesson never gets here.
+		# Legacy checkpoints retain the explicit purchase. New runs require chest entry.
 		if context == null or context.mode != &"tutorial" or context.profile_fields.get("z2_progression_version") != 1 or not context.can_accept_command() or context.phase != &"running":
 			return _atomic_error("teaching_action_unavailable")
+		if context.profile_fields.get("tutorial_chest_learning", false) and not context.profile_fields.get("flag_unlocked", false):
+			return _atomic_error("visit_teaching_chest")
 		if meta_progress_adapter == null:
 			return _atomic_error("meta_progress_adapter_missing")
 		var already_learned: bool = meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01")
@@ -1227,6 +1229,9 @@ func execute_atomic_operation(kind: StringName, payload: Dictionary, operation: 
 		_publish_command_requests(requested_commands)
 		return committed
 	command_bus.set_block_signals(was_blocking)
+	var learning := _settle_committed_teaching_flag()
+	if not learning.get("ok", false):
+		return _storage_error(learning)
 	_publish_command_requests(requested_commands)
 	if durability and kind != &"checkpoint":
 		command_bus._emit_state(change_scope if change_scope != &"" else (&"combat" if kind in [&"combat_fixed_step", &"idle_time", &"combat_hit"] else &"all"))
@@ -1371,6 +1376,18 @@ func finish_pending_combat_save(wait := false, publish := true) -> Dictionary:
 		command_bus._emit_state(pending["scope"] if pending["scope"] != &"" else &"combat")
 	return pending["result"]
 
+# The committed room checkpoint is the durable intent. If the second write
+# fails or the process exits between writes, restore/retry settles it once.
+func _settle_committed_teaching_flag() -> Dictionary:
+	if context.mode != &"tutorial" or not context.profile_fields.get("tutorial_chest_learning", false) or not context.profile_fields.get("flag_unlocked", false):
+		return {"ok": true}
+	if meta_progress_adapter == null:
+		return _atomic_error("meta_progress_adapter_missing")
+	if meta_progress_adapter.data.get("talent_flags", []).has("z2_talent_01"):
+		return {"ok": true}
+	return meta_progress_adapter.purchase_tutorial_flag()
+
+
 func retry_persistence() -> Dictionary:
 	if persistence_error.is_empty():
 		return {"ok": true, "status": &"ready"}
@@ -1384,7 +1401,9 @@ func retry_persistence() -> Dictionary:
 	else:
 		result = {"ok": true}
 	if bool(result.get("ok", false)):
-		persistence_error.clear()
+		result = _settle_committed_teaching_flag()
+		if result.get("ok", false):
+			persistence_error.clear()
 	return result
 
 func initialize_z2_session(manager) -> Dictionary:
@@ -1453,6 +1472,9 @@ func _restore_durable_checkpoint(force_install: bool) -> Dictionary:
 			return _storage_error(recovered)
 	if not bool(loaded.get("can_simulate", false)):
 		return _storage_error(_atomic_error("admission_not_active"))
+	var learning := _settle_committed_teaching_flag()
+	if not learning.get("ok", false):
+		return _storage_error(learning)
 	if not context.run_active and not context.result_snapshot.is_empty():
 		_on_terminal_result_available(context.result_snapshot)
 	return {"ok": true, "status": "restored", "run_id": str(context.run_id), "revision": transaction_revision}

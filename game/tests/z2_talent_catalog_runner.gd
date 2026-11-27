@@ -144,9 +144,11 @@ func _test_teaching_and_level_gates() -> void:
 		var locked := teaching.duplicate(true)
 		locked.merge(overrides, true)
 		_expect_blocked(locked, _id(1), "tutorial_purchase_required")
+	_expect_blocked(_meta(0, 1860, 0, [], false, false), _id(2), "tutorial_required")
 	var prior_ids: Array[String] = [_id(1)]
 	for number in range(2, 40):
-		_expect_blocked(_meta(3, 1860, 100, prior_ids, false, false), _id(number), "tutorial_required")
+		var unlocked_tree: Dictionary = catalog.call("unlock_evaluation", _meta(0, 1860, 100, prior_ids, false, false), _id(number))
+		_expect(unlocked_tree.get("ok", false), "chest entitlement opens the tree before graduation for %s" % _id(number))
 		for level in [1, 2]:
 			var earned: Dictionary = catalog.call("unlock_evaluation", _meta(level, 1860, 100, prior_ids, true, false), _id(number))
 			_expect(earned.get("ok", false), "post-teaching purchase depends on points and predecessors at Lv%d" % level)

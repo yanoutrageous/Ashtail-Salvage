@@ -4,6 +4,8 @@ class_name TutorialMapCatalog
 const SupplyCatalog := preload("res://scripts/core/content/z1_supply_catalog.gd")
 const MAP_ID := "tutorial_5x5"
 const FIXED_SEED := 777
+const EVENT_ROOMS := {Vector2i(0, 1): "information", Vector2i(0, 3): "first_aid",
+	Vector2i(2, 4): "relief", Vector2i(3, 4): "recycle"}
 
 
 static func definition() -> Dictionary:
@@ -63,6 +65,13 @@ static func runtime_config(run_start_config: Dictionary = {}) -> Dictionary:
 	teaching_profile["failure_salvage_capacity"] = SupplyCatalog.BASE_FAILURE_SALVAGE_CAPACITY
 	teaching_profile["consumable_weight_reduce"] = 0
 	sanitized_start["profile_fields"] = teaching_profile
+	var layout := manual_map()
+	var guidance := triggers()
+	# Pre-Z2 callers still use the four legacy services selected by position.
+	if teaching_profile.get("ruleset_id") != "z2":
+		layout["events"] = [Vector2i(0, 3), Vector2i(1, 2), Vector2i(2, 1), Vector2i(3, 0)]
+		for key: String in ["1,2", "2,1", "3,0"]:
+			guidance[key] = &"event_rule"
 	return {
 		"id": StringName(MAP_ID),
 		"mode": &"tutorial",
@@ -100,8 +109,8 @@ static func runtime_config(run_start_config: Dictionary = {}) -> Dictionary:
 		"apply_meta_progress": false,
 		"allow_warehouse_rewards": false,
 		"allow_failure_rewards": false,
-		"manual_map": manual_map(),
-		"tutorial_triggers": triggers(),
+		"manual_map": layout,
+		"tutorial_triggers": guidance,
 		"run_start_config": sanitized_start,
 	}
 
@@ -110,7 +119,7 @@ static func manual_map() -> Dictionary:
 	return {
 		"spawn": Vector2i(0, 0),
 		"mines": [Vector2i(0, 2), Vector2i(1, 1), Vector2i(2, 0), Vector2i(3, 3)],
-		"events": [Vector2i(0, 3), Vector2i(1, 2), Vector2i(2, 1), Vector2i(3, 0)],
+		"events": EVENT_ROOMS.keys(),
 		"monsters": [Vector2i(0, 4), Vector2i(1, 3), Vector2i(2, 2), Vector2i(3, 1), Vector2i(4, 0)],
 		"chests": [Vector2i(1, 4), Vector2i(2, 3), Vector2i(3, 2), Vector2i(4, 1)],
 		"exits": [{"pos": Vector2i(4, 4), "exit_id": &"tutorial_exit", "random_exit": false}],
@@ -126,9 +135,6 @@ static func triggers() -> Dictionary:
 		"1,1": &"mine_rule",
 		"2,0": &"mine_rule",
 		"0,3": &"event_rule",
-		"1,2": &"event_rule",
-		"2,1": &"event_rule",
-		"3,0": &"event_rule",
 		"0,4": &"monster_rule",
 		"1,3": &"monster_rule",
 		"2,2": &"monster_rule",

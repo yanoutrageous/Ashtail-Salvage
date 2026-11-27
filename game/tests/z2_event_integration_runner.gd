@@ -102,6 +102,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_test_registry_and_projection()
 	_test_actual_event_selection()
+	_test_placement()
 	_test_command_purchase()
 	_test_atomic_consumers()
 	_test_savings_income()
@@ -110,10 +111,12 @@ func _run() -> void:
 	_test_owner_process_available()
 	_test_official_pool_defaults()
 	_test_cage_type_projection()
+	_test_voluntary_cage()
 	_test_compression_facts()
 	_test_economy_routes()
 	_test_information_choices()
 	_test_process_choices()
+	_test_level_16_altar()
 	_test_continuations()
 	_test_clock_continuation()
 	_test_all_player_projections()
@@ -401,7 +404,7 @@ func _test_actual_event_selection() -> void:
 		r.context.seed_value = index
 		var result: Dictionary = r.execute_atomic_operation(&"event_assignment", {"pos": pos}, func() -> Dictionary:
 			return Events.select_event(r.context, pos))
-		_check(result.get("ok", false) and str(result.get("event_type", "")) in ["information", "relief", "first_aid", "altar"], "Lv1 actual event type filter")
+		_check(result.get("ok", false) and str(result.get("event_type", "")) in ["information", "relief", "first_aid", "recycle"], "Lv1 actual event type filter")
 		if result.get("ok", false):
 			observed[str(result.event_type)] = true
 			var before: Dictionary = r.capture_authoritative_state()
@@ -415,8 +418,52 @@ func _test_actual_event_selection() -> void:
 		ids[entry.event_type] = true
 		total += float(entry.roll_weight)
 	_check(full.size() == 22 and ids.size() == 22 and is_equal_approx(total, 29.0), "unique22 / inherited total weight29")
-	_check(Events.event_pool({"profile_level": 0}).is_empty(), "empty event eligibility fails closed")
+	_check(Events.EVENT_LEVELS == {"information": 0, "first_aid": 0, "relief": 0, "recycle": 0, "demine": 6, "shop": 7, "clock_in": 8, "coil": 9, "compress": 9, "mechanism": 11, "expand": 13, "trader": 13, "consign": 13, "recon": 14, "shortcut": 14, "altar": 16, "rps": 17, "savings": 18, "pawn": 18, "seal": 21, "cage": 22, "dice": 26}, "exact 22 playtest event admissions")
+	_check(Events.event_pool({"profile_level": 0}) == Events.event_pool({"profile_level": 1}) and Events.event_pool({"profile_level": 0}).size() == 4, "Lv0 and Lv1 share four full events")
 	_dispose(r)
+
+func _test_placement() -> void:
+	var pairs := 0
+	var choices := {}
+	for size: int in [7, 10]:
+		for seed_index in range(25):
+			var ordinal := seed_index + 1
+			var level := 1 if size == 7 and ordinal <= 5 else 18
+			var profile := {"ruleset_id": "z2", "z2_progression_version": 1,
+				"content_eligibility": Eligibility.freeze_profile({"profile_level": level}),
+				"early_discovery_run": ordinal if ordinal <= 5 else 0, "visited_event_types": []}
+			var context := RunContext.new()
+			context.start_run({"mode": &"standard", "width": size, "height": size, "seed": seed_index + 11, "mine_count": size,
+				"event_room_count": 7, "chest_room_count": 5, "profile_fields": profile,
+				"run_start_config": {"profile_fields": profile, "map_config_id": "classic_7x7_simple" if size == 7 else "classic_10x10_simple"}})
+			var savings := 0
+			var rooms := 0
+			var nearby: Array[String] = []
+			for y in size:
+				for x in size:
+					var pos := Vector2i(x, y)
+					var delta := pos - context.truth_map.spawn_pos
+					var adjacent := absi(delta.x) + absi(delta.y) == 1
+					if context.truth_map.get_room_type(pos) == &"Chest" and adjacent:
+						nearby.append("chest")
+					if context.truth_map.get_room_type(pos) != &"Event":
+						continue
+					rooms += 1
+					var assigned := Events.select_event(context, pos)
+					if adjacent:
+						nearby.append(str(assigned.get("event_type", "")))
+					if assigned.get("event_type") == "savings":
+						savings += 1
+			_check(rooms == 7 and savings in ([0] if size < 10 else [0, 2]), "intact quota / exactly paired savings: %d / %d" % [size, seed_index])
+			if savings == 2:
+				pairs += 1
+			if size == 7 and ordinal <= 5:
+				nearby.sort()
+				_check(nearby.size() >= 2, "two usable neighboring route choices on early run %d" % ordinal)
+				choices[str(nearby)] = true
+	_check(pairs > 0, "paired savings occurs in actual 10x10 layouts")
+	_check(choices.size() == 5, "five early admissions offer distinct neighboring choices")
+
 
 func _test_cage_type_projection() -> void:
 	for enemy in ["bat", "drone"]:
@@ -439,6 +486,22 @@ func _test_cage_type_projection() -> void:
 		_check_response(settled, authoritative_view)
 		_check(str(settled.get("message", "")).contains("胜利" if enemy == "bat" else "落败") and r.context.run_stats.get("integration_equipment", 0) == 0, "cage outcome reply and no noncombat equipment growth")
 		_dispose(r)
+
+func _test_voluntary_cage() -> void:
+	var runtime := _runtime()
+	var pos := Vector2i(2, 2)
+	_room(runtime, pos, "cage")
+	runtime.context.profile_fields["cage_requires_acceptance"] = true
+	runtime.process_rules = {"enemy_pool": [{"enemy_id": "bat", "original_power": 13}]}
+	runtime.context.visited_cells[runtime.context.cell_key(pos)] = true
+	var entered := runtime.execute_atomic_operation(&"cage_entry", {}, func() -> Dictionary:
+		return Events.on_room_entered(runtime.context, pos, "cage", runtime.z2_event_hooks(runtime.context, pos, "cage")))
+	_check(entered.get("ok", false) and Events.cage_state(runtime.context, pos).is_empty(), "new cage entry leaves room doors open")
+	_check(runtime.command_bus.dispatch(&"select_event_option", {"option_id": "leave"}).get("ok", false), "unstarted cage challenge can be declined")
+	var accepted := _choose(runtime, "challenge")
+	_check(accepted.get("ok", false) and runtime.in_run_runtime.has_active_combat() and Events.cage_state(runtime.context, pos).get("active", false), "explicit cage challenge starts real combat and seals doors: " + str(accepted.get("reason", "")))
+	_dispose(runtime)
+
 
 func _test_compression_facts() -> void:
 	var r := _runtime()
@@ -537,6 +600,25 @@ func _test_process_choices() -> void:
 				r.context.current_pos = Vector2i(2, 2)
 				_check(_state(r).get("requires_prepare", false), "earlier altar projection flags obsolete shared tier quote")
 		_dispose(r)
+
+func _test_level_16_altar() -> void:
+	var r := _runtime()
+	r.context.run_start_config.profile_fields.content_eligibility = Eligibility.freeze_profile({"profile_level": 16})
+	r.context.profile_fields = r.context.run_start_config.profile_fields.duplicate(true)
+	r.context.max_hp = 200
+	r.context.hp = 200
+	_room(r, Vector2i(2, 2), "altar")
+	for tier in range(1, 6):
+		if not _prepare(r):
+			break
+		var result := _choose(r, "offer")
+		var facts: Dictionary = result.get("facts", {})
+		_check(result.get("ok", false) and facts.get("tier") == tier and facts.get("items", []).size() == 1, "Lv16 altar delivers an official item at stage %d" % tier)
+		if not result.get("ok", false):
+			break
+	_check(r.context.hp == 65 and _black(r) == 340 and _state(r).get("completed", false), "Lv16 altar completes all five costs and rewards in its first room")
+	_check(not _choose(r, "offer").get("ok", false), "completed altar rejects another payment")
+	_dispose(r)
 
 func _test_continuations() -> void:
 	var r := _runtime()

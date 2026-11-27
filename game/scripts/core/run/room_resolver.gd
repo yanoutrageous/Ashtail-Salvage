@@ -63,6 +63,9 @@ func enter_room(context: RunContext) -> Dictionary:
 	context.encounter_tags = encounter.get("encounter_tags", []).duplicate(true)
 	_record_room_event(context, RunEventLog.EVENT_ROOM_ENTERED, {"position": pos, "room_type": context.current_room_type, "encounter_type": context.encounter_type, "first_visit": first_visit})
 
+	if context.current_room_type == &"Chest" and context.profile_fields.get("tutorial_chest_learning", false):
+		context.profile_fields["flag_unlocked"] = true
+
 	var first_explore := not context.explored_cells.has(context.cell_key(pos))
 	var exploration_cost := ProtocolService.exploration_cost(difficulty, entry_protocol, first_explore)
 	if first_explore:
@@ -79,6 +82,7 @@ func enter_room(context: RunContext) -> Dictionary:
 		if not opening.get("ok", false):
 			StateSnapshotScript.install_context(context, before)
 			return opening
+	if Z2Events.applies_to(context):
 		var event_id := ""
 		if context.current_room_type == &"Event":
 			var selected := EventService.select_z2_event(context, pos)
@@ -86,6 +90,8 @@ func enter_room(context: RunContext) -> Dictionary:
 				StateSnapshotScript.install_context(context, before)
 				return selected
 			event_id = str(selected.event_type)
+			if first_visit:
+				context.run_stats["visited_event_" + Z2Events.canonical(event_id)] = true
 		var hooks := Z2Events.hooks_for(runtime_controller, context, pos, event_id)
 		var continued := Z2Events.on_room_entered(context, pos, event_id, hooks)
 		if not continued.get("ok", false):
@@ -119,7 +125,7 @@ func enter_room(context: RunContext) -> Dictionary:
 	elif context.current_room_type == &"Monster" and not context.truth_map.is_cleared(pos):
 		context.enemy_state = CombatState.build_enemy_state(context, pos, context.current_adjacent_mines)
 		context.last_message = RunTextCatalogScript.monster_available()
-	elif context.current_room_type == &"Event" and (z2 or not context.interacted_cells.has(context.cell_key(pos)) or EventService.get_event_type(context, pos) == &"z1_event_e25"):
+	elif context.current_room_type == &"Event" and (Z2Events.applies_to(context) or not context.interacted_cells.has(context.cell_key(pos)) or EventService.get_event_type(context, pos) == &"z1_event_e25"):
 		context.event_state = EventService.get_event_state(context, pos)
 		context.last_message = RunTextCatalogScript.event_available(context.event_state.get("event_type", &"event"))
 	elif context.current_room_type == &"Chest" and not context.searched_cells.has(context.cell_key(pos)):

@@ -397,6 +397,8 @@ func select_event_option(option_id: StringName = &"default", payload: Dictionary
 		return _blocked(&"blocked", _current_blocked_reason())
 	var previous_room := context.get_current_pos()
 	var result: Dictionary = room_resolver.select_event_option(context, option_id, payload)
+	if result.get("ok", false) and result.get("facts", {}).get("combat_requested", false) and runtime_controller != null:
+		runtime_controller.in_run_runtime.sync_room(runtime_controller.get_restored_local_position(Vector2(0.5, 0.72)))
 	if bool(result.get("ok", false)) and context.get_current_pos() != previous_room and runtime_controller != null and runtime_controller.has_method("sync_room_transition"):
 		runtime_controller.sync_room_transition(Vector2i.ZERO)
 	_emit_state()

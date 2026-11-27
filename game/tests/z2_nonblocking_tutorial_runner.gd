@@ -9,12 +9,6 @@ const Tutorial := preload("res://scripts/core/run/tutorial_map_catalog.gd")
 const Guidance := preload("res://scripts/core/run/tutorial_service.gd")
 const MetaScript := preload("res://scripts/core/save/meta_progress_adapter.gd")
 const FIXED_GUIDANCE := ["spawn_intro", "number_rule", "mine_rule", "event_rule", "dice_rule", "altar_rule", "trap_rule", "monster_rule", "chest_rule", "map_rule", "mine_review", "route_rule", "exit_goal"]
-const EVENT_ROUTE := [
-	{"steps": [Vector2i(0, 2), Vector2i(0, 3)], "event": "trap"},
-	{"steps": [Vector2i(0, 2), Vector2i(1, 2)], "event": "dice"},
-	{"steps": [Vector2i(1, 1), Vector2i(2, 1)], "event": "altar"},
-	{"steps": [Vector2i(2, 0), Vector2i(3, 0)], "event": "trader"},
-]
 
 class FailCheckpointCommit extends SaveAdapter:
 	var armed := false
@@ -56,14 +50,11 @@ func _run() -> void:
 			if _walk(Vector2i(0, 1)):
 				await _test_14_legacy_guidance_payloads()
 				await _test_guidance_card_and_long_copy()
-				_test_remote_learning_preview()
-				if await _visit_four_fixed_events() and _reach_exit():
-					await _test_unlearned_exit_rejected()
-					if await _test_failed_learning_and_retry():
-						if await _test_meta_backup_learning_recovery():
-							if await _test_disk_reload_and_main_restart():
-								await _test_flag_risk_confirmation()
-								await _complete_training()
+				if await _play_teaching_route():
+					if await _test_disk_reload_and_main_restart():
+						await _test_flag_risk_confirmation()
+						await _complete_training()
+						_test_early_departures()
 	await _close_main()
 	_finish()
 
@@ -150,7 +141,7 @@ func _test_unconfirmed_intro() -> void:
 		return
 	_check(not scene.run_context.has_blocking_tutorial_popup() and scene.run_context.can_accept_command(), "unconfirmed intro does not lock command authority")
 	_check(not panel.layout_snapshot().get("guidance_expanded", true), "actual intro is collapsed by default")
-	_check(_learn_button().is_visible_in_tree() and not _learn_button().disabled, "explicit learning button exists independently of intro details")
+	_check(!_learn_button().is_visible_in_tree(), "intro teaches automatic chest entry")
 	await _assert_free_controls("unconfirmed intro")
 	_key(KEY_E)
 	# Spawn is intentionally not searchable. A precise domain rejection proves
@@ -172,7 +163,7 @@ func _test_unconfirmed_intro() -> void:
 func _test_14_legacy_guidance_payloads() -> void:
 	_check(scene.run_context.get_current_pos() == Vector2i(0, 1), "legacy compatibility checks occur after leaving birth room")
 	_check(str(scene.tutorial_popup_panel.popup.get("id", "")) == "number_rule", "room change replaces cached spawn guidance with the real room lesson")
-	_check(_learn_button().is_visible_in_tree() and not _learn_button().disabled, "learning remains reachable outside birth room before any purchase")
+	_check(!_learn_button().is_visible_in_tree(), "no remote paid action before chest entry")
 	var definitions: Dictionary = Guidance.popup_definitions()
 	var defined: Array = []
 	for key in definitions:
@@ -289,7 +280,7 @@ func _test_guidance_card_and_long_copy() -> void:
 func _guidance_geometry_ready() -> bool:
 	var card: Rect2 = scene.tutorial_popup_panel.get_node("Panel").get_global_rect()
 	var placed: Array[Rect2] = []
-	for control: Control in [scene.tutorial_popup_panel.get_node("Panel/Content/Title"), _message(), _details_button(), _learn_button()]:
+	for control: Control in [scene.tutorial_popup_panel.get_node("Panel/Content/Title"), _message(), _details_button()]:
 		var rect := control.get_global_rect()
 		if not control.is_visible_in_tree() or rect.size.x <= 1.0 or rect.size.y <= 1.0 or not card.grow(0.5).encloses(rect):
 			return false
@@ -297,7 +288,7 @@ func _guidance_geometry_ready() -> bool:
 			if previous.intersects(rect):
 				return false
 		placed.append(rect)
-	for button: Button in [_details_button(), _learn_button()]:
+	for button: Button in [_details_button()]:
 		if button.get_combined_minimum_size().y > button.size.y + 0.5:
 			return false
 	return true
@@ -306,94 +297,77 @@ func _guidance_geometry_ready() -> bool:
 func _assert_guidance_geometry(tag: String) -> void:
 	var card: Rect2 = scene.tutorial_popup_panel.get_node("Panel").get_global_rect()
 	var rects: Array[Rect2] = []
-	for control: Control in [scene.tutorial_popup_panel.get_node("Panel/Content/Title"), _message(), _details_button(), _learn_button()]:
+	for control: Control in [scene.tutorial_popup_panel.get_node("Panel/Content/Title"), _message(), _details_button()]:
 		var rect := control.get_global_rect()
 		_check(control.is_visible_in_tree() and rect.size.x > 0 and rect.size.y > 0 and card.grow(0.5).encloses(rect), tag + " visible control fits guidance card: " + control.name)
 		for previous: Rect2 in rects:
 			_check(not previous.intersects(rect), tag + " independent content/actions do not overlap: " + control.name)
 		rects.append(rect)
-	for button: Button in [_details_button(), _learn_button()]:
+	for button: Button in [_details_button()]:
 		_check(button.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and button.get_combined_minimum_size().y <= button.size.y + 0.5, tag + " action text is not height-clipped: " + button.name)
 	_check(Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(0.5).encloses(card), tag + " card remains inside the actual viewport")
 
 
-func _test_remote_learning_preview() -> void:
-	_check(scene.run_context.get_current_pos() != Vector2i.ZERO and _learn_button().is_visible_in_tree() and not _learn_button().disabled, "learning is actionable after the original intro and room have been left")
-	_check(_learn_button().focus_mode == Control.FOCUS_ALL, "independent paid-learning business action supports intentional keyboard focus")
-	_learn_button().grab_focus()
-	var start: Vector2 = scene.player_controller.place_on_clear_floor(Vector2(0.50, 0.72))
-	_movement_frame(0.08)
-	_check(root.gui_get_focus_owner() == _learn_button() and scene.player_controller.get_local_position().x > start.x and not scene._gameplay_input_blocked(), "intentional paid-action focus neither traps movement nor gets stolen by a pure-guidance refresh")
-	var meta_path: String = scene.meta_progress_adapter.active_meta_progress_path
-	var checkpoint_path: String = scene.runtime_controller.checkpoint_service.checkpoint_path
-	var meta_hash := FileAccess.get_sha256(meta_path)
-	var checkpoint_hash := FileAccess.get_sha256(checkpoint_path)
-	var before: Dictionary = scene.runtime_controller.capture_authoritative_state()
-	var preview: Dictionary = _command(&"learn_tutorial_flag", {"preview": true, "action_id": "tutorial-learning-preview"})
-	_check(preview.get("ok", false) and preview.get("preview", false) and int(preview.get("cost", -1)) == 100, "public learning preview quotes exactly100 without applying it")
-	_check(scene.runtime_controller.capture_authoritative_state() == before, "learning preview leaves exact runtime/receipt state unchanged")
-	_check(FileAccess.get_sha256(meta_path) == meta_hash and FileAccess.get_sha256(checkpoint_path) == checkpoint_hash, "learning preview changes neither Meta nor checkpoint bytes")
-	_assert_not_purchased("remote preview")
-
-
-func _visit_four_fixed_events() -> bool:
-	var seen: Array[String] = []
-	for index in EVENT_ROUTE.size():
-		var entry: Dictionary = EVENT_ROUTE[index]
-		for target: Vector2i in entry.steps:
-			if not _walk(target):
-				return false
-		var context: RunContext = scene.run_context
-		if not _check(context.current_room_type == &"Event" and str(context.event_state.get("event_type", "")) == entry.event and str(context.event_state.get("ruleset_id", "")) != "z2", "fixed teaching room enters the actual legacy service " + entry.event):
-			return false
-		_check(not str(scene.tutorial_popup_panel.popup.get("message", "")).contains("长文回归"), "cached compatibility text cannot cross into real event room " + entry.event)
-		if not _place_at_entity(&"event"):
-			return false
-		_key(KEY_E)
-		if not await _until(func() -> bool: return scene._runtime_modal_is_top(&"event") and scene.event_panel.is_visible_in_tree(), entry.event + " actual E opens its legacy event panel"):
-			return false
-		_check(not scene.z2_event_adapter.visible and not scene.run_context.has_blocking_tutorial_popup(), entry.event + " lesson neither redirects to Z2 nor blocks event input")
-		if index % 2 == 0:
-			var close := scene.event_choice_panel.find_child("CloseEventOptions", true, false) as Button
-			if not await _click(close, entry.event + " actual legacy close button"):
-				return false
-		else:
-			_key(KEY_ESCAPE)
-		if not await _until(func() -> bool: return not scene._is_runtime_modal_open() and not scene.event_panel.visible, entry.event + " closes both presentation and modal authority"):
-			return false
-		await _assert_free_controls(entry.event + " after close")
-		_assert_not_purchased(entry.event + " after close")
-		seen.append(entry.event)
-	return _check(seen == ["trap", "dice", "altar", "trader"], "all four fixed teaching events open/close with actual movement and Esc afterward")
-
-
-func _reach_exit() -> bool:
-	if not _walk(Vector2i(4, 0)):
+func _play_teaching_route() -> bool:
+	var context: RunContext = scene.run_context
+	_check(context.asset_ledger.get_currency(&"black_coin") == 20, "fresh tutorial owns 20 practice black coins")
+	if not await _use_teaching_event("information", "mine_locations", 5):
 		return false
-	if not _check(scene.in_run_runtime.has_active_combat() and scene.run_context.hp > 0, "unchanged fixed monster begins actual combat after the three teaching mines"):
+	if not _walk(Vector2i(0, 2)) or not _walk(Vector2i(0, 3)):
+		return false
+	var injured := context.hp
+	var price := 4 if context.pressure >= 40 else 9
+	if not await _use_teaching_event("first_aid", "buy", price):
+		return false
+	var patches := context.asset_ledger.get_items_by_location(&"inventory").filter(func(item: Dictionary) -> bool: return item.item_id == "con_med_patch")
+	if not _check(patches.size() == 1, "Lv0 aid purchase delivered one real patch"):
+		return false
+	var healed := _command(&"use_consumable", {"instance_id": patches[0].instance_id})
+	_check(healed.get("ok", false) and context.hp == mini(100, injured + 25), "patch used in the aid room heals up to 25")
+	if not _walk(Vector2i(0, 4)):
 		return false
 	var fled: Dictionary = scene.in_run_runtime.request_flee()
-	if not _check(fled.get("ok", false) and not scene.in_run_runtime.has_active_combat(), "public actual combat flee crosses the monster barrier without editing HP or combat outcome"):
+	if not _check(fled.get("ok", false) and not scene.in_run_runtime.has_active_combat(), "public combat flee permits chest practice"):
 		return false
-	for target: Vector2i in [Vector2i(4, 1), Vector2i(4, 2), Vector2i(4, 3), Vector2i(4, 4)]:
-		if not _walk(target):
+	if not await _test_failed_learning_and_retry() or not await _test_meta_backup_learning_recovery():
+		return false
+	if not _walk(Vector2i(2, 4)) or not await _use_teaching_event("relief", "flat", 5):
+		return false
+	if not _walk(Vector2i(3, 4)) or not await _use_teaching_event("recycle", "deliver", 0):
+		return false
+	return _walk(Vector2i(4, 4))
+
+
+func _use_teaching_event(event: String, option_id: String, price: int) -> bool:
+	var context: RunContext = scene.run_context
+	if not _check(context.event_state.get("event_type") == event and context.event_state.get("ruleset_id") == "z2" and not context.event_state.get("requires_prepare", true), "first entry has a fully prepared " + event):
+		return false
+	if not _place_at_entity(&"event"):
+		return false
+	_key(KEY_E)
+	var adapter = scene.z2_event_adapter
+	if not await _until(func() -> bool: return scene._runtime_modal_is_top(&"event") and adapter.is_visible_in_tree(), event + " opens real dialogue"):
+		return false
+	var dialogue = adapter.dialogue
+	for step in range(dialogue._lines.size() * 2 + 3):
+		if dialogue._choosing:
+			break
+		_key(KEY_SPACE)
+	var before := context.asset_ledger.get_currency(&"black_coin")
+	for index in adapter._options.size():
+		if adapter._options[index].get("id") != option_id:
+			continue
+		var button: Button = dialogue._buttons[index]
+		button.grab_focus()
+		_key(KEY_ENTER)
+		if not await _until(func() -> bool: return dialogue._pending_by_room.is_empty(), "settle real " + option_id):
 			return false
-	_check(scene.run_context.run_stats.get("mine_hits", 0) == 3 and scene.run_context.hp > 0, "three fixed mines really applied and the natural teaching run remains alive")
-	return _check(scene.run_context.current_room_type == &"Exit" and _learn_button().is_visible_in_tree() and not _learn_button().disabled, "unlearned player reaches the real exit and still has a remote learning entry")
-
-
-func _test_unlearned_exit_rejected() -> void:
-	if not _place_at_entity(&"exit"):
-		return
-	var admission: Dictionary = scene.meta_progress_adapter.data.get("admission", {}).duplicate(true)
-	_key(KEY_T)
-	_check(not scene.last_command_result.get("ok", true) and _reason(scene.last_command_result) == "teaching_purchase_required", "actual T rejects extraction without explicit learning")
-	var confirmed: Dictionary = _command(&"confirm_extract")
-	_check(not confirmed.get("ok", true) and _reason(confirmed) == "teaching_purchase_required", "direct confirmation cannot bypass the teaching entitlement")
-	_check(scene.run_context.run_active and scene.run_context.phase == &"running" and scene.run_context.result_snapshot.is_empty() and not scene.extract_panel.visible, "unlearned extraction creates neither terminal state nor a confirmation modal")
-	_check(scene.meta_progress_adapter.data.get("admission", {}) == admission, "unlearned rejection preserves exact active admission")
-	_assert_not_purchased("unlearned exit rejection")
-	await _assert_free_controls("unlearned exit rejection")
+		if not _check(scene.last_command_result.get("ok", false) and context.asset_ledger.get_currency(&"black_coin") == before - price, event + " applies the visible choice and price: " + _reason(scene.last_command_result)):
+			return false
+		_key(KEY_ESCAPE)
+		await _assert_free_controls(event + " after close")
+		return true
+	return _check(false, "missing visible teaching choice " + option_id)
 
 
 func _test_failed_learning_and_retry() -> bool:
@@ -409,14 +383,16 @@ func _test_failed_learning_and_retry() -> bool:
 	var fault := FailCheckpointCommit.new()
 	service.save_adapter = fault
 	fault.armed = true
-	if not await _click(_learn_button(), "actual remote100-point learning button with checkpoint cut"):
-		service.save_adapter = real_adapter
-		return false
+	var request := {"direction": Vector2i.RIGHT, "action_id": "teaching-chest-entry"}
+	var preview := _command(&"attempt_room_transition", {"direction": Vector2i.RIGHT, "preview": true})
+	_check(preview.get("ok", false) and preview.get("preview", false) and FileAccess.get_sha256(checkpoint_path) == before_hash, "real chest preview leaves checkpoint untouched")
+	_assert_not_purchased("preview")
+	_command(&"attempt_room_transition", request)
 	if not await _until(func() -> bool: return not runtime.persistence_error.is_empty(), "real checkpoint failure activates persistence guard"):
 		service.save_adapter = real_adapter
 		return false
 	_check(fault.failures_injected == 1 and not scene.last_command_result.get("ok", true), "one exact checkpoint atomic-rename failure is injected")
-	_assert_paid_once("after failed checkpoint")
+	_assert_not_purchased("after failed checkpoint")
 	_check(not scene.run_context.profile_fields.get("flag_unlocked", false), "durable talent purchase does not prematurely publish an uncommitted runtime capability")
 	_check(FileAccess.get_sha256(checkpoint_path) == before_hash and service.load_checkpoint().get("snapshot", {}) == before_loaded.get("snapshot", {}), "failed checkpoint preserves exact previous primary bytes and snapshot")
 	var before_local: Vector2 = scene.player_controller.get_local_position()
@@ -427,24 +403,17 @@ func _test_failed_learning_and_retry() -> bool:
 	_check(scene.player_controller.get_local_position().is_equal_approx(before_local) and scene.modal_controller.depth() == 0 and scene.persistence_controller.is_blocked(), "save failure still blocks movement, drawers and Esc rather than weakening isolation")
 	var blocked: Dictionary = _command(&"learn_tutorial_flag")
 	_check(not blocked.get("ok", true) and _reason(blocked) == "persistence_retry_required", "another purchase cannot bypass a pending checkpoint failure")
-	_assert_paid_once("blocked retry request")
+	_assert_not_purchased("blocked retry request")
 	if not await _click(scene.persistence_controller.persistence_retry_button, "actual persistence retry-and-continue button"):
 		service.save_adapter = real_adapter
 		return false
 	if not await _until(func() -> bool: return runtime.persistence_error.is_empty() and not scene.persistence_controller.persistence_error_panel.visible, "official persistence retry restores the committed checkpoint"):
 		service.save_adapter = real_adapter
 		return false
-	_check(not scene.run_context.profile_fields.get("flag_unlocked", false) and scene.run_context.get_current_pos() == Vector2i(4, 4), "retry restores the old runtime position/capability, not the failed candidate")
-	if not await _until(func() -> bool: return _learn_button().is_visible_in_tree() and not _learn_button().disabled, "learning retry becomes actionable after the official storage recovery"):
-		service.save_adapter = real_adapter
-		return false
-	_learn_button().grab_focus()
-	_check(root.gui_get_focus_owner() == _learn_button(), "user can intentionally focus the independent learning business action")
-	_key(KEY_ENTER)
-	if not await _until(func() -> bool: return scene.run_context.profile_fields.get("flag_unlocked", false) and runtime.persistence_error.is_empty(), "actual Enter activates learning retry and publishes only after a successful checkpoint"):
-		service.save_adapter = real_adapter
-		return false
+	_check(not scene.run_context.profile_fields.get("flag_unlocked", false) and scene.run_context.get_current_pos() == Vector2i(0, 4), "retry restores the old runtime position/capability, not the failed candidate")
+	var entered := _command(&"attempt_room_transition", request)
 	service.save_adapter = real_adapter
+	_check(entered.get("ok", false) and scene.run_context.get_current_pos() == Vector2i(1, 4) and scene.run_context.profile_fields.get("flag_unlocked", false), "chest entry learns before searching")
 	_assert_paid_once("successful retry")
 	_check(not _learn_button().visible, "learning button retires after the capability is committed")
 	for id in ["tutorial-learn-repeat-a", "tutorial-learn-repeat-b"]:
@@ -467,11 +436,8 @@ func _test_meta_backup_learning_recovery() -> bool:
 	var paid_disk := _disk_meta()
 	if not _check(backup.get("admission", {}).get("phase") == "active" and backup.get("admission") == paid.get("admission") and _learning_state(backup) == original_learning and not paid.is_empty(), "actual valid backup has the same active admission and100 unspent points, not manually cleared flags"):
 		return false
-	# Meta JSON reads numbers as floats; the real unlock operation casts spent
-	# to int before adding cost. Predict only that exact100 leaf, not the tree.
 	if not _check(SaveAdapter.is_nonnegative_integer(paid.get("talent_spent")) and paid.talent_spent == 100, "original paid Meta observation contains exactly100 integral spent points"):
 		return false
-	paid["talent_spent"] = int(paid.talent_spent)
 	var runtime = scene.runtime_controller
 	var checkpoint_path: String = runtime.checkpoint_service.checkpoint_path
 	var checkpoint_hash := FileAccess.get_sha256(checkpoint_path)
@@ -481,7 +447,7 @@ func _test_meta_backup_learning_recovery() -> bool:
 	if not _check(decoded.get("ok", false) and saved.get("context", {}).get("data", {}).get("profile_fields", {}).get("flag_unlocked", false), "paid native checkpoint really contains the runtime capability before Meta recovery"):
 		return false
 	var saved_popup: Dictionary = saved.context.data.tutorial_popup
-	if not _check(str(saved_popup.get("id", "")) == "exit_goal" and saved_popup.get("blocking") == false and not saved_popup.has("presentation_kind"), "native recovery fixture has the exact unclassified nonblocking exit lesson"):
+	if not _check(str(saved_popup.get("id", "")) == "chest_rule" and saved_popup.get("blocking") == false and not saved_popup.has("presentation_kind"), "native recovery fixture has the exact unclassified nonblocking chest lesson"):
 		return false
 	# Existing restore classifies this one known presentation leaf after native
 	# validation. Derive its exact value, retaining every other native fact.
@@ -501,24 +467,12 @@ func _test_meta_backup_learning_recovery() -> bool:
 	runtime = scene.runtime_controller
 	if not _check(scene._show_run_screen() and meta.active_profile_id == profile and meta.last_load_status == "recovered_backup" and not meta.write_blocked, "new Main natively restores the real valid Meta backup as writable"):
 		return false
-	_check(RunStateSnapshot.fingerprint(meta.data) == RunStateSnapshot.fingerprint(backup), "new Main preserves the entire actual pre-payment backup Meta state")
-	_check(RunStateSnapshot.fingerprint(runtime.capture_authoritative_state()) == RunStateSnapshot.fingerprint(expected_restore), "backup recovery preserves the full native snapshot and six components except the independently derived exact guide-classification leaf")
-	_check(FileAccess.get_sha256(checkpoint_path) == checkpoint_hash and FileAccess.get_sha256(path + ".bak") == pre_payment_meta_sha, "Meta recovery neither rewrites the good checkpoint nor its valid backup")
-	_check(scene.run_context.profile_fields.get("flag_unlocked", false) and not meta.data.get("talent_flags", []).has("z2_talent_01") and runtime.is_tutorial_learning_required(), "legitimate recovery creates learned context but missing durable entitlement and still requires learning")
-	var rejected: Dictionary = _command(&"confirm_extract")
-	_check(not rejected.get("ok", true) and _reason(rejected) == "teaching_purchase_required", "recovered runtime capability alone cannot bypass durable graduation payment")
-	if not await _until(func() -> bool: return _learn_button().is_visible_in_tree() and not _learn_button().disabled, "recovered missing Meta entitlement exposes an actionable learning button even with ctx.flag=true"):
-		return false
-	var before_repay: Dictionary = runtime.capture_authoritative_state()
-	if not await _click(_learn_button(), "actual100-point learning action after native Meta-backup recovery"):
-		return false
-	_assert_paid_once("recovered entitlement repayment")
-	_check(not runtime.is_tutorial_learning_required() and not _learn_button().visible, "only restored durable entitlement retires the recovered learning action")
-	_check(_disk_meta() == paid_disk and RunStateSnapshot.fingerprint(meta.data) == RunStateSnapshot.fingerprint(paid), "repayment restores the entire original paid Meta state without changing any other field")
-	_assert_learning_commit_only(before_repay, runtime.capture_authoritative_state(), "backup recovery repayment")
+	_check(RunStateSnapshot.fingerprint(runtime.capture_authoritative_state()) == RunStateSnapshot.fingerprint(expected_restore), "backup recovery preserves native room state and guide classification")
+	_check(FileAccess.get_sha256(checkpoint_path) == checkpoint_hash, "recovering the entitlement does not rewrite the good room checkpoint")
+	_assert_paid_once("restored chest intent repays missing entitlement")
+	_check(not runtime.is_tutorial_learning_required() and !_learn_button().visible and _disk_meta() == paid_disk, "native backup recovery automatically restores the original paid entitlement")
 
-	# Keep the original first-payment checkpoint-cut test above unchanged. Also
-	# cut a subsequent already-paid commit: recovery/retry must cost exactly0.
+	# A subsequent already-paid commit and its retry both cost zero.
 	var service = runtime.checkpoint_service
 	var real_adapter = service.save_adapter
 	var fault := FailCheckpointCommit.new()
@@ -592,7 +546,7 @@ func _test_disk_reload_and_main_restart() -> bool:
 
 func _test_flag_risk_confirmation() -> void:
 	var origin: Vector2i = scene.run_context.get_current_pos()
-	var target := Vector2i(3, 4)
+	var target := Vector2i(4, 3)
 	var flagged: Dictionary = _command(&"toggle_flag_cell", {"pos": target})
 	if not _check(flagged.get("ok", false) and scene.run_context.intel_map.is_flagged(target), "learned capability places a real manual flag"):
 		return
@@ -648,11 +602,46 @@ func _complete_training() -> void:
 	_check(settlement.get("finalized", false) and settlement.get("tutorial_completion_only", false) and scene.runtime_controller.last_meta_commit.get("ok", false), "real teaching-only settlement finalizes through the checkpoint/Meta boundary")
 	_check(meta.get("profile_level") == 1 and meta.get("profile_exp") == 0 and meta.get("run_count") == 0 and meta.get("extract_count") == 0, "natural learned teaching reaches Lv1 without exploration XP or ordinary run counts")
 	_check(meta.get("talent_points") == 0 and meta.get("talent_spent") == 100 and meta.get("talent_earned") == 100 and meta.get("talent_flags", []).count("z2_talent_01") == 1, "successful completion neither double-charges nor re-grants teaching points")
-	_check(meta.get("warehouse_items", []).is_empty() and meta.get("initial_supply_receipt", {}).is_empty() and meta.get("admission", {}).is_empty(), "tutorial completion grants no starter items and clears its admission")
+	_check(meta.get("gold") == 0 and meta.get("warehouse_items", []).is_empty() and meta.get("initial_supply_receipt", {}).is_empty() and meta.get("admission", {}).is_empty(), "tutorial completion grants no starter items and clears its admission")
 	var reload := MetaScript.new()
 	reload.set_active_profile_path(scene.meta_progress_adapter.active_meta_progress_path, scene.meta_progress_adapter.active_profile_id)
 	reload.load_or_create_default()
 	_check(reload.data.get("tutorial_completed", false) and reload.data.get("profile_level") == 1 and reload.data.get("talent_spent") == 100, "completed Lv1 entitlement survives an independent final disk reload")
+
+
+func _test_early_departures() -> void:
+	var map_id := "classic_7x7_simple"
+	var offers := {}
+	for index in range(6):
+		var commission: Dictionary = M7ContentCatalog.commission_offer_candidates(map_id, index, 3)[0]
+		var config := {"map_config_id": map_id, "difficulty": &"simple", "seed_value": 411, "selected_objective_id": commission.id}
+		var start := _command(&"start_standard_run", {"run_start_config": config})
+		if not _check(start.get("ok", false), "durable early departure %d: %s" % [index + 1, str(start.get("action_result", {}))]):
+			return
+		var context: RunContext = scene.run_context
+		var planned: Array = context.run_start_config.get("early_offered_events", [])
+		if index < 5:
+			_check(planned.size() == (2 if index == 4 else 1), "graduated run has its scheduled route choices")
+			offers[str(planned)] = true
+			var targets: Array = context.truth_map.map_profile.get("early_event_positions", [])
+			if not _check(not targets.is_empty(), "early route has a real event room"):
+				return
+			var delta: Vector2i = targets[0] - context.get_current_pos()
+			_check(absi(delta.x) + absi(delta.y) == 1, "scheduled event can be entered in one actual step")
+			if not _walk(targets[0]):
+				return
+			_check(context.event_state.get("event_type") == planned[0] and not context.event_state.get("requires_prepare", true), "scheduled offer resolves through real entry and preparation")
+		else:
+			_check(planned.is_empty(), "sixth valid departure returns to ordinary placement")
+		var ended := _command(&"abandon_run", {"confirmed": true})
+		if ended.get("ok", false) and scene.run_context.phase == &"failure_salvage":
+			ended = _command(&"confirm_failure_salvage", {"selected_instance_ids": []})
+		if not _check(ended.get("ok", false) and scene.meta_progress_adapter.data.run_count == index + 1, "abandoned run settlement advances the discovery ordinal once: %s" % _reason(ended)):
+			return
+		if index < 5:
+			var record: Dictionary = scene.meta_progress_adapter.data.history_records.back()
+			_check(record.get("early_offered_events") == planned and record.get("visited_event_types", []).has(planned[0]), "committed history distinguishes offered and actually visited events")
+	_check(offers.size() == 5, "same-seed low-XP departures offer five different choices")
 
 
 func _assert_free_controls(tag: String) -> void:

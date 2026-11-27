@@ -222,7 +222,9 @@ func _initialize_run(config: Dictionary) -> Dictionary:
 	talent_interface = config.get("talent_interface", []).duplicate(true) if config.get("talent_interface", []) is Array else []
 	active_talent_effects = config.get("active_talent_effects", []).duplicate(true) if config.get("active_talent_effects", []) is Array else []
 	if tutorial and bool(Z2Talents.run_profile(profile_fields, []).enabled):
-		profile_fields = {"ruleset_id": "z2", "z2_progression_version": 1, "flag_unlocked": bool(profile_fields.get("flag_unlocked", false))}
+		profile_fields = {"ruleset_id": "z2", "z2_progression_version": 1,
+			"flag_unlocked": bool(profile_fields.get("flag_unlocked", false)), "tutorial_chest_learning": true,
+			"content_eligibility": Z2ContentEligibility.freeze_profile({"profile_level": 0})}
 		active_talent_effects.clear()
 		run_start_config["profile_fields"] = profile_fields.duplicate(true)
 		run_start_config["active_talent_effects"] = []
@@ -232,11 +234,15 @@ func _initialize_run(config: Dictionary) -> Dictionary:
 		config["max_hp"] = 100
 	asset_ledger = RunAssetLedger.new()
 	asset_ledger.setup(config)
+	if profile_fields.get("tutorial_chest_learning", false):
+		asset_ledger.add_currency(&"black_coin", 20, "tutorial_practice")
 	query_facade = RunQueryFacade.new()
 	truth_map = TruthMap.new()
 	truth_map.setup_from_config(config)
 	width = truth_map.width
 	height = truth_map.height
+	if not tutorial and Z2EventRuntime.applies_to(self):
+		Z2EventRuntime.place_special_events(self)
 	intel_map = IntelMap.new()
 	intel_map.setup(width, height)
 	for visible_exit_pos in truth_map.get_visible_exits(null):

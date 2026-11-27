@@ -135,10 +135,10 @@ static func projection(meta: Dictionary) -> Array[Dictionary]:
 					reason += "，具体效果待定"
 		elif talent_id == TALENT_FLAG_MARKING and (level != 0 or bool(meta.get("tutorial_completed", false)) or not bool(meta.get("tutorial_purchase_available", false))):
 			reason_code = &"tutorial_purchase_required"
-			reason = "插旗标记仅可在等级0的教学购买步骤解锁。"
-		elif talent_id != TALENT_FLAG_MARKING and not bool(meta.get("tutorial_completed", false)):
+			reason = "首次进入教程宝箱房，系统会用100教学点解锁插旗。"
+		elif talent_id != TALENT_FLAG_MARKING and not flags.has(TALENT_FLAG_MARKING) and not bool(meta.get("tutorial_completed", false)):
 			reason_code = &"tutorial_required"
-			reason = "完成教学后才能解锁其他天赋。"
+			reason = "先进入教学宝箱房点亮插旗，开放天赋树。"
 		elif not missing_prerequisites.is_empty():
 			reason_code = &"prerequisite_missing"
 			reason = "需先解锁全部前置：%s" % _talent_names(missing_prerequisites)

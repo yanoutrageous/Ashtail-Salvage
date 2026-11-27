@@ -15,10 +15,11 @@ const MECHANISM_VARIANT_POOL := [
 	{"variant": "electric", "legacy_event_id": "z1_event_e06", "legacy_slot": 5, "roll_weight": 1},
 	{"variant": "mechanical", "legacy_event_id": "trap", "legacy_slot": 28, "roll_weight": 1},
 ]
-const EVENT_LEVELS := {"information": 1, "relief": 1, "first_aid": 1, "altar": 1,
-	"shop": 3, "recycle": 2, "demine": 3, "clock_in": 3, "mechanism": 4, "coil": 4,
-	"compress": 5, "rps": 5, "shortcut": 6, "consign": 8, "trader": 10, "expand": 12,
-	"savings": 15, "recon": 18, "cage": 21, "seal": 22, "pawn": 23, "dice": 26}
+const EARLY_DISCOVERY_RUNS := 5
+const EVENT_LEVELS := {"information": 0, "first_aid": 0, "relief": 0, "recycle": 0,
+	"demine": 6, "shop": 7, "clock_in": 8, "coil": 9, "compress": 9, "mechanism": 11,
+	"expand": 13, "trader": 13, "consign": 13, "recon": 14, "shortcut": 14,
+	"altar": 16, "rps": 17, "savings": 18, "pawn": 18, "seal": 21, "cage": 22, "dice": 26}
 const EVENT_WEIGHT_TOTAL := 29.0
 const ECONOMY := ["shop", "savings", "seal", "relief", "first_aid", "consign", "expand", "compress", "trader", "pawn"]
 const INFORMATION := ["information", "shortcut", "demine", "recon"]
@@ -33,7 +34,7 @@ const ALIASES := {
 	"z1_event_e20": "clock_in", "z1_event_e21": "recon", "z1_event_e22": "rps", "z1_event_e24": "cage", "z1_event_e25": "shop",
 }
 const TITLES := {"shop": "补给商店", "savings": "储蓄兑付", "seal": "封条柜", "relief": "减压", "first_aid": "急救柜", "consign": "托运", "expand": "扩容", "compress": "压缩", "trader": "旅商", "pawn": "预支", "information": "线报", "shortcut": "捷径", "demine": "排雷", "recon": "侦察", "mechanism": "机关", "recycle": "回收", "coil": "拾料线圈", "clock_in": "打卡", "rps": "博弈", "cage": "围笼", "dice": "骰局", "altar": "祭坛"}
-const ACTION_TITLES := {"prepare": "查看服务", "leave": "返回探索", "buy": "购买", "refresh": "刷新三格货架", "deposit": "存入黑币", "withdraw": "取回本息", "use": "使用抢救封条", "flat": "简单休息", "ten_percent": "泡脚", "thirty_percent": "按摩", "consign": "托运", "expand": "扩充战利品背包", "compress": "压缩两件一档藏品", "sell": "出售", "pawn": "抵押预支", "mine_count": "查看5×5雷数", "mine_locations": "查看3×3雷位", "chest_locations": "查看5×5宝箱", "exit_direction": "询问最近出口方向", "preview_target": "查看捷径出口", "travel": "通过捷径", "detonate": "远程起爆", "recon_3": "侦察3×3", "recon_5": "侦察5×5", "recon_7": "侦察7×7", "assist": "交付辅助材料", "attempt": "尝试处理机关", "take": "带走材料", "deliver": "交付材料", "calibrate": "校准线圈", "register": "登记开工", "claim": "签退领款", "rock": "石头", "paper": "布", "scissors": "剪刀", "roll": "掷骰", "offer": "献祭"}
+const ACTION_TITLES := {"challenge": "接受围笼挑战", "prepare": "查看服务", "leave": "返回探索", "buy": "购买", "refresh": "刷新三格货架", "deposit": "存入黑币", "withdraw": "取回本息", "use": "使用抢救封条", "flat": "简单休息", "ten_percent": "泡脚", "thirty_percent": "按摩", "consign": "托运", "expand": "扩充战利品背包", "compress": "压缩两件一档藏品", "sell": "出售", "pawn": "抵押预支", "mine_count": "查看5×5雷数", "mine_locations": "查看3×3雷位", "chest_locations": "查看5×5宝箱", "exit_direction": "询问最近出口方向", "preview_target": "查看捷径出口", "travel": "通过捷径", "detonate": "远程起爆", "recon_3": "侦察3×3", "recon_5": "侦察5×5", "recon_7": "侦察7×7", "assist": "交付辅助材料", "attempt": "尝试处理机关", "take": "带走材料", "deliver": "交付材料", "calibrate": "校准线圈", "register": "登记开工", "claim": "签退领款", "rock": "石头", "paper": "布", "scissors": "剪刀", "roll": "掷骰", "offer": "献祭"}
 
 # This is the production routing/consumer boundary. It never starts a transaction
 # or saves; all entry, choose and continuation hooks run in the existing candidate.
@@ -45,16 +46,78 @@ static func event_ids() -> Array:
 # User authorized inheritance on 2026-11-16. Collapse aliases BEFORE assigning
 # equal shares to the approved D02 level-filtered22; information has one share.
 # Preserve the former total29, not the superseded four-event30/25/25/20 split.
-static func event_pool(frozen: Dictionary) -> Array:
+static func event_pool(frozen: Dictionary, include_savings: bool = true) -> Array:
 	var qualified: Array[String] = []
 	var level := int(frozen.get("profile_level", 0))
 	for event: String in event_ids():
-		if level >= int(EVENT_LEVELS[event]):
+		if level >= int(EVENT_LEVELS[event]) and (event != "savings" or include_savings):
 			qualified.append(event)
 	var result: Array[Dictionary] = []
 	for event: String in qualified:
 		result.append({"event_type": event, "min_level": int(EVENT_LEVELS[event]),
 			"roll_weight": EVENT_WEIGHT_TOTAL / qualified.size(), "probability": 1.0 / qualified.size()})
+	return result
+
+
+# Reserve only exceptional placements. Other rooms keep the original
+# position-seeded draw at entry; the checkpoint owns all reserved identities.
+static func place_special_events(context: RunContext) -> void:
+	var frozen: Dictionary = context.profile_fields.get("content_eligibility", {})
+	var level := int(frozen.get("profile_level", 0))
+	var ordinal := int(context.profile_fields.get("early_discovery_run", 0))
+	var seen: Array = context.profile_fields.get("visited_event_types", []).duplicate()
+	var offered: Array = context.profile_fields.get("earlier_offers", [])
+	var this_run: Array[String] = []
+	var rotation := ["information", "first_aid", "relief", "recycle"]
+	var preferred: Array[String] = []
+	for event: String in EVENT_LEVELS:
+		if EVENT_LEVELS[event] > 0 and EVENT_LEVELS[event] <= level and event != "savings":
+			preferred.push_front(event)
+	for index in rotation.size():
+		preferred.append(rotation[posmod(ordinal - 1 + index, rotation.size())])
+	for pos: Vector2i in context.truth_map.map_profile.get("early_event_positions", []):
+		if not this_run.is_empty():
+			preferred = preferred.filter(func(event: String) -> bool: return event in ["information", "recycle"])
+		var fresh := preferred.filter(func(event: String) -> bool: return not offered.has(event))
+		var candidates := fresh if not fresh.is_empty() else preferred
+		var selected: String = candidates[0]
+		for event: String in candidates:
+			if not seen.has(event):
+				selected = event
+				break
+		this_run.append(selected)
+		context.z1_event_rooms[context.cell_key(pos)] = {"event_type": selected}
+		seen.append(selected)
+		preferred.erase(selected)
+	if not this_run.is_empty():
+		context.run_start_config["early_offered_events"] = this_run
+	if level < EVENT_LEVELS.savings or mini(context.width, context.height) < 10:
+		return
+	var reachable := _reachable_event_rooms(context)
+	# Draw at the map level. A bank consumes two reachable slots, so each
+	# available pair contributes one ticket; at most one bank is placed.
+	var pair_index := posmod(context.seed_value, event_pool(frozen).size())
+	var first_slot := pair_index * 2
+	if first_slot + 1 < reachable.size():
+		for pos: Vector2i in [reachable[first_slot], reachable[first_slot + 1]]:
+			context.z1_event_rooms[context.cell_key(pos)] = {"event_type": "savings"}
+
+
+static func _reachable_event_rooms(context: RunContext) -> Array[Vector2i]:
+	var queue: Array[Vector2i] = [context.truth_map.spawn_pos]
+	var seen := {context.truth_map.spawn_pos: true}
+	var result: Array[Vector2i] = []
+	var index := 0
+	while index < queue.size():
+		var pos := queue[index]
+		index += 1
+		if context.truth_map.get_room_type(pos) == &"Event" and not context.z1_event_rooms.has(context.cell_key(pos)):
+			result.append(pos)
+		for direction: Vector2i in [Vector2i.DOWN, Vector2i.RIGHT, Vector2i.UP, Vector2i.LEFT]:
+			var next := pos + direction
+			if context.truth_map.is_inside(next) and not seen.has(next) and not context.truth_map.is_mine(next):
+				queue.append(next)
+				seen[next] = true
 	return result
 
 
@@ -74,10 +137,17 @@ static func select_event(context: RunContext, pos: Vector2i) -> Dictionary:
 			context.z1_event_rooms[key] = room
 		return {"ok": true, "event_type": existing, "canonical_event_type": canonical(existing),
 			"pool_id": str(room.get("z2_event_selection", {}).get("pool_id", "inherited_saved_event")), "already_selected": true}
+	if context.mode == &"tutorial":
+		var fixed: String = TutorialMapCatalog.EVENT_ROOMS.get(pos, "")
+		if fixed.is_empty():
+			return _fail("unknown_teaching_event")
+		room["event_type"] = fixed
+		context.z1_event_rooms[key] = room
+		return {"ok": true, "event_type": fixed, "canonical_event_type": fixed}
 	var profile: Dictionary = context.run_start_config.get("profile_fields", {})
 	if not profile.get("content_eligibility") is Dictionary:
 		return _fail("missing_frozen_eligibility")
-	var pool := event_pool(profile.content_eligibility)
+	var pool := event_pool(profile.content_eligibility, false)
 	if pool.is_empty():
 		return _fail("empty_eligible_event_pool")
 	var rng := RandomNumberGenerator.new()
@@ -161,9 +231,8 @@ static func canonical(event_id: String) -> String:
 	return str(ALIASES.get(event_id, event_id))
 
 static func applies_to(context: RunContext) -> bool:
-	# Tutorials retain Z2 profile identity, but their fixed four-event lesson
-	# follows the same legacy boundary as Z2RunHooks.applies_to.
-	if context == null or context.mode == &"tutorial":
+	# Older tutorial checkpoints retain their original map and event rules.
+	if context == null or (context.mode == &"tutorial" and not context.profile_fields.get("tutorial_chest_learning", false)):
 		return false
 	var profile: Dictionary = context.run_start_config.get("profile_fields", context.profile_fields)
 	return str(profile.get("ruleset_id", "")) == "z2" and int(profile.get("z2_progression_version", 0)) == 1
@@ -223,7 +292,11 @@ static func public_state(context: RunContext, pos: Vector2i, event_id: String) -
 		state["variant_selection"] = binding.duplicate(true)
 		if not state.has("variant") and binding.has("variant"):
 			state["variant"] = str(binding.variant)
-	var prepared := bool(state.get("prepared", false))
+	var voluntary_cage := event == "cage" and bool(context.profile_fields.get("cage_requires_acceptance", false))
+	var challenge_available: bool = voluntary_cage and not state.has("combat_request") and not state.get("completed", false)
+	if voluntary_cage:
+		state["challenge_available"] = challenge_available
+	var prepared := challenge_available or bool(state.get("prepared", false))
 	state["requires_prepare"] = bool(state.get("requires_prepare", not prepared and not state.get("completed", false)))
 	if event == "altar" and not state.get("completed", false) and int(state.get("tier", 0)) != mini(5, int(state.get("global_tier", 0)) + 1):
 		state["requires_prepare"] = true
@@ -270,7 +343,9 @@ static func public_state(context: RunContext, pos: Vector2i, event_id: String) -
 		elif id == "withdraw" and int(raw.get("reward", {}).get("revoke_safe", 0)) > 0:
 			option.player_cost = {"kind": &"gold_coin", "amount": int(raw.reward.revoke_safe), "display_text": "撤销%d安全金币保底" % int(raw.reward.revoke_safe)}
 		options.append(option)
-	if event != "cage" or bool(state.get("completed", false)):
+	if challenge_available:
+		options.append(_ui_option("challenge", 0, {"revision": int(state.revision)}, true, "", "接战后封门，胜利时获得挑战战力奖励。"))
+	if event != "cage" or challenge_available or bool(state.get("completed", false)):
 		options.append(_ui_option("leave", 0, {}, true))
 	state["options"] = options
 	state["input_fields"] = ["amount"] if event == "savings" else (["instance_ids"] if event == "compress" else [])
@@ -308,7 +383,7 @@ static func choose(context: RunContext, pos: Vector2i, event_id: String, option_
 	if canonical(str(stored_event_type(context, pos))) != event:
 		return _fail("event_binding_conflict")
 	if option_id == "leave":
-		if event == "cage" and not bool(public_state(context, pos, event).get("completed", false)):
+		if event == "cage" and bool(cage_state(context, pos).get("active", false)):
 			return _fail("cage_combat_locked")
 		return {"ok": true, "event_type": event, "completed": false, "stage_completed": false, "stage_facts": [], "facts": {}, "message": "已返回探索。"}
 	hooks = _dependencies(context, hooks)
@@ -325,7 +400,13 @@ static func choose(context: RunContext, pos: Vector2i, event_id: String, option_
 					return bound
 				context.z1_event_rooms[context.cell_key(pos)] = room
 				rules["mechanism_variant"] = str(bound.variant)
-			raw = Process.choose(context, pos, event, option_id, payload, rules)
+			if event == "cage" and option_id == "challenge":
+				var state := public_state(context, pos, event)
+				if not state.get("challenge_available", false) or payload.get("revision") != state.get("revision"):
+					return _fail("stale_revision")
+				raw = Process.on_room_entered(context, pos, event, rules)
+			else:
+				raw = Process.choose(context, pos, event, option_id, payload, rules)
 			if raw.get("ok", false) and option_id == "prepare":
 				var room: Dictionary = context.z1_event_rooms[context.cell_key(pos)]
 				room["z2_event_rules_view"] = {"material_tags": rules.get("material_tags", {}).duplicate(true),
@@ -338,7 +419,8 @@ static func on_room_entered(context: RunContext, pos: Vector2i, event_id: String
 		return _fail("wrong_ruleset")
 	var event := canonical(event_id)
 	hooks = _dependencies(context, hooks)
-	var raw := Process.on_room_entered(context, pos, event, hooks.get("process_rules", {}))
+	var entry_event := "" if event == "cage" and context.profile_fields.get("cage_requires_acceptance", false) else event
+	var raw := Process.on_room_entered(context, pos, entry_event, hooks.get("process_rules", {}))
 	var result := _finish(context, pos, event, "room_entered", raw, hooks, raw.has("combat_request"), false)
 	if result.get("ok", false) and event_ids().has(event):
 		var room_key := context.cell_key(pos)
@@ -605,7 +687,7 @@ static func _summary(context: RunContext, event: String, state: Dictionary) -> S
 		"coil": "校准后等待下一次完整普通房搜索，额外领取1件来自该搜索渠道的物品；实际交付时才完成阶段。",
 		"clock_in": "付费登记，实际进入3间登记时尚未到访的新房后，回到任一打卡处领款；原登记房也可领款。",
 		"rps": "石头、布、剪刀先得两胜者结束。平局继续；胜局领取本房已确定的奖金，败局不领取奖金。",
-		"cage": "进入围笼即开始强制战斗，封门期间不能撤退。胜利提升战力；按真实战果结清，不领取普通清场奖励。",
+		"cage": "接受围笼挑战后开始战斗，封门期间不能撤退。胜利后增加对手基础战力的两倍。",
 		"dice": "每押20黑币，每房最多3押。1至4点返还0，5点返还40，6点返还80黑币；后两押使用后续权重。",
 		"altar": "按全局祭坛阶段支付生命，领取本阶段黑币及已生成物品。生命支付后必须至少保留1点；辅助材料可降低本次生命费用。",
 	}
