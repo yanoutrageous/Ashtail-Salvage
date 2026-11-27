@@ -48,10 +48,19 @@ static func trap_power_range(adjacent_mines: int, difficulty: StringName) -> Vec
 	return Vector2i(maxi(1, roundi(middle * 0.85)), roundi(middle * 1.15))
 
 
-static func mine_damage(mine_damage_reduce: int, immune: bool) -> int:
+static func map_difficulty(context: RunContext) -> StringName:
+	var map_id := str(context.run_start_config.get("map_config_id", ""))
+	return StringName(M7ContentCatalog.map_definition_exact(map_id).get("difficulty", &""))
+
+
+static func mine_damage(mine_damage_reduce: int, immune: bool, difficulty: StringName = &"") -> int:
 	if immune:
 		return 0
-	return maxi(MIN_MINE_DAMAGE, BASE_MINE_DAMAGE - mine_damage_reduce)
+	var by_difficulty := {
+		&"tutorial": 15, &"simple": 20, &"easy": 20, &"normal": 25,
+		&"standard": 25, &"hard": 30, &"hell": 35,
+	}
+	return maxi(MIN_MINE_DAMAGE, int(by_difficulty.get(difficulty, BASE_MINE_DAMAGE)) - mine_damage_reduce)
 
 
 static func protocol_level_for_pressure(pressure: int) -> int:

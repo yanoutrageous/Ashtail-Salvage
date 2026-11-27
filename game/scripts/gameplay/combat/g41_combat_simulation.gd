@@ -932,22 +932,14 @@ func _update_enemy(enemy_index: int, delta: float) -> void:
 		enemy["entry_grace_remaining"] = 0.0
 		if StringName(enemy.get("state", &"arrival")) == &"arrival":
 			enemy["state"] = &"idle"
-			enemy["state_timer"] = float(
-				MonsterCatalogScript.definition(
-					StringName(enemy.get("monster_type", &"slime"))
-				).get("idle_seconds", 0.0)
-			)
+			enemy["state_timer"] = float(_enemy_definition(enemy).get("idle_seconds", 0.0))
 		enemies[enemy_index] = enemy
 		return
 	if StringName(enemy.get("state", &"idle")) == &"hurt":
 		enemy["state_timer"] = maxf(0.0, float(enemy.get("state_timer", 0.0)) - delta)
 		if float(enemy["state_timer"]) <= EPSILON:
 			enemy["state"] = &"idle"
-			enemy["state_timer"] = float(
-				MonsterCatalogScript.definition(
-					StringName(enemy.get("monster_type", &"slime"))
-				).get("idle_seconds", 0.0)
-			)
+			enemy["state_timer"] = float(_enemy_definition(enemy).get("idle_seconds", 0.0))
 			if StringName(enemy.get("behavior_id", &"")) == &"attack_echo":
 				for hazard in hazards:
 					if String(hazard["owner_id"]) != String(enemy["enemy_id"]):
@@ -980,9 +972,21 @@ func _update_enemy(enemy_index: int, delta: float) -> void:
 			_update_drone(enemy_index, delta)
 
 
+func _enemy_definition(enemy: Dictionary) -> Dictionary:
+	return MonsterCatalogScript.definition(StringName(enemy.get("monster_type", &"slime")), bool(enemy.get("tutorial_enemy", false)))
+
+
+func _take_enemy_attack_slot(enemy: Dictionary, definition: Dictionary) -> bool:
+	if tick_index < int(enemy.get("next_attack_tick", 0)):
+		return false
+	if definition.has("attack_period"):
+		enemy["next_attack_tick"] = tick_index + ceili(float(definition["attack_period"]) / FIXED_STEP)
+	return true
+
+
 func _update_melee_enemy(enemy_index: int, delta: float) -> void:
 	var enemy := enemies[enemy_index]
-	var definition := MonsterCatalogScript.definition(StringName(enemy.get("monster_type", &"slime")))
+	var definition := _enemy_definition(enemy)
 	var state := StringName(enemy.get("state", &"idle"))
 	var distance := Vector2(enemy.get("pos", Vector2.ZERO)).distance_to(Vector2(player.get("pos", Vector2.ZERO)))
 	var melee_radius := _enemy_melee_hit_radius(enemy, definition)
@@ -1022,7 +1026,7 @@ func _update_melee_enemy(enemy_index: int, delta: float) -> void:
 				0.0,
 				float(enemy.get("state_timer", definition.get("idle_seconds", 0.0))) - delta
 			)
-			if float(enemy["state_timer"]) <= EPSILON:
+			if float(enemy["state_timer"]) <= EPSILON and _take_enemy_attack_slot(enemy, definition):
 				enemy["state"] = &"warning"
 				enemy["state_timer"] = float(definition.get("warning_seconds", 0.5))
 				_emit_event(&"melee_warning_started", {
@@ -1160,7 +1164,7 @@ func _stable_navigation_side(enemy_id: String) -> int:
 
 func _update_bat(enemy_index: int, delta: float) -> void:
 	var enemy := enemies[enemy_index]
-	var definition := MonsterCatalogScript.definition(StringName(enemy.get("monster_type", MonsterCatalogScript.TYPE_BAT)))
+	var definition := _enemy_definition(enemy)
 	var state := StringName(enemy.get("state", &"idle"))
 	if state == &"aim":
 		enemy["state_timer"] = float(enemy.get("state_timer", 0.0)) - delta
@@ -1176,11 +1180,11 @@ func _update_bat(enemy_index: int, delta: float) -> void:
 	elif state == &"cooldown":
 		enemy["state_timer"] = float(enemy.get("state_timer", 0.0)) - delta
 		_move_keep_distance(enemy, definition, delta)
-		if float(enemy["state_timer"]) <= EPSILON:
+		if float(enemy["state_timer"]) <= EPSILON and _take_enemy_attack_slot(enemy, definition):
 			enemy["state"] = &"aim"
 			enemy["state_timer"] = float(definition.get("aim_seconds", 0.5))
 			_prepare_bat_special_attack(enemy, definition)
-	else:
+	elif _take_enemy_attack_slot(enemy, definition):
 		enemy["state"] = &"aim"
 		enemy["state_timer"] = float(definition.get("aim_seconds", 0.5))
 		_prepare_bat_special_attack(enemy, definition)
@@ -1268,7 +1272,10 @@ func _spawn_bat_spread(enemy: Dictionary, definition: Dictionary) -> void:
 				"return_distance": return_distance, "distance_remaining": return_distance,
 				"inbound": false,
 			}
-		_spawn_projectile(String(enemy.get("enemy_id", "")), origin, base_direction.rotated(lerpf(-half_angle, half_angle, ratio)), int(enemy.get("damage", MonsterCatalogScript.base_damage(int(player.get("power", 1)), MonsterCatalogScript.TYPE_BAT))), extra)
+		var direction := base_direction.rotated(lerpf(-half_angle, half_angle, ratio))
+		if definition.has("projectile_speed"):
+			extra["velocity"] = direction * float(definition["projectile_speed"])
+		_spawn_projectile(String(enemy.get("enemy_id", "")), origin, direction, int(enemy.get("damage", MonsterCatalogScript.base_damage(int(player.get("power", 1)), MonsterCatalogScript.TYPE_BAT))), extra)
 	_emit_event(&"ranged_fired", {"enemy_id": enemy.get("enemy_id", ""), "projectile_count": count})
 
 
@@ -1425,10 +1432,10 @@ func _damage_enemy(enemy_index: int, damage: int, critical: bool = false) -> voi
 	var behavior := StringName(enemy.get("behavior_id", &""))
 	if enemy.has("visual_lift"):
 		enemy["visual_lift"] = 0.0
-	if behavior == &"directional_guard" and StringName(enemy.get("state", &"")) != &"cooldown":
+	if behavior == &"directional_guard" and (StringName(enemy.get("state", &"")) != &"cooldown" or bool(enemy.get("tutorial_enemy", false))):
 		var incoming := _normalized_or(Vector2(player.get("pos", Vector2.ZERO)) - Vector2(enemy["pos"]), Vector2.LEFT)
 		if incoming.dot(Vector2(enemy.get("facing", Vector2.LEFT))) >= 0.5:
-			var definition := MonsterCatalogScript.definition(StringName(enemy["monster_type"]))
+			var definition := _enemy_definition(enemy)
 			applied = maxi(1, int(round(float(applied) * float(definition.get("guard_multiplier", 0.25)))))
 			_emit_event(&"guard_blocked", {"enemy_id": enemy["enemy_id"], "damage": applied})
 	enemy["hp"] = maxi(0, int(enemy.get("hp", 0)) - applied)
@@ -1521,13 +1528,16 @@ func _spawn_enemy(
 	forced_pos: Variant = null,
 	enemy_profile: Dictionary = {}
 ) -> void:
-	var definition := MonsterCatalogScript.definition(monster_type)
+	var teaching := bool(enemy_profile.get("tutorial_enemy", false))
+	var definition := MonsterCatalogScript.definition(monster_type, teaching)
 	if definition.is_empty():
 		return
 	var positions := [Vector2(0.70, 0.50), Vector2(0.68, 0.28), Vector2(0.70, 0.74), Vector2(0.56, 0.62)]
 	var spawn_pos: Vector2 = positions[encounter_index % positions.size()]
 	if forced_pos is Vector2:
 		spawn_pos = forced_pos
+	elif definition.has("spawn_position"):
+		spawn_pos = Vector2(definition["spawn_position"])
 	else:
 		spawn_pos += Vector2(rng.range_float(-0.025, 0.025), rng.range_float(-0.025, 0.025))
 	var enemy_id := forced_id if not forced_id.is_empty() else "enemy_%02d_%s" % [encounter_index + 1, String(monster_type)]
@@ -1559,6 +1569,8 @@ func _spawn_enemy(
 		spawned_enemy["enemy_name"] = String(enemy_profile.get("enemy_name", "异常体"))
 	if enemy_profile.has("enemy_power"):
 		spawned_enemy["enemy_power"] = int(enemy_profile.get("enemy_power", 0))
+	if teaching:
+		spawned_enemy["tutorial_enemy"] = true
 	if definition.has("source_id"):
 		spawned_enemy["visual_key"] = definition["visual_key"]
 		spawned_enemy["visual_subject"] = monster_type
@@ -1637,7 +1649,7 @@ func _prepare_bat_special_attack(enemy: Dictionary, definition: Dictionary) -> v
 
 func _update_z1_hazard_enemy(enemy_index: int, delta: float) -> void:
 	var enemy := enemies[enemy_index]
-	var definition := MonsterCatalogScript.definition(StringName(enemy["monster_type"]))
+	var definition := _enemy_definition(enemy)
 	var behavior := StringName(enemy["behavior_id"])
 	var state := StringName(enemy.get("state", &"idle"))
 	if state == &"warning" and int(enemy.get("action_started_tick", -1)) == tick_index:
@@ -1651,7 +1663,7 @@ func _update_z1_hazard_enemy(enemy_index: int, delta: float) -> void:
 			var from := Vector2(enemy["pos"])
 			enemy["pos"] = _resolve_body_motion(from, from + _obstacle_aware_melee_direction(enemy, _direction_to_player(enemy)) * float(definition.get("move_speed", 0.18)) * delta, _enemy_body_radius(enemy))
 			enemy["state"] = &"move"
-		else:
+		elif _take_enemy_attack_slot(enemy, definition):
 			_start_z1_action(enemy, definition)
 	elif state == &"warning":
 		enemy["state_timer"] = float(enemy["state_timer"]) - delta
@@ -1662,6 +1674,10 @@ func _update_z1_hazard_enemy(enemy_index: int, delta: float) -> void:
 	elif state == &"active":
 		if behavior == &"rail_charge":
 			_advance_rail_charge(enemy, definition, delta)
+		elif behavior == &"directional_guard" and definition.has("guard_push_speed"):
+			var from := Vector2(enemy["pos"])
+			var to := from + Vector2(enemy["facing"]) * float(definition["guard_push_speed"]) * delta
+			enemy["pos"] = _resolve_body_motion(from, to, _enemy_body_radius(enemy))
 		elif behavior == &"marked_jump":
 			var duration := float(definition.get("active_seconds", 0.25))
 			var progress := clampf(1.0 - (float(enemy["state_timer"]) - delta) / duration, 0.0, 1.0)
@@ -1720,6 +1736,9 @@ func _start_z1_action(enemy: Dictionary, definition: Dictionary, requested_direc
 		&"pressure_pulse":
 			common["pressure_delta"] = 4
 			_start_hazard(enemy, _line_hazard(origin, direction, 0.70, 0.018, common))
+		&"teaching_shockwave":
+			common.merge({"shape": &"circle", "origin": origin, "radius": 0.28}, true)
+			_start_hazard(enemy, common)
 		&"live_cable":
 			var center := _clamp_position(origin + direction * 0.15)
 			var tangent := direction.orthogonal()
@@ -1745,7 +1764,7 @@ func _advance_rail_charge(enemy: Dictionary, definition: Dictionary, delta: floa
 		enemy["attack_done"] = true
 	if resolved.distance_to(desired) > GEOMETRY_EPSILON:
 		enemy["state"] = &"cooldown"
-		enemy["state_timer"] = 1.0
+		enemy["state_timer"] = float(definition.get("wall_stun_seconds", 1.0))
 		_cancel_enemy_hazards(String(enemy["enemy_id"]))
 		_emit_event(&"charge_blocked", {"enemy_id": enemy["enemy_id"], "position": resolved})
 

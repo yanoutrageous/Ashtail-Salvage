@@ -622,6 +622,8 @@ func _start_current_encounter(player_local_pos: Vector2) -> void:
 		room_pos,
 		context.current_adjacent_mines
 	)
+	if bool(identity.get("tutorial_enemy", false)):
+		monster_types = [StringName(identity["monster_type"])]
 	if _cage_active():
 		var cage := EventService.cage_state(context, room_pos)
 		monster_types = [StringName(cage.get("monster_type", &"slime"))]
@@ -636,7 +638,7 @@ func _start_current_encounter(player_local_pos: Vector2) -> void:
 		String(identity.get("enemy_name", "异常体"))
 	)
 	mother_profile.merge(identity, true)
-	if String(monster_types[0]).begins_with("z1_monster_"):
+	if String(monster_types[0]).begins_with("z1_monster_") and not bool(identity.get("tutorial_enemy", false)):
 		mother_profile["enemy_name"] = String(MonsterCatalogScript.definition(monster_types[0]).get("display_name", "异常体"))
 	context.enemy_state = mother_profile.duplicate(true)
 	var event_type := EventService.get_event_type(context, room_pos) if context.current_room_type == &"Event" else &""
@@ -665,7 +667,8 @@ func _encounter_types(
 	room_pos: Vector2i = Vector2i.ZERO,
 	adjacent_mines: int = 0
 ) -> Array[StringName]:
-	return [MonsterCatalogScript.pick_type_for_cell(run_seed, room_pos, adjacent_mines, context == null or context.mode != &"tutorial")]
+	var difficulty := RunBalanceCatalog.map_difficulty(context) if context != null and RunEffectApplier.is_z2_run(context) else &""
+	return [MonsterCatalogScript.pick_type_for_cell(run_seed, room_pos, adjacent_mines, context == null or context.mode != &"tutorial", difficulty)]
 
 
 func _consume_domain_events(events: Array[Dictionary]) -> Dictionary:

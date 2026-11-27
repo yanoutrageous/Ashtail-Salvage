@@ -22,7 +22,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	for test in [_test_typed_composition, _test_pressure_and_legacy_isolation, _test_actual_hit_and_periodic_healing,
+	for test in [_test_playtest_mines_and_teaching_rooms, _test_typed_composition, _test_pressure_and_legacy_isolation, _test_actual_hit_and_periodic_healing,
 		_test_countdown_real_attack_and_clock, _test_retreat_and_terminal_lifecycle, _test_lifecycle_save_rollback,
 		_test_external_terminal_cleanup, _test_periodic_rollback_and_cancelled_attack]:
 		test.call()
@@ -76,6 +76,78 @@ func _status(run: RunContext, item_id: String) -> Dictionary:
 	return {}
 
 
+func _test_playtest_mines_and_teaching_rooms() -> void:
+	var mine_damage := {
+		"tutorial_5x5": 15, "classic_7x7_simple": 20, "classic_7x7_normal": 25,
+		"classic_10x10_easy": 20, "classic_10x10_standard": 25, "classic_10x10_hard": 30,
+		"classic_13x13_normal": 25, "classic_13x13_hard": 30, "classic_13x13_hell": 35,
+	}
+	for map_id in mine_damage:
+		var run := _context()
+		run.run_start_config["map_config_id"] = map_id
+		if map_id == "tutorial_5x5":
+			run.mode = &"tutorial"
+		var result := Combat.apply_mine_hit(run)
+		_check(result.get("ok", false) and int(result.get("facts", {}).get("actual_hp_loss", -1)) == int(mine_damage[map_id]), "mine damage follows formal map: " + map_id)
+	var lessons := {
+		Vector2i(2, 2): ["慢速近战", 30], Vector2i(0, 4): ["原地冲击波", 40],
+		Vector2i(1, 3): ["慢速远程", 25], Vector2i(3, 1): ["挡板工偶", 40],
+		Vector2i(4, 0): ["刹不住的搬运车", 35],
+	}
+	for pos in lessons:
+		var run := _context()
+		run.mode = &"tutorial"
+		run.run_start_config["map_config_id"] = "tutorial_5x5"
+		run.player_pos = pos
+		run.current_room_type = &"Monster"
+		var bridge := G41InRunRuntime.new()
+		bridge.context = run
+		bridge.sync_room(Vector2(0.21, 0.5))
+		var enemy: Dictionary = bridge.simulation.enemies[0]
+		_check(bridge.simulation.enemies.size() == 1 and enemy.get("enemy_name") == lessons[pos][0], "fixed teaching encounter identity: " + str(pos))
+		_check(int(enemy.max_hp) == int(lessons[pos][1]) and int(enemy.damage) == 1 and int(enemy.enemy_power) == 2, "teaching HP, damage and power: " + str(pos))
+		_check_teaching_attack(bridge.simulation, lessons[pos][0])
+	var teaching_clear := _context()
+	teaching_clear.mode = &"tutorial"
+	teaching_clear.run_start_config["map_config_id"] = "tutorial_5x5"
+	teaching_clear.run_start_config.profile_fields["content_eligibility"] = Eligibility.freeze_profile({"profile_level": 0})
+	var reward := RunRuleService.apply_combat_reward(teaching_clear, ROOM, 2)
+	_check(reward.get("ok", false) and reward.get("items", []).is_empty() and teaching_clear.asset_ledger.get_currency(RunAssetLedger.CURRENCY_BLACK) == 2, "Lv0 teaching battle awards practice currency without a formal loot pool")
+
+
+func _check_teaching_attack(sim: G41CombatSimulation, lesson: String) -> void:
+	sim.set_arena_obstacles([])
+	var origin := Vector2(sim.enemies[0].pos)
+	match lesson:
+		"慢速近战":
+			sim.player["pos"] = origin + Vector2(-0.11, 0)
+			sim.advance_ticks(75)
+			_check(sim.enemies[0].state == &"warning" and int(sim.player.hp) == 100, "tutorial melee clearly warns before impact")
+			sim.advance_ticks(75)
+			_check(int(sim.player.hp) == 99, "tutorial melee hits once for one damage")
+		"原地冲击波":
+			sim.player["pos"] = origin + Vector2(-0.13, 0)
+			sim.advance_ticks(70)
+			_check(not sim.hazards.is_empty() and sim.hazards[0].shape == &"circle" and int(sim.player.hp) == 100, "tutorial shockwave warns with a visible circle")
+			sim.advance_ticks(100)
+			_check(int(sim.player.hp) == 99 and sim.enemies[0].pos == origin, "tutorial shockwave stands still and hits once")
+		"慢速远程":
+			sim.player["pos"] = origin + Vector2(-0.36, 0)
+			sim.advance_ticks(94)
+			_check(sim.projectiles.size() == 1 and Vector2(sim.projectiles[0].velocity).length() < 0.24, "tutorial ranged fires a single slow projectile")
+		"挡板工偶":
+			sim.player["pos"] = origin + Vector2(-0.12, 0)
+			sim.call("_damage_enemy", 0, 10)
+			_check(int(sim.enemies[0].hp) == 35, "the front of the teaching shield takes half damage")
+			sim.player["pos"] = origin + Vector2(0.12, 0)
+			sim.call("_damage_enemy", 0, 10)
+			_check(int(sim.enemies[0].hp) == 25, "the exposed side of the teaching shield takes full damage")
+		"刹不住的搬运车":
+			sim.player["pos"] = Vector2(0.94, origin.y)
+			sim.advance_ticks(155)
+			_check(sim.enemies[0].state == &"cooldown" and float(sim.enemies[0].state_timer) > 2.4, "the teaching cart is stunned after its charge hits the wall")
+
+
 func _test_typed_composition() -> void:
 	var run := _context([9, 20])
 	_equip(run, ["eq_debris_brow_guard"])
@@ -97,7 +169,7 @@ func _test_typed_composition() -> void:
 	mine.mine_dmg_reduce = 99
 	mine.mine_immunity = 1
 	var mined := Combat.apply_mine_hit(mine)
-	_check(mined.get("ok") == true and int(mined.get("facts", {}).get("actual_hp_loss", -1)) == Combat.BASE_MINE_DAMAGE - 5, "real mine consumer uses Z2 buckle, not legacy reduction or immunity")
+	_check(mined.get("ok") == true and int(mined.get("facts", {}).get("actual_hp_loss", -1)) == 20, "13×13 ordinary mine applies Z2 buckle to 25 base damage")
 	_check(mine.vitals_counters.get("z2_supply:eq_buffer_buckle_fixture") == 2 and mine.mine_immunity == 1, "mine spends exactly the Z2 instance counter")
 
 

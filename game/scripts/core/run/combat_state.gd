@@ -5,6 +5,7 @@ const RunStateMachineScript := preload("res://scripts/core/run/run_state_machine
 const RunBalanceCatalogScript := preload("res://scripts/core/run/run_balance_catalog.gd")
 const RunEffectApplierScript := preload("res://scripts/core/run/run_effect_applier.gd")
 const Z2Talents := preload("res://scripts/core/progression/z2_talent_runtime.gd")
+const MonsterCatalog := preload("res://scripts/gameplay/combat/g41_monster_catalog.gd")
 
 const BASE_MINE_DAMAGE := RunBalanceCatalogScript.BASE_MINE_DAMAGE
 const MIN_MINE_DAMAGE := RunBalanceCatalogScript.MIN_MINE_DAMAGE
@@ -40,7 +41,8 @@ static func apply_mine_hit(context: RunContext, fail_authority = null) -> Dictio
 		return {"ok": false, "reason": "no_active_run", "facts": {}}
 	var z2 := RunEffectApplierScript.is_z2_run(context)
 	var immune := not z2 and context.mine_immunity > 0
-	var damage: int = RunBalanceCatalogScript.mine_damage(0 if z2 else context.mine_dmg_reduce, immune)
+	var difficulty := RunBalanceCatalogScript.map_difficulty(context) if z2 else &""
+	var damage: int = RunBalanceCatalogScript.mine_damage(0 if z2 else context.mine_dmg_reduce, immune, difficulty)
 	var alive_before := context.hp > 0
 	var result := RunEffectApplierScript.apply_damage_packet(context, {"amount": damage, "damage_type": "mine", "source_id": "mine"})
 	if not bool(result.ok):
@@ -101,10 +103,12 @@ static func build_enemy_state(context: RunContext, pos: Vector2i, adjacent_mines
 		return {}
 	var identity_hash := enemy_identity_hash(context.seed_value, pos)
 	var power_span := ENEMY_POWER_MAX - ENEMY_POWER_MIN + 1
-	var base_power := ENEMY_POWER_MIN + identity_hash % power_span
+	var difficulty := RunBalanceCatalogScript.map_difficulty(context) if RunEffectApplierScript.is_z2_run(context) else &""
+	var difficulty_power := int({&"simple": -3, &"easy": -3, &"hard": 3, &"hell": 5}.get(difficulty, 0))
+	var base_power := maxi(ENEMY_POWER_MIN, ENEMY_POWER_MIN + identity_hash % power_span + difficulty_power)
 	var adjacent_power_bonus := maxi(0, adjacent_mines) * 2
 	var enemy_power := base_power + adjacent_power_bonus
-	return {
+	var identity := {
 		"identity_hash": identity_hash,
 		"enemy_name": String(ENEMY_NAMES[identity_hash % ENEMY_NAMES.size()]),
 		"base_power": base_power,
@@ -115,6 +119,9 @@ static func build_enemy_state(context: RunContext, pos: Vector2i, adjacent_mines
 		"alive": true,
 		"cleared": context.truth_map != null and context.truth_map.is_cleared(pos),
 	}
+	if difficulty == &"tutorial":
+		identity.merge(MonsterCatalog.teaching_profile(pos), true)
+	return identity
 
 
 static func enemy_identity_hash(run_seed: int, pos: Vector2i) -> int:
