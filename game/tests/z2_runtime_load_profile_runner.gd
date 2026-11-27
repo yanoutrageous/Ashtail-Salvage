@@ -62,21 +62,6 @@ func _formal_runtime():
 		_release(r)
 		return null
 	r.bind_meta_progress_adapter(meta)
-	if not _ok(r.execute_meta_action(_offer_request("prepare", "prepare")), "formal opening preparation"):
-		_release(r)
-		return null
-	var offered: Dictionary = meta.data.z2_opening_offer
-	while not offered.candidates.has("status_clear") and int(offered.refresh_count) < 10:
-		if not _ok(r.execute_meta_action(_offer_request("refresh", "refresh:%d" % int(offered.refresh_count), {"offer_id": offered.offer_id})), "legal opening refresh"):
-			_release(r)
-			return null
-		offered = meta.data.z2_opening_offer
-	if not _check(offered.candidates.has("status_clear"), "fixture draws status_clear through legal offers"):
-		_release(r)
-		return null
-	if not _ok(r.execute_meta_action(_offer_request("choose", "choose", {"offer_id": offered.offer_id, "effect_id": "status_clear"})), "formal opening choice"):
-		_release(r)
-		return null
 	r.checkpoint_service = RunCheckpointService.new()
 	if not _ok(r.checkpoint_service.configure(meta, "z2", Rules.CONTENT_VERSION), "real checkpoint configured"):
 		_release(r)
@@ -87,13 +72,25 @@ func _formal_runtime():
 	if not _ok(start, "formal authorized departure"):
 		_release(r)
 		return null
+	var offered: Dictionary = r.spawn_opening_offer()
+	while not offered.candidates.has("status_clear") and int(offered.refresh_count) < 10:
+		if not _ok(r.execute_meta_action(_offer_request("refresh", "refresh:%d" % int(offered.refresh_count), {"offer_id": offered.offer_id, "run_id": str(r.context.run_id)})), "legal opening refresh"):
+			_release(r)
+			return null
+		offered = r.spawn_opening_offer()
+	if not _check(offered.candidates.has("status_clear"), "fixture draws status_clear through legal offers"):
+		_release(r)
+		return null
+	if not _ok(r.command_bus.dispatch(&"opening_choose", {"action_id": "choose", "offer_id": offered.offer_id, "effect_id": "status_clear"}), "formal opening choice"):
+		_release(r)
+		return null
 	_check(Opening.public_state(r.context).get("selected") == "status_clear", "trusted opening reached live run")
 	_check(r.context.run_start_config.profile_fields.has("z2_fact_sequence_base"), "formal departure freezes actual fact cursor")
 	return r
 
 
 func _offer_request(action: String, id: String, fields: Dictionary = {}) -> Dictionary:
-	var request := {"source_page": "deploy_prep", "action": "opening_" + action, "request_id": id}
+	var request := {"source_page": "spawn_room", "action": "opening_" + action, "request_id": id}
 	request.merge(fields)
 	return request
 

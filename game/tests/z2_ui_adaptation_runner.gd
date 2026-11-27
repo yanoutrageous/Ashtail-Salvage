@@ -62,8 +62,7 @@ func _run() -> void:
 		await _many_materials()
 	if opening_cost_only:
 		await _opening_cost_safearea()
-	else:
-		await _live_camp_choice()
+
 	if not OS.get_cmdline_user_args().has("--camp-only") and not camp_layout_only and not opening_cost_only:
 		await _resize_window(Vector2i(1920, 1080))
 		scene.set_ui_scale_factor(1.0)
@@ -112,8 +111,6 @@ func _prepare_camp_profile(prefix: String) -> void:
 	var was_active: bool = runtime.context.run_active
 	runtime.context.run_active = false
 	runtime.bind_meta_progress_adapter(_meta)
-	var prepared := runtime.execute_meta_action({"source_page": "deploy_prep", "action": "opening_prepare", "request_id": prefix + "_prepare"})
-	_check(prepared.get("ok", false), "actual durable opening offer for page matrix")
 	runtime.context.run_active = was_active
 
 func _settle() -> void:
@@ -305,29 +302,7 @@ func _camp_matrix() -> void:
 	page.show_tab(&"loadout")
 	await _settle()
 	for card: Control in page.card_views:
-		if not str(card.card_id).begins_with("opening_"): continue
-		var title: Label = card.title_label
-		_label_fits(title, "opening candidate list name " + str(card.card_id))
-		_check(title.is_visible_in_tree() and title.get_visible_line_count() > 0 and title.text == card.card_data.title, _case + ": candidate name actually renders " + str(card.card_id))
-		_check(not _rect(title).intersects(_rect(card.summary_label)), _case + ": candidate title and subtitle do not overlap")
-		if title.get_visible_line_count() == 0:
-			print("CAMP_TITLE_PROBE=", title.text, " size=", title.size, " font=", title.get_theme_font_size("font_size"), " height=", title.get_theme_font("font").get_height(title.get_theme_font_size("font_size")), " visible=", title.visible)
-	for effect: String in _meta.data.z2_opening_offer.candidates:
-		page._on_card_pressed(StringName("opening_" + effect))
-		await _settle()
-		_inside(page.detail_primary_action_button, "opening choose " + effect)
-		_check(not page.detail_primary_action_button.disabled, _case + ": choose is enabled " + effect)
-		_inside(page.detail_title_label, "opening title")
-		_label_fits(page.detail_badge_label, "opening candidate subtitle")
-		_label_fits(page.detail_description_label, "opening description")
-	page._on_card_pressed(&"opening_offer")
-	await _settle()
-	_inside(page.detail_primary_action_button, "opening refresh")
-	_inside(page.detail_secondary_action_button, "opening skip")
-	_label_fits(page.detail_badge_label, "opening offer subtitle")
-	_check(page.detail_badge_label.get_visible_line_count() == page.detail_badge_label.get_line_count(), _case + ": opening subtitle renders every wrapped line")
-	_check(page.detail_badge_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, _case + ": opening subtitle is not ellipsized")
-	_check(_rect(page.detail_badge_label).end.y <= _rect(page.detail_body_scroll).position.y, _case + ": opening subtitle stays above scroll body")
+		_check(not str(card.card_id).begins_with("opening_"), _case + ": camp loadout contains no spawn offers")
 	await _capture("camp")
 	var back := page.find_child("DeployNavMain", true, false) as Button
 	_inside(back, "camp return")
@@ -460,119 +435,47 @@ func _many_materials() -> void:
 	_check(Service.get_event_state(runtime.context, runtime.context.current_pos).completed, "actual Main mouse submit commits compression")
 	scene._cancel_event_modal()
 
-func _live_camp_choice() -> void:
-	runtime.context.run_active = false
-	scene._show_deploy_shell(&"loadout")
-	var page: Control = scene.ui_shell.get_deploy_page()
-	page.reduced_motion = true
-	await _settle()
-	await _mouse_click(page.tab_buttons[&"loadout"])
-	page._on_card_pressed(&"opening_offer")
-	await _settle()
-	var before := int(_meta.data.gold)
-	page.detail_primary_action_button.pressed.emit()
-	page.detail_primary_action_button.pressed.emit()
-	await _settle()
-	_check(int(_meta.data.gold) == before - 5 and int(_meta.data.z2_opening_offer.refresh_count) == 1, "Main callback refresh double input charges once")
-	if int(_meta.data.gold) != before - 5: print("CAMP_MAIN_PROBE=", page.last_meta_action_result, " pending=", page.pending_meta_action, " scene=", scene.last_command_result, " actions=", page.detail_actions)
-	var choice := str(_meta.data.z2_opening_offer.candidates[0])
-	page._on_card_pressed(StringName("opening_" + choice))
-	await _settle()
-	await _mouse_click(page.detail_primary_action_button)
-	_check(_meta.data.z2_opening_offer.selected == choice, "actual Main mouse choice reaches durable Meta")
-	if _meta.data.z2_opening_offer.selected != choice: print("CAMP_CHOOSE_PROBE=", page.last_meta_action_result, " pending=", page.pending_meta_action)
-	_check(page.pending_meta_action.is_empty(), "actual Main matching opening receipt releases UI")
-
 func _opening_cost_safearea() -> void:
 	_check(DisplayServer.get_name() != "headless", "opening text safearea uses native rendered glyphs")
 	if DisplayServer.get_name() == "headless": return
-	runtime.context.run_active = false
 	await _resize_window(Vector2i(1280, 720))
-	scene._show_deploy_shell(&"loadout")
-	var page: Control = scene.ui_shell.get_deploy_page()
-	page.reduced_motion = true
-	for price in [5, 50]:
-		if price == 50:
-			for refresh_index in range(9):
-				var result := runtime.execute_meta_action({"source_page": "deploy_prep", "action": "opening_refresh",
-					"request_id": "safearea-refresh-%d" % refresh_index, "offer_id": _meta.data.z2_opening_offer.offer_id})
-				_check(result.get("ok", false), "actual durable refresh to price50 step%d" % refresh_index)
-		_check((int(_meta.data.z2_opening_offer.refresh_count) + 1) * 5 == price, "actual core offer refresh cost%d" % price)
-		var cost_scales := [1.5] if OS.get_cmdline_user_args().has("--opening-cost-only") else [1.0, 1.25, 1.5]
-		for scale_value in cost_scales:
-			var case_checks := checks
-			var case_failures := failures.size()
-			scene.set_ui_scale_factor(scale_value)
-			page.apply_snapshot({"meta_progress_summary": _meta.get_summary()})
-			page.show_tab(&"loadout")
-			page._on_card_pressed(&"opening_offer")
-			await _settle()
-			_case = "1280x720-%d-cost%d" % [roundi(scale_value * 100), price]
-			var refresh: Button = page.detail_primary_action_button
-			var skip: Button = page.detail_secondary_action_button
-			_check(page.detail_actions[0].id == &"opening_refresh" and page.detail_actions[1].id == &"opening_skip", _case + ": both real action identities retained")
-			_check(not refresh.disabled and not skip.disabled and str(price) in refresh.text, _case + ": exact affordable price and both actions visible")
-			_check(refresh.get_theme_font_size("font_size") >= roundi(16 * scale_value), _case + ": refresh keeps requested font size")
-			_check(skip.get_theme_font_size("font_size") >= roundi(14 * scale_value), _case + ": skip keeps requested font size")
-			_check(refresh.text == "刷新 · %d金币" % price and skip.text == "跳过" and skip.tooltip_text == page.detail_actions[1].label, _case + ": concise captions retain the exact fee and full skip explanation")
-			_check(_rect(skip).position.x - _rect(refresh).end.x >= 8.0, _case + ": action controls keep their eight-pixel gap")
-			var refresh_ink: Rect2 = await _action_safearea(refresh, "refresh")
-			var skip_ink: Rect2 = await _action_safearea(skip, "skip")
-			_check(not refresh_ink.intersects(skip_ink) and skip_ink.position.x - refresh_ink.end.x >= 8.0, _case + ": complete action glyphs do not overlap")
-			await _capture("opening-actions")
-			await _opening_style_transition(page)
-			_opening_action_cases.append({"case": _case, "fee": price, "scale": scale_value,
-				"checks": checks - case_checks, "failures": failures.size() - case_failures, "ink": _action_ink.duplicate(true)})
-			page._on_card_pressed(StringName("opening_" + str(_meta.data.z2_opening_offer.candidates[0])))
-			await _settle()
-			_check(page.detail_primary_action_button.size.x == 184.0 and page.detail_primary_action_button.get_theme_stylebox("normal").get_margin(SIDE_RIGHT) == 6.0,
-				_case + ": choosing a candidate restores the original action layout")
-			page._on_card_pressed(&"opening_offer")
-			await _settle()
-	var before := int(_meta.data.gold)
-	await _mouse_click(page.detail_primary_action_button)
-	_check(int(_meta.data.gold) == before - 50 and int(_meta.data.z2_opening_offer.refresh_count) == 10, "actual maximum-price button charges50 once and reaches core cap")
-	_check(page.pending_meta_action.is_empty(), "maximum-price action accepts its durable receipt")
+	runtime.context.reset()
+	runtime.checkpoint_writer = Callable()
+	runtime.checkpoint_service = RunCheckpointService.new()
+	runtime.checkpoint_service.configure(_meta, "z2", Rules.CONTENT_VERSION)
+	var map_id := "classic_7x7_simple"
+	var commission: Dictionary = M7ContentCatalog.commission_offer_candidates(map_id, int(_meta.data.run_count), 3)[0]
+	var start: Dictionary = runtime.command_bus.dispatch(&"start_standard_run", {"run_start_config": {"map_config_id": map_id, "difficulty": "simple", "seed_value": 27, "selected_objective_id": commission.id}})
+	_check(start.get("ok", false), "actual ordinary start for spawn panel: " + str(start.get("action_result", start)))
+	if not start.get("ok", false): return
+	scene._show_run_screen()
+	var panel: Control = scene.z2_ui_controller.opening_panel
+	var refresh := panel.find_child("OpeningRefresh", true, false) as Button
+	var skip := panel.find_child("OpeningSkip", true, false) as Button
+	for count in range(10):
+		var price := (count + 1) * 5
+		if count in [0, 9]:
+			for scale_value in [1.0, 1.25, 1.5]:
+				scene.set_ui_scale_factor(scale_value)
+				await _settle()
+				_case = "1280x720-%d-cost%d" % [roundi(scale_value * 100), price]
+				_inside(refresh, "spawn refresh")
+				_inside(skip, "spawn skip")
+				_check(not refresh.disabled and refresh.text.contains(str(price)), _case + ": real affordable price")
+				_check(refresh.get_theme_font_size("font_size") == roundi(16 * scale_value), _case + ": requested font size")
+				var refresh_ink := await _action_safearea(refresh, "refresh")
+				var skip_ink := await _action_safearea(skip, "skip")
+				_check(not refresh_ink.intersects(skip_ink), _case + ": captions stay separate")
+				await _capture("spawn-opening")
+				_opening_action_cases.append({"case": _case, "fee": price, "scale": scale_value, "ink": _action_ink.duplicate(true)})
+		var balance := int(_meta.data.gold)
+		await _mouse_click(refresh)
+		_check(int(_meta.data.gold) == balance - price, "pointer redraw charges exactly %d" % price)
+	_check(refresh.disabled and not skip.disabled, "tenth redraw leaves final decision available")
+	var offer: Dictionary = runtime.spawn_opening_offer()
+	await _mouse_click(panel.find_child("OpeningChoice0", true, false))
+	_check(runtime.context.run_start_config.opening_effect.get("id") == offer.candidates[0], "actual Main pointer chooses the displayed effect")
 
-func _opening_style_transition(page: Control) -> void:
-	var states := ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]
-	var refresh: Button = page.detail_primary_action_button
-	var skip: Button = page.detail_secondary_action_button
-	var styles: Array[StyleBox] = []
-	var ids := []
-	var private_styles := true
-	for button in [refresh, skip]:
-		for state in states:
-			var style: StyleBox = button.get_theme_stylebox(state)
-			private_styles = private_styles and button.has_theme_stylebox_override(state) and not ids.has(style.get_instance_id())
-			styles.append(style)
-			ids.append(style.get_instance_id())
-	_check(private_styles, _case + ": all twelve action StyleBoxes are distinct owned overrides")
-	page._on_card_pressed(&"loadout_capacity")
-	await _settle()
-	var hidden_restored: bool = page.detail_actions.is_empty() and not refresh.visible and refresh.size.x == 184.0
-	for state in states: hidden_restored = hidden_restored and refresh.get_theme_stylebox(state).get_margin(SIDE_RIGHT) == 6.0
-	_check(hidden_restored, _case + ": ordinary no-action detail explicitly restores all six margins")
-	page.show_tab(&"claim")
-	page._on_card_pressed(&"claim_initial_supplies")
-	await _settle()
-	var regular_restored: bool = refresh.visible and page.detail_actions.size() == 1 and page.detail_actions[0].id == &"claim_initial_supplies" and refresh.size.x == 184.0 and skip.size.x == 102.0
-	var regular_ids := []
-	for state in states:
-		var style: StyleBox = refresh.get_theme_stylebox(state)
-		regular_restored = regular_restored and style.get_margin(SIDE_RIGHT) == 6.0 and not ids.has(style.get_instance_id())
-		regular_ids.append(style.get_instance_id())
-	_check(regular_restored, _case + ": actual ordinary claim detail has fresh styles and original margins/layout")
-	await _capture("ordinary-detail-after-opening")
-	page.show_tab(&"loadout")
-	page._on_card_pressed(&"opening_offer")
-	await _settle()
-	var returned := true
-	for state in states: returned = returned and refresh.get_theme_stylebox(state).get_margin(SIDE_RIGHT) == 40.0 and skip.get_theme_stylebox(state).get_margin(SIDE_RIGHT) == 6.0
-	for index in range(6, 12): returned = returned and styles[index].get_margin(SIDE_RIGHT) == 6.0
-	_check(returned, _case + ": returning to opening changes only its own arrow, prior sibling styles stay unchanged")
-	print("OPENING_STYLE_TRANSITION ", _case, " owned_unique=", private_styles, " hidden_restored=", hidden_restored,
-		" regular_restored=", regular_restored, " returned=", returned, " original_ids=", ids, " regular_ids=", regular_ids)
 
 func _action_safearea(button: Button, tag: String) -> Rect2:
 	var style := button.get_theme_stylebox("normal")

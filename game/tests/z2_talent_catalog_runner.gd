@@ -4,44 +4,44 @@ const CATALOG_PATH := "res://scripts/core/progression/z2_talent_catalog.gd"
 # Independent expectations from S1 / 05 天赋树与节点, rows 11–49 (SHA db630e72...).
 const EXPECTED := [
 	["插旗标记", 100, []],
-	["背包容量Ⅰ", 20, [1]],
-	["初始战力Ⅰ", 20, [1]],
-	["最大生命Ⅰ", 20, [1]],
-	["首次增压豁免", 40, [2, 3]],
-	["装备负重上限", 20, [5]],
-	["普怪成长Ⅰ", 20, [5]],
-	["失败抢救容量Ⅰ", 20, [4]],
-	["物理减伤Ⅰ", 20, [8]],
-	["首次致死保护", 40, [7, 9]],
-	["移动速度Ⅰ", 20, [6]],
-	["搜索速度Ⅰ", 20, [11]],
-	["攻击速度Ⅰ", 20, [10]],
-	["撤离收入Ⅰ", 20, [10]],
-	["解锁第一批开局效果", 100, [12, 13, 14]],
-	["搜索速度Ⅱ", 40, [15]],
-	["攻击速度Ⅱ", 40, [15]],
-	["撤离收入Ⅱ", 40, [15]],
-	["消耗品保留", 60, [16, 17]],
-	["物理减伤Ⅱ", 40, [18]],
-	["移动速度Ⅱ", 40, [19]],
-	["普怪成长Ⅱ", 40, [19]],
-	["失败抢救容量Ⅱ", 40, [20]],
-	["背包容量Ⅱ", 40, [21]],
-	["暴击启用", 60, [22, 23]],
-	["背包容量Ⅲ", 40, [24]],
-	["初始战力Ⅱ", 40, [25]],
-	["最大生命Ⅱ", 40, [25]],
-	["解锁第二批开局效果", 100, [26, 27, 28]],
-	["失败消耗品转换数量", 60, [29]],
-	["暴击率提升", 60, [29]],
-	["致死保护强化", 60, [29]],
-	["消耗品减重", 60, [30]],
-	["暴击伤害提升", 60, [31]],
-	["低血恢复", 60, [32]],
-	["单次增压上限", 80, [33]],
-	["暴击溢出", 80, [34]],
-	["专属回收", 80, [35]],
-	["解锁第三批开局效果", 100, [36, 37, 38]],
+	["背包容量Ⅰ", 10, [1]],
+	["初始战力Ⅰ", 10, [1]],
+	["最大生命Ⅰ", 10, [1]],
+	["首次增压豁免", 30, [2, 3]],
+	["装备负重上限", 10, [5]],
+	["普怪成长Ⅰ", 10, [5]],
+	["失败抢救容量Ⅰ", 10, [4]],
+	["物理减伤Ⅰ", 10, [8]],
+	["首次致死保护", 30, [7, 9]],
+	["移动速度Ⅰ", 10, [6]],
+	["搜索速度Ⅰ", 10, [11]],
+	["攻击速度Ⅰ", 10, [10]],
+	["撤离收入Ⅰ", 10, [10]],
+	["解锁第一批开局效果", 90, [12, 13, 14]],
+	["搜索速度Ⅱ", 30, [15]],
+	["攻击速度Ⅱ", 30, [15]],
+	["撤离收入Ⅱ", 30, [15]],
+	["消耗品保留", 50, [16, 17]],
+	["物理减伤Ⅱ", 30, [18]],
+	["移动速度Ⅱ", 30, [19]],
+	["普怪成长Ⅱ", 30, [19]],
+	["失败抢救容量Ⅱ", 30, [20]],
+	["背包容量Ⅱ", 30, [21]],
+	["暴击启用", 50, [22, 23]],
+	["背包容量Ⅲ", 30, [24]],
+	["初始战力Ⅱ", 30, [25]],
+	["最大生命Ⅱ", 30, [25]],
+	["解锁第二批开局效果", 90, [26, 27, 28]],
+	["失败消耗品转换数量", 50, [29]],
+	["暴击率提升", 50, [29]],
+	["致死保护强化", 50, [29]],
+	["消耗品减重", 50, [30]],
+	["暴击伤害提升", 50, [31]],
+	["低血恢复", 50, [32]],
+	["单次增压上限", 70, [33]],
+	["暴击溢出", 70, [34]],
+	["专属回收", 70, [35]],
+	["解锁第三批开局效果", 90, [36, 37, 38]],
 ]
 
 var catalog: Script
@@ -78,7 +78,7 @@ func _test_source_graph_and_purchase_costs() -> void:
 	_expect(nodes.size() == 39, "source requires exactly 39 nodes")
 	if nodes.size() != 39:
 		return
-	var meta := _meta(0, 1860, 0, [], false, true)
+	var meta := _meta(0, 1480, 0, [], false, true)
 	var branches := {}
 	for index in range(EXPECTED.size()):
 		var number := index + 1
@@ -121,10 +121,10 @@ func _test_source_graph_and_purchase_costs() -> void:
 		_expect(bool(duplicate.get("ok", false)) and bool(duplicate.get("duplicate", false)) and str(duplicate.get("status")) == "talent_already_unlocked", "repeat purchase is idempotent: %s" % talent_id)
 		_expect(meta == duplicate_before, "duplicate must not debit: %s" % talent_id)
 		if number in [15, 29, 39]:
-			var cumulative := {15: 500, 29: 1160, 39: 1860}
+			var cumulative := {15: 360, 29: 880, 39: 1480}
 			_expect(meta.talent_spent == cumulative[number], "source cumulative cost at %d" % number)
 	var summary: Dictionary = catalog.call("summary", meta)
-	_expect(meta.talent_points == 0 and meta.talent_spent == 1860, "whole tree costs exactly 1860")
+	_expect(meta.talent_points == 0 and meta.talent_spent == 1480, "formal tree 1380 plus teaching flag 100")
 	_expect(summary.get("known_unlocked_count") == 39 and summary.get("available_count") == 0, "completed-tree summary")
 	_expect(summary.get("node_count") == 39 and summary.get("branch_count") == branches.size(), "summary counts real catalog groups")
 	_expect((catalog.call("definition", "unknown") as Dictionary).is_empty(), "unknown definition is empty")
@@ -147,8 +147,9 @@ func _test_teaching_and_level_gates() -> void:
 	var prior_ids: Array[String] = [_id(1)]
 	for number in range(2, 40):
 		_expect_blocked(_meta(3, 1860, 100, prior_ids, false, false), _id(number), "tutorial_required")
-		for level in [0, 1, 2]:
-			_expect_blocked(_meta(level, 1860, 100, prior_ids, true, true), _id(number), "profile_level_required")
+		for level in [1, 2]:
+			var earned: Dictionary = catalog.call("unlock_evaluation", _meta(level, 1860, 100, prior_ids, true, false), _id(number))
+			_expect(earned.get("ok", false), "post-teaching purchase depends on points and predecessors at Lv%d" % level)
 		prior_ids.append(_id(number))
 	var ready := _meta(3, 120, 100, [_id(1)], true, false)
 	var projected: Array = catalog.call("projection", ready)

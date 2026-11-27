@@ -133,6 +133,23 @@ func _enter_z2_shortcut(request: Dictionary) -> Dictionary:
 	return entered
 
 
+func spawn_opening_pending() -> bool:
+	return context != null and context.run_active and context.z1_event_flags.get("z2_opening", {}).get("status") == "offered"
+
+
+func spawn_opening_offer() -> Dictionary:
+	if not spawn_opening_pending():
+		return {}
+	var initial: Dictionary = context.z1_event_flags.z2_opening.admitted_offer
+	# A paid redraw and its fee are committed together in the profile. Final
+	# selection copies this journal into the run checkpoint with its effect.
+	if meta_progress_adapter != null:
+		var latest: Dictionary = meta_progress_adapter.data.get("z2_opening_offer", {})
+		if latest.get("offer_key") == initial.offer_key:
+			return latest.duplicate(true)
+	return initial.duplicate(true)
+
+
 func execute_z2_opening_action(action: String, payload: Dictionary) -> Dictionary:
 	if not _planning_action or not context.run_active or not Z2Hooks.applies_to(context):
 		return {"ok": false, "reason": "opening_action_unavailable"}
@@ -384,8 +401,9 @@ func _normalize_meta_action(source_page: String, action_id: StringName, action: 
 	}
 	var target_id := ""
 	match action_id:
-		&"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip":
+		&"opening_refresh":
 			target_id = "opening_offer"
+			payload["run_id"] = _exact_meta_id(action.get("run_id", ""))
 			payload["offer_id"] = _exact_meta_id(action.get("offer_id", ""))
 			payload["effect_id"] = _exact_meta_id(action.get("effect_id", ""))
 		META_ACTION_CLAIM_INITIAL:
@@ -460,8 +478,8 @@ func _dispatch_meta_action(payload: Dictionary) -> Dictionary:
 	var action_id := StringName(payload.get("action", &""))
 	var result: Variant
 	match action_id:
-		&"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip":
-			result = meta_progress_adapter.apply_z2_opening_action(String(action_id).trim_prefix("opening_"), payload)
+		&"opening_refresh":
+			result = meta_progress_adapter.refresh_spawn_opening_offer(spawn_opening_offer(), payload)
 		META_ACTION_CLAIM_INITIAL:
 			result = meta_progress_adapter.claim_initial_supplies()
 		META_ACTION_PURCHASE:
@@ -523,6 +541,10 @@ func _meta_summary_after_action(result: Dictionary) -> Dictionary:
 
 
 func _store_meta_action_result(request_id: String, payload: Dictionary, envelope: Dictionary) -> void:
+	# Active-run redraws already have atomic profile receipts. Avoid copying the
+	# admission's initial checkpoint into the run again for every refresh.
+	if payload.get("action") == &"opening_refresh":
+		return
 	if str(envelope.get("status", "")) in ["save_failed", "write_blocked", "persistence_failed"]:
 		# No durable receipt exists for a failed save. The same request must be
 		# allowed to retry after storage recovers, without reopening the game.
@@ -985,6 +1007,8 @@ func _checkpoint_header(snapshot: Dictionary) -> Dictionary:
 	}
 
 func execute_atomic_command(command_name: StringName, payload: Dictionary) -> Dictionary:
+	if spawn_opening_pending() and command_name not in [&"opening_choose", &"opening_skip"]:
+		return _atomic_error("opening_selection_required")
 	if has_pending_combat_save():
 		return _combat_save_pending()
 	if command_name == &"retry_terminal_commit":

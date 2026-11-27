@@ -418,7 +418,10 @@ static func authorize_with_meta(config: Dictionary, meta_summary: Dictionary) ->
 	if Z2Rules.applies_to(meta_summary):
 		normalized["profile_fields"]["content_eligibility"] = Z2ContentEligibility.freeze_profile(meta_summary)
 		normalized["profile_fields"]["z2_fact_sequence_base"] = int(meta_summary.get("z2_fact_sequence", 0))
-		normalized["z2_opening_offer"] = _dictionary_from(meta_summary.get("z2_opening_offer", {}))
+		# Honor a paid or closed pre-upgrade camp offer only for its original departure.
+		var old_offer := _dictionary_from(meta_summary.get("z2_opening_offer", {}))
+		var departure_key := "%s:opening:%d" % [meta_summary.get("profile_id", ""), int(meta_summary.get("run_count", 0))]
+		normalized["z2_opening_offer"] = old_offer if old_offer.get("offer_key") == departure_key else {}
 	normalized["talent_interface"] = _array_from(profile.get("talent_directions", []))
 	normalized["active_talent_effects"] = _array_from(profile.get("active_talent_effects", []))
 	normalized["profile_id"] = str(meta_summary.get("profile_id", normalized.get("profile_id", "default")))

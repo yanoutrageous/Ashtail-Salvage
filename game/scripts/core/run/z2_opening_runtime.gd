@@ -31,13 +31,16 @@ static func admit_departure(context: RunContext, trusted_offer: Dictionary) -> D
 		return _fail("no_context")
 	if context.run_start_config.get("z2_opening_offer", {}) != trusted_offer:
 		return _fail("trusted_final_offer_required")
+	if trusted_offer.is_empty() and _unlocked(context) and context.mode != &"tutorial":
+		trusted_offer = Offer.initial_offer(str(context.run_id) + ":opening", context.seed_value)
+		context.run_start_config["z2_opening_offer"] = trusted_offer.duplicate(true)
 	if trusted_offer.is_empty():
 		var noop := _ok(false)
 		noop["noop"] = true
 		return noop
 	if not _unlocked(context):
 		return _fail("first_batch_locked")
-	if not Offer.valid_offer(trusted_offer, true):
+	if not Offer.valid_offer(trusted_offer):
 		return _fail("trusted_final_offer_required")
 	var state := _state(context)
 	if not state.is_empty():
@@ -53,6 +56,26 @@ static func admit_departure(context: RunContext, trusted_offer: Dictionary) -> D
 	context.z1_event_flags[KEY] = state
 	context.asset_ledger.sync_compat_fields(context)
 	return _ok(state.status == "selected", {"opening_selected": state.selected, "offer_key": trusted_offer.offer_key, "initial_power": state.initial_power})
+
+
+static func confirm_spawn_offer(context: RunContext, offer: Dictionary, action: String, payload: Dictionary) -> Dictionary:
+	var state := _state(context)
+	if state.get("status") != "offered" or not Offer.valid_offer(offer) or offer.status != "offered":
+		return _fail("choice_closed")
+	if str(payload.get("offer_id", "")) != str(offer.offer_id):
+		return _fail("stale_offer")
+	for key in ["offer_id", "candidates", "refresh_count", "paid_gold"]:
+		state[key] = offer[key]
+	state["admitted_offer"] = offer.duplicate(true)
+	var result := execute(context, action, payload, {"d06_policy": D06_POLICY})
+	if result.get("ok", false):
+		var selected := str(_state(context).selected)
+		state = _state(context)
+		state.admitted_offer.status = state.status
+		state.admitted_offer.selected = selected
+		context.run_start_config["opening_effect"] = {"id": selected, "batch": 1} if not selected.is_empty() else {}
+		context.run_start_config["z2_opening_offer"] = state.admitted_offer.duplicate(true)
+	return result
 
 
 static func options(context: RunContext) -> Array[Dictionary]:

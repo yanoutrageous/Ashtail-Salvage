@@ -10,6 +10,12 @@ const UILayerContractScript = preload("res://scripts/ui/shell/ui_layer_contract.
 
 var _scene: Node
 var _closing_event_modal := false
+var opening_panel: PanelContainer
+var _opening_choices: Array[Button] = []
+var _opening_descriptions: Array[Label] = []
+var _opening_status: Label
+var _opening_refresh: Button
+var _opening_input_locked := false
 
 
 func _init(scene: Node) -> void:
@@ -53,6 +59,105 @@ func open_completed_event_in_range() -> bool:
 		return false
 	_show_event_panel(_scene.run_context.get_status_snapshot().get("event_state", {}))
 	return true
+
+
+func build_spawn_opening_panel() -> void:
+	opening_panel = _scene._new_modal_panel("SpawnOpeningPanel", Rect2())
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 8)
+	opening_panel.add_child(body)
+	var title := Label.new()
+	title.text = "选择本局开局效果"
+	title.add_theme_font_size_override("font_size", 22)
+	body.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.follow_focus = true
+	body.add_child(scroll)
+	var cards := VBoxContainer.new()
+	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cards.add_theme_constant_override("separation", 8)
+	scroll.add_child(cards)
+	for index in range(3):
+		var button: Button = _scene._add_menu_button(cards, "", _submit_spawn_opening.bind("choose", index))
+		button.name = "OpeningChoice%d" % index
+		_scene.run_surface.apply_legacy_button_style(button, &"primary")
+		_opening_choices.append(button)
+		var description := Label.new()
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		cards.add_child(description)
+		_opening_descriptions.append(description)
+	_opening_status = Label.new()
+	_opening_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(_opening_status)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 10)
+	body.add_child(buttons)
+	_opening_refresh = _scene._add_menu_button(buttons, "", _submit_spawn_opening.bind("refresh", -1))
+	_opening_refresh.name = "OpeningRefresh"
+	var skip: Button = _scene._add_menu_button(buttons, "跳过", _submit_spawn_opening.bind("skip", -1))
+	skip.name = "OpeningSkip"
+	_scene.run_surface.apply_legacy_button_style(_opening_refresh, &"secondary")
+	_scene.run_surface.apply_legacy_button_style(skip, &"secondary")
+	_scene.run_surface.apply_legacy_modal_style(opening_panel, &"ui.accent")
+
+
+func scale_spawn_opening(scale: float) -> void:
+	if opening_panel == null:
+		return
+	for label: Label in opening_panel.find_children("*", "Label", true, false):
+		label.add_theme_font_size_override("font_size", roundi((22 if label == opening_panel.get_child(0).get_child(0) else 16) * scale))
+	for button: Button in opening_panel.find_children("*", "Button", true, false):
+		button.add_theme_font_size_override("font_size", roundi(16 * scale))
+
+
+func show_spawn_opening() -> void:
+	var offer: Dictionary = _scene.runtime_controller.spawn_opening_offer()
+	if offer.is_empty():
+		return
+	var gold := int(_scene.runtime_controller.meta_progress_adapter.data.get("gold", 0))
+	var count := int(offer.refresh_count)
+	for index in _opening_choices.size():
+		var card := Z2OpeningOffer.IDS.find(offer.candidates[index])
+		_opening_choices[index].text = Z2OpeningOffer.LABELS[card]
+		_opening_descriptions[index].text = Z2OpeningOffer.DESCRIPTIONS[card]
+	var price := (count + 1) * 5
+	_opening_status.text = "档案金币 %d　已刷新 %d / 10" % [gold, count]
+	_opening_refresh.text = "整组刷新 · %d 金币" % price if count < 10 else "刷新次数已用完"
+	_opening_refresh.disabled = count >= 10 or gold < price
+	if not _scene._runtime_modal_is_top(&"spawn_opening"):
+		_scene._push_runtime_modal(&"spawn_opening", opening_panel, _opening_choices[0], func(_reason): _opening_choices[0].grab_focus())
+
+
+func _submit_spawn_opening(action: String, index: int) -> void:
+	if _opening_input_locked or not _scene._runtime_modal_is_top(&"spawn_opening"):
+		return
+	var offer: Dictionary = _scene.runtime_controller.spawn_opening_offer()
+	if offer.is_empty():
+		return
+	_opening_input_locked = true
+	call_deferred("_release_spawn_opening_input")
+	var request_id := "%s:%s:%d" % [offer.offer_id, action, index]
+	var result: Dictionary
+	if action == "refresh":
+		result = _scene.runtime_controller.execute_meta_action({"action": "opening_refresh", "source_page": "spawn_room", "run_id": str(_scene.run_context.run_id), "offer_id": offer.offer_id, "request_id": request_id})
+	else:
+		var payload := {"action_id": request_id, "offer_id": offer.offer_id}
+		if index >= 0:
+			payload["effect_id"] = offer.candidates[index]
+		result = _scene._dispatch_command(StringName("opening_" + action), payload, false, false)
+	if result.get("ok", false) and action != "refresh":
+		_scene._pop_runtime_modal(&"spawn_opening")
+		_scene._sync_player_input_enabled()
+	else:
+		show_spawn_opening()
+		if not result.get("ok", false):
+			_opening_status.text += "　操作未保存，可重试。"
+
+
+func _release_spawn_opening_input() -> void:
+	_opening_input_locked = false
 
 
 func _refresh_opening_inventory_controls() -> void:

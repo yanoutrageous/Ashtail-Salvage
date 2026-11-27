@@ -1087,13 +1087,13 @@ func claim_goal_reward(goal_kind: String, goal_id: String, tier: int = 1) -> Dic
 	return _quest_action_result(result, previous_data)
 
 
-func apply_z2_opening_action(action: String, payload: Dictionary) -> Dictionary:
-	if not _ensure_writable("apply_z2_opening_action"):
+func refresh_spawn_opening_offer(offer: Dictionary, payload: Dictionary) -> Dictionary:
+	if not _ensure_writable("refresh_spawn_opening_offer"):
 		return {"ok": false, "status": "write_blocked", "reason": write_block_reason}
-	if not data.get("admission", {}).is_empty():
-		return {"ok": false, "status": "departure_in_progress"}
+	if offer.is_empty():
+		return {"ok": false, "status": "active_opening_required"}
 	var previous := data.duplicate(true)
-	var evaluation := Z2OpeningOfferScript.execute(data, action, payload)
+	var evaluation := Z2OpeningOfferScript.execute(data, "refresh", payload, 0, offer)
 	var response := evaluation.duplicate(true)
 	response.erase("meta")
 	response["status"] = str(evaluation.get("reason", "duplicate_ignored" if evaluation.get("duplicate", false) else "applied"))

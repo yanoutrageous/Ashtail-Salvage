@@ -161,7 +161,7 @@ func _test_admission() -> void:
 	_check(not Runtime.admit_departure(c, chosen).get("ok", true), "actual context qualification required")
 	var prepared: Dictionary = _execute(_meta(), "prepare").offer
 	c = _context(prepared)
-	_check(not Runtime.admit_departure(c, prepared).get("ok", true), "unfinalized camp choice rejected")
+	_check(Runtime.admit_departure(c, prepared).get("ok", false) and Runtime.public_state(c).status == "offered", "unfinished original offer preserved in spawn")
 	var skipped: Dictionary = _execute(_execute(_meta(), "prepare").meta, "skip").offer
 	c = _context(skipped)
 	_check(Runtime.admit_departure(c, skipped).get("ok", false) and c.power == 42 and Runtime.public_state(c).status == "skipped", "skip admits without activation")

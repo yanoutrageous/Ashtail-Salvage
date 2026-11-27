@@ -234,35 +234,26 @@ func _admission_retry() -> void:
 
 func _opening_save_retry() -> void:
 	var meta = _new_meta("opening")
-	_check(meta.has_method("apply_z2_opening_action"), "Meta exposes opening candidate save entry")
-	if not meta.has_method("apply_z2_opening_action"):
-		return
 	meta.data.talent_flags.append("z2_talent_15")
 	meta.data.gold = 100
 	_check(meta.save(), "opening qualification setup saves")
-	var prepared: Dictionary = meta.call("apply_z2_opening_action", "prepare", {"request_id": "prepare"})
-	_check(prepared.get("ok", false), "opening prepare saves candidate")
-	var saved_offer: Dictionary = meta.data.get("z2_opening_offer", {}).duplicate(true)
-	_check(meta.get_summary().get("z2_opening_offer", {}) == saved_offer, "trusted summary includes complete opening offer and receipts")
+	var run = _context(meta)
+	var initial := Z2OpeningOffer.initial_offer(str(run.run_id) + ":opening", run.seed_value)
 	var before: Dictionary = meta.data.duplicate(true)
 	var cut := CutSave.new()
 	cut.cut = true
 	meta.save_adapter = cut
-	var payload := {"request_id": "refresh", "offer_id": str(saved_offer.get("offer_id", ""))}
-	var failed: Dictionary = meta.execute_idempotent_meta_action("refresh", {"action": "opening_refresh", "payload": payload}, Callable(meta, "apply_z2_opening_action").bind("refresh", payload))
-	_check(not failed.adapter_result.get("ok", true) and _same(meta, before), "opening deferred save failure rolls back fee and draw")
+	var payload := {"request_id": "refresh", "offer_id": initial.offer_id, "run_id": str(run.run_id)}
+	var operation := Callable(meta, "refresh_spawn_opening_offer").bind(initial, payload)
+	var failed: Dictionary = meta.execute_idempotent_meta_action("refresh", payload, operation)
+	_check(not failed.adapter_result.get("ok", true) and _same(meta, before), "opening deferred save failure rolls back fee and redraw")
 	meta.load_or_create_default()
-	var retried: Dictionary = meta.execute_idempotent_meta_action("refresh", {"action": "opening_refresh", "payload": payload}, Callable(meta, "apply_z2_opening_action").bind("refresh", payload))
-	_check(retried.adapter_result.get("ok", false) and int(meta.data.gold) == 95 and int(meta.data.z2_opening_offer.refresh_count) == 1, "opening retry charges5 once and redraws once")
+	var retried: Dictionary = meta.execute_idempotent_meta_action("refresh", payload, operation)
+	_check(retried.adapter_result.get("ok", false) and int(meta.data.gold) == 95 and int(meta.data.z2_opening_offer.refresh_count) == 1, "retry charges once")
 	meta.load_or_create_default()
 	var after: Dictionary = meta.data.duplicate(true)
-	meta.call("apply_z2_opening_action", "refresh", payload)
-	_check(_same(meta, after), "opening receipt reload prevents repeat charge or draw")
-	var offer: Dictionary = meta.data.z2_opening_offer
-	var chosen: Dictionary = meta.call("apply_z2_opening_action", "choose", {"request_id": "choose", "offer_id": str(offer.offer_id), "effect_id": str(offer.candidates[0])})
-	_check(chosen.get("ok", false) and int(meta.data.gold) == 95, "opening choose does not debit again")
-	_context(meta)
-	_check(not meta.call("apply_z2_opening_action", "prepare", {"request_id": "active"}).get("ok", true), "active admission blocks opening action")
+	var replay: Dictionary = meta.execute_idempotent_meta_action("refresh", payload, operation)
+	_check(replay.idempotency_status == &"duplicate" and _same(meta, after), "replay after reload keeps balance and candidates")
 
 func _stage_scores() -> void:
 	var events: Array = []

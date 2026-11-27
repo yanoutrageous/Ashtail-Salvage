@@ -61,6 +61,14 @@ func dispatch(command_name: StringName, payload: Dictionary = {}) -> Dictionary:
 			action_result = toggle_flag_cell(command_payload.get("pos", null))
 		&"flag_current_cell":
 			action_result = flag_current_cell()
+		&"opening_choose", &"opening_skip":
+			if runtime_controller == null or not runtime_controller.spawn_opening_pending():
+				action_result = _blocked(&"blocked", "choice_closed")
+			else:
+				var choice := command_payload.duplicate(true)
+				choice["action_id"] = command.action_id
+				action_result = Z2OpeningRuntime.confirm_spawn_offer(context, runtime_controller.spawn_opening_offer(), String(command_name).trim_prefix("opening_"), choice)
+				_emit_state()
 		&"end_opening_effect", &"dismantle_opening_item", &"use_opening_tool":
 			if not _can_accept_command() or runtime_controller == null:
 				action_result = _blocked(&"blocked", _current_blocked_reason())

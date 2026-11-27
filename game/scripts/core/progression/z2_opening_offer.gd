@@ -26,20 +26,27 @@ static func public_state(meta: Dictionary) -> Dictionary:
 	return offer
 
 
-static func execute(meta: Dictionary, action: String, payload: Dictionary = {}, seed: int = 0) -> Dictionary:
+static func execute(meta: Dictionary, action: String, payload: Dictionary = {}, seed: int = 0, run_offer: Dictionary = {}) -> Dictionary:
 	if meta.get("ruleset_id", "") != "z2" or meta.get("z2_progression_version", 0) != 1:
 		return _failure(meta, "z2_profile_required")
 	if not meta.get("talent_flags", []) is Array or not meta.get("talent_flags", []).has("z2_talent_15"):
 		return _failure(meta, "first_batch_locked")
 	if not _natural(meta.get("gold")) or not _natural(meta.get("run_count")) or str(meta.get("profile_id", "")).is_empty():
 		return _failure(meta, "invalid_meta_balance_or_identity")
-	if not meta.get("admission", {}) is Dictionary or not meta.get("admission", {}).is_empty():
+	if not run_offer.is_empty():
+		var admission: Dictionary = meta.get("admission", {})
+		if action != "refresh" or admission.get("phase") != "active" or str(admission.get("run_id")) != str(payload.get("run_id")) or not valid_offer(run_offer):
+			return _failure(meta, "active_opening_required")
+	elif not meta.get("admission", {}) is Dictionary or not meta.get("admission", {}).is_empty():
 		return _failure(meta, "departure_in_progress")
 	var request_id := str(payload.get("request_id", ""))
 	if request_id.is_empty():
 		return _failure(meta, "request_id_required")
 	var key := str(meta.profile_id) + ":opening:" + str(int(meta.run_count))
 	var candidate := meta.duplicate(true)
+	if not run_offer.is_empty():
+		key = str(run_offer.offer_key)
+		candidate[KEY] = run_offer.duplicate(true)
 	if not candidate.get(KEY, {}) is Dictionary:
 		return _failure(meta, "invalid_saved_offer")
 	var offer: Dictionary = candidate.get(KEY, {}).duplicate(true)
@@ -53,9 +60,7 @@ static func execute(meta: Dictionary, action: String, payload: Dictionary = {}, 
 	var expense := 0
 	if action == "prepare":
 		if offer.is_empty() or str(offer.offer_key) != key:
-			offer = {"version": 1, "batch": 1, "offer_key": key, "seed": key.hash() if seed == 0 else seed,
-				"refresh_count": 0, "paid_gold": 0, "status": "offered", "selected": "", "receipts": {}}
-			_set_draw(offer)
+			offer = initial_offer(key, key.hash() if seed == 0 else seed)
 	else:
 		if offer.is_empty() or str(offer.offer_key) != key:
 			return _failure(meta, "requires_prepare")
@@ -89,6 +94,13 @@ static func execute(meta: Dictionary, action: String, payload: Dictionary = {}, 
 	offer.receipts[request_id] = request
 	candidate[KEY] = offer
 	return _success(candidate, expense)
+
+
+static func initial_offer(key: String, seed: int) -> Dictionary:
+	var offer := {"version": 1, "batch": 1, "offer_key": key, "seed": seed,
+		"refresh_count": 0, "paid_gold": 0, "status": "offered", "selected": "", "receipts": {}}
+	_set_draw(offer)
+	return offer
 
 
 static func draw_candidates(offer_key: String, seed: int, refresh_count: int) -> Array:

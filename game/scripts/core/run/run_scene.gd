@@ -290,6 +290,8 @@ func get_ui_scale_factor() -> float:
 
 
 func _apply_ui_scale_to_runtime_controls(sync_shell: bool) -> void:
+	if z2_ui_controller != null:
+		z2_ui_controller.scale_spawn_opening(_ui_scale_factor)
 	var targets: Array[Node] = [run_surface, tutorial_popup_panel, map_overlay_panel, result_panel, inventory_panel, ground_loot_panel, loot_panel, runtime_settings_panel, event_choice_panel, z2_event_adapter]
 	if is_inside_tree():
 		targets.append(get_tree().root.get_node_or_null("Z2PersistentOverlays/NotificationQueue"))
@@ -320,6 +322,10 @@ func _process(delta: float) -> void:
 	# A restored encounter starts advancing only after the player returns to it.
 	# In particular, a boss saved on its first tick must still be able to announce.
 	if persistence_controller.present_error() or not run_context.run_active or screen_state != SCREEN_RUN:
+		return
+	if runtime_controller.spawn_opening_pending():
+		if not _is_runtime_modal_open():
+			z2_ui_controller.show_spawn_opening()
 		return
 	var input_blocked := _gameplay_input_blocked()
 	if room_runtime_view != null:
@@ -864,6 +870,7 @@ func _build_runtime_modals() -> void:
 	runtime_modal_parent.add_child(runtime_modal_input_shield)
 
 	z2_ui_controller.build_event_panel()
+	z2_ui_controller.build_spawn_opening_panel()
 
 	loot_panel = LootResultPanelScript.new() as Control
 	loot_panel.name = "LootResultPanel"
@@ -992,6 +999,7 @@ func _bind_runtime_modal_controller() -> void:
 		run_surface,
 		{
 			&"event": event_modal_root,
+			&"spawn_opening": z2_ui_controller.opening_panel,
 			&"flag_entry_confirm": tutorial_popup_panel,
 			&"loot_result": loot_panel,
 			&"extract_confirm": extract_panel,
@@ -1027,6 +1035,7 @@ func _apply_runtime_modal_layout(profile: Dictionary) -> void:
 	_set_control_rect(event_panel, layout.get("event", Rect2()) as Rect2)
 	if loot_panel != null:
 		loot_panel.call("apply_layout_profile", profile)
+	_set_control_rect(z2_ui_controller.opening_panel, layout.get("settings", Rect2()) as Rect2)
 	_set_control_rect(extract_panel, layout.get("extract", Rect2()) as Rect2)
 	_set_control_rect(pause_panel, layout.get("pause", Rect2()) as Rect2)
 	_set_control_rect(runtime_settings_panel, layout.get("settings", Rect2()) as Rect2)
@@ -1104,6 +1113,7 @@ func _show_run_screen() -> bool:
 	_hide_runtime_popups()
 	_refresh_view_models()
 	persistence_controller.restore_pending_phase()
+	z2_ui_controller.show_spawn_opening()
 	return true
 
 
@@ -2312,6 +2322,7 @@ func _gameplay_input_blocked() -> bool:
 		or not is_visible_in_tree()
 		or run_context == null
 		or not run_context.run_active
+		or runtime_controller.spawn_opening_pending()
 		or persistence_controller.is_blocked()
 		or _is_runtime_modal_open()
 		or (map_overlay_panel != null and map_overlay_panel.visible)

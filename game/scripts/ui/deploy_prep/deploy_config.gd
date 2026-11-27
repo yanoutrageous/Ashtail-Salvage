@@ -993,19 +993,6 @@ static func config_validity(config: Dictionary) -> Dictionary:
 	return _config_validity_for(config)
 
 
-static func opening_offer_state(config: Dictionary) -> Dictionary:
-	var meta := _dictionary_copy(config.get("meta_progress_summary", {}))
-	var qualified := Z2Rules.applies_to(meta) and _array_copy(meta.get("talent_flags", [])).has("z2_talent_15")
-	var offer := _dictionary_copy(meta.get("z2_opening_offer", {}))
-	var key := "%s:opening:%d" % [str(meta.get("profile_id", "")), int(meta.get("run_count", 0))]
-	if str(offer.get("offer_key", "")) != key:
-		offer = {}
-	var closed := str(offer.get("status", "")) in ["selected", "skipped"]
-	var locked := bool(config.get("active_run_locked", false)) or not _dictionary_copy(meta.get("admission", {})).is_empty()
-	return {"qualified": qualified, "offer": offer, "closed": closed, "locked": locked,
-		"refresh_cost": (int(offer.get("refresh_count", 0)) + 1) * 5, "gold": int(meta.get("gold", 0))}
-
-
 static func _config_validity_for(config: Dictionary) -> Dictionary:
 	var used := int(config.get("bag_used", 0))
 	var limit := int(config.get("bag_limit", M3RItemUsabilityModelScript.BASE_BACKPACK_CAPACITY))
@@ -1042,10 +1029,6 @@ static func _config_validity_for(config: Dictionary) -> Dictionary:
 		reason_code = &"equipment_overweight"
 	elif used > limit:
 		reason_code = &"backpack_overweight"
-	var opening := opening_offer_state(config)
-	if valid and map_id != "tutorial_5x5" and opening.qualified and not opening.closed and not bool(config.get("active_run_locked", false)):
-		valid = false
-		reason_code = &"opening_selection_required"
 	return {
 		"label": "M6 出勤配置合法" if valid else "出勤配置需要调整",
 		"checks": [

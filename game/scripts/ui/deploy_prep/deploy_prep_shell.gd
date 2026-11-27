@@ -46,7 +46,7 @@ const SUMMARY_PAGES := [
 	{"id": &"effect", "label": "本局"},
 	{"id": &"objective", "label": "目标"},
 ]
-const META_DETAIL_ACTION_IDS := [&"purchase", &"sell", &"confirm_batch_sell", &"claim_initial_supplies", &"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip"]
+const META_DETAIL_ACTION_IDS := [&"purchase", &"sell", &"confirm_batch_sell", &"claim_initial_supplies"]
 const SUMMARY_INITIAL_ROWS := 8
 
 var current_model: Dictionary = {}
@@ -90,9 +90,6 @@ var detail_primary_action_button: Button
 var detail_secondary_action_button: Button
 var detail_actions: Array[Dictionary] = []
 var pending_meta_action: Dictionary = {}
-var opening_submitted_request: Dictionary = {}
-var opening_input_locked := false
-var opening_retry_request: Dictionary = {}
 var last_meta_action_result: Dictionary = {}
 var meta_request_sequence := 0
 var result_hint_panel: Panel
@@ -185,8 +182,6 @@ func apply_meta_action_result(envelope: Dictionary) -> bool:
 	if str(envelope.get("target_id", "")) != str(pending_meta_action.get("target_id", "")):
 		return false
 	var completed_action := StringName(envelope.get("action", &""))
-	if String(completed_action).begins_with("opening_"):
-		opening_retry_request = opening_submitted_request.duplicate(true) if String(envelope.get("status", "")) == "save_failed" else {}
 	pending_meta_action.clear()
 	last_meta_action_result = envelope.duplicate(true)
 	var player_message := _meta_result_player_message(envelope)
@@ -310,7 +305,6 @@ func set_ui_scale_factor(value: float) -> void:
 	for view in card_views:
 		if view != null and is_instance_valid(view) and view.has_method("set_ui_scale_factor"):
 			view.call("set_ui_scale_factor", ui_scale_factor)
-			_fit_opening_card_copy(view)
 	if not current_model.is_empty():
 		_refresh_wallet()
 		_refresh_detail_projection()
@@ -1322,10 +1316,6 @@ func _refresh_detail_action_button(button: Button, index: int, control_id: Strin
 	button.disabled = not enabled
 	button.text = "处理中…" if meta_blocked and _pending_matches_detail_action(action_id) else str(action.get("label", "查看"))
 	button.tooltip_text = "正在等待基地确认" if meta_blocked else _detail_action_reason(action)
-	if action_id == &"opening_skip" and not meta_blocked:
-		button.text = "跳过"
-		if enabled:
-			button.tooltip_text = str(action.get("label", "跳过本次开局效果"))
 	_apply_image_button_surface(button, &"danger" if bool(action.get("destructive", false)) else control_id, &"normal" if enabled else &"disabled")
 
 
@@ -1464,7 +1454,6 @@ func _rebuild_cards() -> void:
 		card_list.add_child(view)
 		view.call("setup", card, active, card_id == selected_card)
 		view.call("set_ui_scale_factor", ui_scale_factor)
-		_fit_opening_card_copy(view)
 		view.connect("card_pressed", _on_card_pressed)
 		view.connect("quantity_delta_requested", _on_card_quantity_delta_requested)
 		card_views.append(view)
@@ -1474,33 +1463,6 @@ func _rebuild_cards() -> void:
 		result_hint_label.visible = show_hint
 		result_hint_label.text = str(_dictionary_from(current_model.get("active_tab_data", {})).get("empty_state", "暂无内容"))
 	call_deferred("_restore_card_scroll", target_scroll)
-
-
-func _fit_opening_card_copy(view: Control) -> void:
-	if not str(view.card_id).begins_with("opening_"):
-		return
-	# The existing title font's line height exceeds the fixed card slot at125/150%.
-	# Grow only these offer rows, retaining their icon/title/summary/chips layout.
-	var title: Label = view.title_label
-	title.clip_text = false
-	title.size.y = maxf(28.0, ceilf(title.get_theme_font("font").get_height(title.get_theme_font_size("font_size"))) + 2.0)
-	var summary: Label = view.summary_label
-	summary.position.y = title.position.y + title.size.y + 2.0
-	summary.size.y = maxf(18.0, ceilf(summary.get_theme_font("font").get_height(summary.get_theme_font_size("font_size"))) + 2.0)
-	var chips_top := summary.position.y + summary.size.y + 2.0
-	var chips_height := 18.0
-	for node_name in ["CardCategoryChip", "CardModeChip"]:
-		var panel: Control = view.get_node(node_name)
-		var label: Label = view.get_node(node_name + "Label")
-		label.position.y = chips_top + 1.0
-		label.size.y = maxf(16.0, ceilf(label.get_theme_font("font").get_height(label.get_theme_font_size("font_size"))) + 2.0)
-		panel.position.y = chips_top
-		panel.size.y = label.size.y + 2.0
-		chips_height = maxf(chips_height, panel.size.y)
-	var row_height := maxf(76.0, chips_top + chips_height + 7.0)
-	view.custom_minimum_size.y = row_height
-	view.get_node("CardContentMatte").size.y = row_height - 14.0
-	view.get_node("CardRarityEdge").size.y = row_height - 10.0
 
 
 func _refresh_card_selection() -> void:
@@ -1805,9 +1767,6 @@ func _on_detail_action_pressed(index: int) -> void:
 		return
 	var payload := _dictionary_from(action.get("payload", {}))
 	match action_id:
-		&"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip":
-			payload["action"] = action_id
-			_submit_meta_action(payload)
 		&"select_map":
 			_on_map_requested(StringName(payload.get("map_config_id", &"")))
 		&"open_map":
@@ -1841,8 +1800,6 @@ func _submit_explicit_card_action(domain_tab: StringName, domain_card_id: String
 
 
 func _submit_meta_action(action: Dictionary) -> void:
-	if str(action.get("action", "")).begins_with("opening_") and opening_input_locked:
-		return
 	if not pending_meta_action.is_empty():
 		current_model = DeployPrepModelScript.model_with_action_message(current_model, "上一项基地操作仍在确认，请稍候。")
 		_refresh_all(false)
@@ -1853,15 +1810,6 @@ func _submit_meta_action(action: Dictionary) -> void:
 	meta_request_sequence += 1
 	meta_action["request_id"] = MetaActionRequestIdScript.generate(&"deploy")
 	meta_action["source_page"] = &"deploy_prep"
-	if str(meta_action.get("action", "")).begins_with("opening_"):
-		# Main may deliver the receipt synchronously and replace this same button's action.
-		opening_input_locked = true
-		call_deferred("_release_opening_input_lock")
-		if not opening_retry_request.is_empty() and _opening_request_key(meta_action) == _opening_request_key(opening_retry_request):
-			meta_action["request_id"] = opening_retry_request.request_id
-		else:
-			opening_retry_request.clear()
-		opening_submitted_request = meta_action.duplicate(true)
 	pending_meta_action = {
 		"request_id": str(meta_action.get("request_id", "")),
 		"source_page": &"deploy_prep",
@@ -1873,17 +1821,8 @@ func _submit_meta_action(action: Dictionary) -> void:
 	meta_action_requested.emit(meta_action)
 
 
-func _release_opening_input_lock() -> void:
-	opening_input_locked = false
-
-
-func _opening_request_key(action: Dictionary) -> Array:
-	return [str(action.get("action", "")), str(action.get("offer_id", "")), str(action.get("effect_id", ""))]
-
-
 func _meta_action_target_id(action: Dictionary) -> String:
 	match StringName(action.get("action", &"")):
-		&"opening_prepare", &"opening_refresh", &"opening_choose", &"opening_skip": return "opening_offer"
 		&"claim_initial_supplies": return "initial_supplies"
 		&"purchase": return str(action.get("item_id", ""))
 		&"sell_collectible": return str(action.get("instance_id", ""))
@@ -1893,8 +1832,6 @@ func _meta_action_target_id(action: Dictionary) -> String:
 
 
 func _meta_pending_player_message(action: Dictionary) -> String:
-	if str(action.get("action", "")).begins_with("opening_"):
-		return "正在保存开局准备…"
 	match StringName(action.get("action", &"")):
 		&"claim_initial_supplies": return "正在确认首次补给…"
 		&"purchase": return "正在确认购买…"
@@ -1905,12 +1842,6 @@ func _meta_pending_player_message(action: Dictionary) -> String:
 func _meta_result_player_message(envelope: Dictionary) -> String:
 	var result := _dictionary_from(envelope.get("result", {}))
 	var status := StringName(envelope.get("status", result.get("status", &"unknown")))
-	if str(envelope.get("action", "")).begins_with("opening_"):
-		if bool(envelope.get("ok", false)):
-			return "开局准备已保存。"
-		if status == &"save_failed":
-			return "保存失败，本次开局准备未改变，请重试。"
-		return "开局操作未完成，请重新查看当前候选与金币。"
 	if StringName(envelope.get("action", &"")) == &"claim_initial_supplies":
 		if status in [&"already_claimed", &"duplicate_ignored"]:
 			return "首次补给已领取，无需重复申领。"
@@ -2692,7 +2623,7 @@ func _apply_scaled_control_font(control: Control) -> void:
 
 
 func _refit_detail_controls() -> void:
-	_fit_opening_action_row()
+	_fit_detail_action_row()
 	for control in [
 		detail_title_label,
 		detail_badge_label,
@@ -2708,25 +2639,18 @@ func _refit_detail_controls() -> void:
 			_apply_scaled_control_font(fact_label)
 
 
-func _fit_opening_action_row() -> void:
+func _fit_detail_action_row() -> void:
 	if detail_primary_action_button == null or detail_secondary_action_button == null:
 		return
 	var primary := DeployPrepLayoutContractScript.DETAIL_PRIMARY_ACTION
 	var secondary := DeployPrepLayoutContractScript.DETAIL_SECONDARY_ACTION
-	var opening_pair := detail_actions.size() == 2 and StringName(detail_actions[0].get("id", &"")) == &"opening_refresh" and StringName(detail_actions[1].get("id", &"")) == &"opening_skip"
-	if opening_pair:
-		secondary.position.x = secondary.end.x - 60.0
-		secondary.size.x = 60.0
-		primary.size.x = secondary.position.x - primary.position.x - 8.0
-	# These overrides are private to this button. Restore them even when the
-	# next detail has no actions and therefore does not rebuild its styles.
 	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
-		detail_primary_action_button.get_theme_stylebox(state).set_content_margin(SIDE_RIGHT, 40.0 if opening_pair else 6.0)
+		detail_primary_action_button.get_theme_stylebox(state).set_content_margin(SIDE_RIGHT, 6.0)
 	_set_rect(detail_primary_action_button, primary)
 	_set_rect(detail_secondary_action_button, secondary)
 	detail_primary_action_button.set_meta("deploy_text_bounds", primary.size)
 	detail_secondary_action_button.set_meta("deploy_text_bounds", secondary.size)
-	detail_secondary_action_button.set_meta("deploy_text_padding", Vector2(6, 8) if opening_pair else Vector2(12, 8))
+	detail_secondary_action_button.set_meta("deploy_text_padding", Vector2(12, 8))
 
 
 func _resize_scroll_label(label: Label, minimum_height: float, characters_per_line: int) -> void:
@@ -2763,13 +2687,6 @@ func _label_max_lines(node_name: String) -> int:
 
 func _apply_label_flow_policy(label: Label) -> void:
 	if label == null:
-		return
-	if label == detail_badge_label and str(current_model.get("selected_card", "")).begins_with("opening_"):
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.clip_text = false
-		label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		label.max_lines_visible = -1
-		label.size.y = maxf(DeployPrepLayoutContractScript.DETAIL_BADGE.size.y, float(label.get_line_height() * label.get_line_count() + 4))
 		return
 	if label == detail_badge_label:
 		label.size.y = DeployPrepLayoutContractScript.DETAIL_BADGE.size.y
