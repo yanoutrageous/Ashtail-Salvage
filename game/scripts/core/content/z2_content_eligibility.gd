@@ -47,7 +47,10 @@ static func is_eligible(item_id: String, channel: String, frozen: Dictionary, ma
 		var maps: Array = MATERIAL_RULES[item_id]
 		return channel == "monster" and (maps.is_empty() or maps.has(map_id))
 	if INHERITED_MATERIAL_CHANNELS.has(item_id):
-		return level >= 1 and (channel == "qualification" or INHERITED_MATERIAL_CHANNELS[item_id].has(channel))
+		var channels: Array = INHERITED_MATERIAL_CHANNELS[item_id]
+		if channel == "recycle":
+			return channels.has(channel)
+		return level >= 1 and (channel == "qualification" or channels.has(channel))
 	var item := Items.definition(item_id)
 	if item.is_empty():
 		return false
@@ -77,6 +80,12 @@ static func is_eligible(item_id: String, channel: String, frozen: Dictionary, ma
 			return tier in [3, 4, 5, 6]
 	if not item.channels.has(channel):
 		return false
+	# Supply shops appear at Lv7 on every formal map. A multi-source item's
+	# map list applies to its field drop, independently of its shop offer.
+	if channel == "shop":
+		return level >= 7
+	if channel == "starter_claim":
+		return level >= 1
 	var maps: Array = item.map_ids
 	return maps.is_empty() or maps.has(map_id)
 

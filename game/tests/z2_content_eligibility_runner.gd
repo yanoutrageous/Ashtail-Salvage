@@ -7,53 +7,48 @@ const ACQUISITION_CHANNELS := [
 	"mechanism_success", "first_aid_cabinet", "salvage_seal_cabinet", "starter_claim",
 	"compression", "recycle", "event", "research", "extra_drop",
 ]
-# Latest authorized Z1 mechanism/five-stage altar inheritance. The previous
-# one-channel assertions produced103 failures; their original RED log and reason
-# remain in t07-content-process-eligibility-red-disposition.json.
 const COLLECTIBLE_CHANNELS := [
-	["search"], ["search", "compression"], ["chest", "altar"],
-	["chest", "altar", "mechanism_success"], ["altar", "mechanism_success"], ["altar"],
+	["search", "chest"], ["search", "chest", "compression"], ["search", "chest", "altar"],
+	["search", "chest", "altar", "mechanism_success"], ["search", "chest", "altar", "mechanism_success"], ["search", "chest", "altar"],
 ]
-const COLLECTIBLE_UNLOCKS := [
-	["col_04", 2], ["col_self_stitching_envelope", 3], ["col_17", 4],
-	["col_double_shadow_rivet", 5], ["col_missing_shift_roster", 6], ["col_16", 7],
-	["col_06", 8], ["col_unspoken_seal_roll", 10], ["col_delayed_bell", 12],
-	["col_negative_floor_plate", 15], ["col_self_winding_spool", 16],
-	["col_missing_tooth_counter", 17], ["col_backward_ledger", 18],
-	["col_clockwork_copper_dial", 19], ["col_23", 20], ["col_windless_vane", 21],
-	["col_20", 22], ["col_24", 23], ["col_10", 24], ["col_borrowed_shadow_doll", 25],
-	["col_reverse_counter", 26], ["col_folded_price_board", 27],
-	["col_word_swallowing_meter", 28], ["col_13", 29], ["col_bottomless_ballast_canister", 30],
-]
-# Literal expectations transcribed from the approved distribution, not catalog-derived.
+const COLLECTIBLE_BATCHES := {
+	2: ["col_04", "col_missing_shift_roster", "col_06", "col_17", "col_16", "col_missing_tooth_counter", "col_clockwork_copper_dial", "col_10", "col_folded_price_board"],
+	12: ["col_self_stitching_envelope", "col_double_shadow_rivet", "col_delayed_bell", "col_self_winding_spool", "col_20", "col_windless_vane", "col_reverse_counter"],
+	28: ["col_unspoken_seal_roll", "col_backward_ledger", "col_24", "col_word_swallowing_meter", "col_negative_floor_plate", "col_23", "col_borrowed_shadow_doll", "col_13", "col_bottomless_ballast_canister"],
+}
+const MAP_10_STANDARD := ["classic_10x10_standard", "classic_10x10_hard"]
+const MAP_10_HARD := ["classic_10x10_hard"]
+const MAP_13 := ["classic_13x13_normal", "classic_13x13_hard", "classic_13x13_hell"]
+const MAP_13_HARD := ["classic_13x13_hard", "classic_13x13_hell"]
+const MAP_HELL := ["classic_13x13_hell"]
 const LEVEL_SUPPLIES := [
-	["con_ration", 1, ["search", "starter_claim"], ""],
-	["con_tape_roll", 1, ["search", "starter_claim"], ""],
-	["con_range_powder", 1, ["search"], ""],
-	["con_med_patch", 1, ["first_aid_cabinet"], ""],
-	["eq_old_vest", 2, ["camp_shop"], ""],
-	["eq_edge_opener", 2, ["camp_shop"], ""],
-	["eq_recovery_bag", 2, ["camp_shop"], ""],
-	["con_calm_candy", 3, ["shop"], ""],
-	["eq_debris_brow_guard", 4, ["chest", "camp_shop"], ""],
-	["eq_pressure_relief_wrench", 5, ["chest"], ""],
-	["con_scan_pin", 6, ["chest", "shop"], ""],
-	["eq_goggles", 7, ["chest", "camp_shop"], ""],
-	["eq_insulated_sleeve", 11, ["search"], ""],
-	["eq_buffer_buckle", 14, ["chest"], ""],
-	["con_hemostatic_clasp", 15, ["chest"], ""],
-	["con_ledger_seal_paper", 16, ["search"], ""],
-	["eq_seam_finder_pendant", 17, ["search"], ""],
-	["con_stabilizer", 18, ["monster"], ""],
-	["con_cooling_patch", 19, ["chest"], ""],
-	["eq_etched_sleeve", 20, ["chest"], ""],
-	["eq_signal_pin", 21, ["mechanism_success"], ""],
-	["con_salvage_seal", 22, ["salvage_seal_cabinet"], ""],
-	["eq_folding_shovel", 23, ["chest"], "classic_13x13_normal"],
-	["eq_strapped_backplate", 24, ["monster"], "classic_13x13_normal"],
-	["eq_old_work_badge", 26, ["mechanism_success"], "classic_13x13_hard"],
-	["con_waiver_medicine", 27, ["chest"], "classic_13x13_hard"],
-	["con_countdown_pill", 30, ["chest"], "classic_13x13_hell"],
+	["con_ration", 0, ["search"], []],
+	["con_tape_roll", 0, ["search"], []],
+	["con_range_powder", 0, ["search"], []],
+	["con_med_patch", 0, ["first_aid_cabinet"], []],
+	["eq_old_vest", 4, ["camp_shop"], []],
+	["eq_edge_opener", 4, ["camp_shop"], []],
+	["eq_recovery_bag", 4, ["camp_shop"], []],
+	["con_calm_candy", 7, ["shop"], []],
+	["eq_goggles", 5, ["chest"], MAP_10_STANDARD],
+	["con_scan_pin", 5, ["chest"], MAP_10_STANDARD],
+	["eq_debris_brow_guard", 10, ["chest"], MAP_10_HARD],
+	["eq_pressure_relief_wrench", 10, ["chest"], MAP_10_HARD],
+	["eq_buffer_buckle", 10, ["chest"], MAP_10_HARD],
+	["eq_seam_finder_pendant", 10, ["search"], MAP_10_HARD],
+	["eq_insulated_sleeve", 15, ["search"], MAP_13],
+	["con_ledger_seal_paper", 15, ["search"], MAP_13],
+	["con_hemostatic_clasp", 15, ["chest"], MAP_13],
+	["con_cooling_patch", 15, ["chest"], MAP_13],
+	["con_stabilizer", 15, ["monster"], MAP_13],
+	["eq_etched_sleeve", 20, ["chest"], MAP_13_HARD],
+	["eq_folding_shovel", 20, ["chest"], MAP_13_HARD],
+	["eq_strapped_backplate", 20, ["monster"], MAP_13_HARD],
+	["eq_signal_pin", 20, ["mechanism_success"], MAP_13_HARD],
+	["con_waiver_medicine", 20, ["chest"], MAP_13_HARD],
+	["con_salvage_seal", 21, ["salvage_seal_cabinet"], []],
+	["eq_old_work_badge", 25, ["mechanism_success"], MAP_HELL],
+	["con_countdown_pill", 25, ["chest"], MAP_HELL],
 ]
 const RESEARCH_CASES := [
 	["research_hard_shell_patch", "con_hard_shell_patch", "mon_old_gear_set", 40],
@@ -171,26 +166,25 @@ func _catalog_contract() -> void:
 
 func _initial_and_level_boundaries() -> void:
 	var initial := [["col_05", "col_01", "col_02", "col_03"], ["col_09", "col_15", "col_22", "col_08"], ["col_14", "col_07", "col_18"], ["col_12", "col_11"], ["col_19", "col_reverse_growing_comb"], ["col_absent_person_frame", "col_21"]]
-	var channels := ["search", "search", "chest", "chest", "altar", "altar"]
-	var frozen: Dictionary = eligibility.freeze_profile({"profile_level": 1})
-	var seen := 0
-	for tier_index in range(6):
-		var found: Array = []
-		for item: Dictionary in catalog.collectibles():
-			if int(item.collectible_level) == tier_index + 1 and eligibility.is_eligible(item.item_id, channels[tier_index], frozen):
-				found.append(item.item_id)
-		found.sort()
-		var expected: Array = initial[tier_index].duplicate()
-		expected.sort()
-		_check(found == expected, "Lv1 exact legal pool for tier %d" % (tier_index + 1))
-		seen += found.size()
-	_check(seen == 17, "initial six-tier pool totals 17")
-	for row in COLLECTIBLE_UNLOCKS:
-		var below: Dictionary = eligibility.freeze_profile({"profile_level": row[1] - 1})
-		var at: Dictionary = eligibility.freeze_profile({"profile_level": row[1]})
-		_check(not eligibility.is_eligible(row[0], "qualification", below), "collectible previous level locked " + row[0])
-		_check(eligibility.is_eligible(row[0], "qualification", at), "collectible exact unlock level " + row[0])
-	for level in [0, 1, 2, 3, 9, 13, 30, 50]:
+	var frozen: Dictionary = eligibility.freeze_profile({"profile_level": 0})
+	for channel in ["search", "chest"]:
+		for tier_index in range(6):
+			var found: Array = []
+			for item: Dictionary in catalog.collectibles():
+				if int(item.collectible_level) == tier_index + 1 and eligibility.is_eligible(item.item_id, channel, frozen):
+					found.append(item.item_id)
+			found.sort()
+			var expected: Array = initial[tier_index].duplicate()
+			expected.sort()
+			_check(found == expected, "Lv0 exact %s pool for tier %d" % [channel, tier_index + 1])
+	for level in COLLECTIBLE_BATCHES:
+		var below: Dictionary = eligibility.freeze_profile({"profile_level": level - 1})
+		var at: Dictionary = eligibility.freeze_profile({"profile_level": level})
+		for id in COLLECTIBLE_BATCHES[level]:
+			for channel in ["qualification", "search", "chest"]:
+				_check(not eligibility.is_eligible(id, channel, below), "before batch " + id + channel)
+				_check(eligibility.is_eligible(id, channel, at), "at batch " + id + channel)
+	for level in [0, 1, 2, 3, 11, 12, 27, 28, 50]:
 		var profile: Dictionary = eligibility.freeze_profile({"profile_level": level})
 		for item: Dictionary in catalog.collectibles():
 			var unlocked: bool = eligibility.is_eligible(item.item_id, "qualification", profile)
@@ -208,32 +202,37 @@ func _initial_and_level_boundaries() -> void:
 
 
 func _supply_channels() -> void:
+	var maps := ["", "unknown_13x13_hell", "tutorial_5x5", "classic_7x7_simple", "classic_7x7_normal", "classic_10x10_easy", "classic_10x10_standard", "classic_10x10_hard"] + MAP_13
+	var high: Dictionary = eligibility.freeze_profile({"profile_level": 50})
 	for row in LEVEL_SUPPLIES:
 		var below: Dictionary = eligibility.freeze_profile({"profile_level": row[1] - 1})
 		var at: Dictionary = eligibility.freeze_profile({"profile_level": row[1]})
-		var high: Dictionary = eligibility.freeze_profile({"profile_level": 50})
 		for channel in ACQUISITION_CHANNELS:
-			_check(not eligibility.is_eligible(row[0], channel, below, row[3]), "all entrances reject locked supply " + row[0] + " " + channel)
-			_check(eligibility.is_eligible(row[0], channel, at, row[3]) == row[2].has(channel), "supply exact level/channel " + row[0] + " " + channel)
-			_check(eligibility.is_eligible(row[0], channel, high, row[3]) == row[2].has(channel), "high level cannot widen channels " + row[0] + " " + channel)
-	_check(eligibility.filter_pool(["eq_old_vest", "eq_edge_opener", "eq_recovery_bag"], "camp_shop", eligibility.freeze_profile({"profile_level": 2})).size() == 3, "all three distinct-slot Lv2 equipment are purchasable")
-	_check(not eligibility.is_eligible("unknown", "search", eligibility.freeze_profile({"profile_level": 50})), "unknown item fails closed")
-	_check(not eligibility.is_eligible("con_ration", "typo", eligibility.freeze_profile({"profile_level": 50})), "unknown channel fails closed")
+			for map_id in maps:
+				if (row[0] == "con_scan_pin" and channel == "shop") or (row[0] in ["con_ration", "con_tape_roll"] and channel == "starter_claim"):
+					continue
+				var allowed: bool = row[2].has(channel) and (row[3].is_empty() or row[3].has(map_id))
+				_check(row[1] == 0 or not eligibility.is_eligible(row[0], channel, below, map_id), "below supply level %s %s %s" % [row[0], channel, map_id])
+				_check(eligibility.is_eligible(row[0], channel, at, map_id) == allowed, "first supply source %s %s %s" % [row[0], channel, map_id])
+				_check(eligibility.is_eligible(row[0], channel, high, map_id) == allowed, "late supply source %s %s %s" % [row[0], channel, map_id])
+	_check(not eligibility.is_eligible("unknown", "search", high), "unknown item fails closed")
+	_check(not eligibility.is_eligible("con_ration", "typo", high), "unknown channel fails closed")
 
 
 func _map_restrictions() -> void:
-	var frozen: Dictionary = eligibility.freeze_profile({"profile_level": 50})
-	var maps := ["", "unknown_13x13_hell", "classic_7x7_simple", "classic_7x7_normal", "classic_10x10_easy", "classic_10x10_standard", "classic_10x10_hard", "classic_13x13_normal", "classic_13x13_hard", "classic_13x13_hell"]
-	var rules := [
-		["eq_folding_shovel", "chest", ["classic_13x13_normal", "classic_13x13_hard", "classic_13x13_hell"]],
-		["eq_strapped_backplate", "monster", ["classic_13x13_normal", "classic_13x13_hard", "classic_13x13_hell"]],
-		["eq_old_work_badge", "mechanism_success", ["classic_13x13_hard", "classic_13x13_hell"]],
-		["con_waiver_medicine", "chest", ["classic_13x13_hard", "classic_13x13_hell"]],
-		["con_countdown_pill", "chest", ["classic_13x13_hell"]],
-	]
-	for row in rules:
-		for map_id in maps:
-			_check(eligibility.is_eligible(row[0], row[1], frozen, map_id) == row[2].has(map_id), "exact map whitelist " + row[0] + " " + map_id)
+	var before: Dictionary = eligibility.freeze_profile({"profile_level": 6})
+	var at: Dictionary = eligibility.freeze_profile({"profile_level": 7})
+	for map_id in ["classic_7x7_simple", "classic_10x10_standard", "classic_13x13_hell"]:
+		_check(not eligibility.is_eligible("con_scan_pin", "shop", before, map_id), "scan pin shop locked before event " + map_id)
+		_check(eligibility.is_eligible("con_scan_pin", "shop", at, map_id), "scan pin shop ignores chest map whitelist " + map_id)
+	var tutorial: Dictionary = eligibility.freeze_profile({"profile_level": 0})
+	var graduated: Dictionary = eligibility.freeze_profile({"profile_level": 1})
+	for id in ["con_ration", "con_tape_roll"]:
+		_check(not eligibility.is_eligible(id, "starter_claim", tutorial), "claim remains a graduation benefit " + id)
+		_check(eligibility.is_eligible(id, "starter_claim", graduated), "graduate can claim " + id)
+	for id in ["sp_transit_lead_seal", "sp_inspection_calibration_plate"]:
+		_check(eligibility.is_eligible(id, "recycle", tutorial, "tutorial_5x5"), "recycle teaching material " + id)
+		_check(not eligibility.is_eligible(id, "chest", tutorial, "tutorial_5x5"), "recycle teaching availability is channel-specific " + id)
 
 
 func _research_and_materials() -> void:

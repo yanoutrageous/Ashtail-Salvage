@@ -15,7 +15,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 6, "icon_path": "res://assets/items/z1/col_05.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "到底是线断了还是螺丝断了？",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_04", "display_name": "旧标签纸", "item_type": "collectible",
@@ -23,7 +23,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 7, "icon_path": "res://assets/items/z1/col_04.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "前后贴过工具、货架和一位打瞌睡的同事，上面写着“待处理”. ",
-		"min_profile_level": 2, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_01", "display_name": "旧螺母", "item_type": "collectible",
@@ -31,7 +31,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 8, "icon_path": "res://assets/items/z1/col_01.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "修理工说很重要，问是哪台机器的，他就莫名其妙忙起来了. ",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_02", "display_name": "半张工牌", "item_type": "collectible",
@@ -39,7 +39,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 9, "icon_path": "res://assets/items/z1/col_02.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "照片和姓名都少了半截，但批准人签在离职手续被撕走的那边. ",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_missing_shift_roster", "display_name": "缺格值班表", "item_type": "collectible",
@@ -47,7 +47,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 10, "icon_path": "res://assets/items/z1/col_missing_shift_roster.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "周一到周六整齐得一匹，周日被撕掉了，诶这不就空出一天了？",
-		"min_profile_level": 6, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_03", "display_name": "裂纹灯片", "item_type": "collectible",
@@ -55,7 +55,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 11, "icon_path": "res://assets/items/z1/col_03.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "老板本来说像镜子，员工打碎后又说这是高级灯片. ",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_06", "display_name": "断电池", "item_type": "collectible",
@@ -63,7 +63,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 12, "icon_path": "res://assets/items/z1/col_06.png",
 		"short_description": "1档藏品，可登记或出售。",
 		"flavor": "据说曾在“自我充电站”心理调解活动中取得了第二名的好成绩. ",
-		"min_profile_level": 8, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_09", "display_name": "标准封签", "item_type": "collectible",
@@ -71,7 +71,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 13, "icon_path": "res://assets/items/z1/col_09.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "封签完好，不代表箱子没被动过，也不证明封签本身没有被改动，更不说明封签一直都是这样。",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_17", "display_name": "无主钥", "item_type": "collectible",
@@ -79,7 +79,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 14, "icon_path": "res://assets/items/z1/col_17.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "因为所有人都说是自己的，但都不知道开啥锁，就成无主的了. ",
-		"min_profile_level": 4, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_15", "display_name": "旧巡逻牌", "item_type": "collectible",
@@ -87,7 +87,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 15, "icon_path": "res://assets/items/z1/col_15.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "“你上班了？”“没。”“你签到了？”“巡逻牌代签。”",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_22", "display_name": "活页图", "item_type": "collectible",
@@ -95,7 +95,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 16, "icon_path": "res://assets/items/z1/col_22.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "商家宣传“这书指的路像你的未来一样光明”，最后一页被撕了. ",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_16", "display_name": "无刻尺", "item_type": "collectible",
@@ -103,7 +103,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 17, "icon_path": "res://assets/items/z1/col_16.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "甲方量出来嫌短，乙方量出来嫌长，制作的师傅说那就是两头都能用。",
-		"min_profile_level": 7, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_missing_tooth_counter", "display_name": "掉齿计次轮", "item_type": "collectible",
@@ -111,7 +111,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 18, "icon_path": "res://assets/items/z1/col_missing_tooth_counter.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "别的齿轮：我转速超过了99%的齿轮！\n这个齿轮：我把自己转缺了！\n唉，就很…...懂吧. ",
-		"min_profile_level": 17, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_clockwork_copper_dial", "display_name": "校时铜盘", "item_type": "collectible",
@@ -119,7 +119,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 19, "icon_path": "res://assets/items/z1/col_clockwork_copper_dial.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "大家校了半天发现被校对象和校准原件弄反了. ",
-		"min_profile_level": 19, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_08", "display_name": "完整齿轮", "item_type": "collectible",
@@ -127,7 +127,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 20, "icon_path": "res://assets/items/z1/col_08.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "没人知道这玩意是崭新出厂还是遗憾离场的. ",
-		"min_profile_level": 1, "channels": ["search"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_10", "display_name": "旧工具头", "item_type": "collectible",
@@ -135,7 +135,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 21, "icon_path": "res://assets/items/z1/col_10.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "“柄呢？！”，“不知道啊”，有人顺手把自己的手往袖子里缩了缩。",
-		"min_profile_level": 24, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_folded_price_board", "display_name": "折角价目板", "item_type": "collectible",
@@ -143,7 +143,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 22, "icon_path": "res://assets/items/z1/col_folded_price_board.png",
 		"short_description": "2档藏品，可登记或出售。",
 		"flavor": "写“十块”，折角掰平有个“起”，翻到背面还有个“每天”。",
-		"min_profile_level": 27, "channels": ["search"],
+		"min_profile_level": 2, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_14", "display_name": "温热条款", "item_type": "collectible",
@@ -151,7 +151,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 23, "icon_path": "res://assets/items/z1/col_14.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "无论你触犯了什么离谱的规矩，我都会稳稳地接住你。",
-		"min_profile_level": 1, "channels": ["chest"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_07", "display_name": "空白条款", "item_type": "collectible",
@@ -159,7 +159,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 24, "icon_path": "res://assets/items/z1/col_07.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "“这是条款，不是画饼的空头支票！别乱签！”",
-		"min_profile_level": 1, "channels": ["chest"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_double_shadow_rivet", "display_name": "双影铆钉", "item_type": "collectible",
@@ -167,7 +167,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 25, "icon_path": "res://assets/items/z1/col_double_shadow_rivet.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "铆钉一枚，反向阴影两道，少退一道按整套赔偿，最终解释权归库存所有。",
-		"min_profile_level": 5, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_delayed_bell", "display_name": "迟响铜铃", "item_type": "collectible",
@@ -175,7 +175,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 26, "icon_path": "res://assets/items/z1/col_delayed_bell.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "温馨提示，本铃将于危险解除后响起，请提前注意. ",
-		"min_profile_level": 12, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_18", "display_name": "异常电池", "item_type": "collectible",
@@ -183,7 +183,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 27, "icon_path": "res://assets/items/z1/col_18.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "据说因为过于emo被拒绝参加“自我充电站”心理调解活动. ",
-		"min_profile_level": 1, "channels": ["chest"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_20", "display_name": "过热驱动核（藏品）", "item_type": "collectible",
@@ -191,7 +191,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 28, "icon_path": "res://assets/items/z1/col_20.png",
 		"short_description": "3档藏品，可登记或出售。",
 		"flavor": "这其实是一个情感调解员. “我不喜欢冷战，我更喜欢火拼. ”",
-		"min_profile_level": 22, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_12", "display_name": "自拧螺母", "item_type": "collectible",
@@ -199,7 +199,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 29, "icon_path": "res://assets/items/z1/col_12.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "自己把自己拧成了一个麻花，这又何尝不是一种自洽. ",
-		"min_profile_level": 1, "channels": ["chest"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_self_stitching_envelope", "display_name": "自缝封套", "item_type": "collectible",
@@ -207,7 +207,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 30, "icon_path": "res://assets/items/z1/col_self_stitching_envelope.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "好的，清楚，了解，明白，知道. 它一边说一边把自己缝上了. ",
-		"min_profile_level": 3, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_11", "display_name": "反针罗盘", "item_type": "collectible",
@@ -215,7 +215,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 31, "icon_path": "res://assets/items/z1/col_11.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "上一个被指反方向的人，现在已经在画地为牢了. ",
-		"min_profile_level": 1, "channels": ["chest"],
+		"min_profile_level": 0, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_self_winding_spool", "display_name": "自缠线轴", "item_type": "collectible",
@@ -223,7 +223,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 32, "icon_path": "res://assets/items/z1/col_self_winding_spool.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "被某个程序员看到后，他高兴的说这个线轴就是自指迭代. ",
-		"min_profile_level": 16, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_windless_vane", "display_name": "无风风向标", "item_type": "collectible",
@@ -231,7 +231,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 33, "icon_path": "res://assets/items/z1/col_windless_vane.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "“风向开标了. ”“真的假的？”“我去真开标了”",
-		"min_profile_level": 21, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_reverse_counter", "display_name": "逆数计数器", "item_type": "collectible",
@@ -239,7 +239,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 34, "icon_path": "res://assets/items/z1/col_reverse_counter.png",
 		"short_description": "4档藏品，可登记或出售。",
 		"flavor": "5，4，3，2，1，0.9，0.8，0.7，0.6，0.69……？？？",
-		"min_profile_level": 26, "channels": ["chest"],
+		"min_profile_level": 12, "channels": ["search", "chest"],
 	},
 	{
 		"item_id": "col_19", "display_name": "低语灯芯", "item_type": "collectible",
@@ -247,7 +247,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 35, "icon_path": "res://assets/items/z1/col_19.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "永远不会放弃你，永远不会欺骗你，永远不会抛弃你，永远…...",
-		"min_profile_level": 1, "channels": ["altar"],
+		"min_profile_level": 0, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_reverse_growing_comb", "display_name": "逆生齿梳", "item_type": "collectible",
@@ -255,7 +255,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 36, "icon_path": "res://assets/items/z1/col_reverse_growing_comb.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "这个梳子不管什么使用，一直强调要看它自己心情，它才是老大. ",
-		"min_profile_level": 1, "channels": ["altar"],
+		"min_profile_level": 0, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_unspoken_seal_roll", "display_name": "返写封条卷", "item_type": "collectible",
@@ -263,7 +263,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 37, "icon_path": "res://assets/items/z1/col_unspoken_seal_roll.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "能读心自动书写的卷轴，只可惜大部分写下来的放不出来. ",
-		"min_profile_level": 10, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_backward_ledger", "display_name": "倒页账簿", "item_type": "collectible",
@@ -271,7 +271,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 38, "icon_path": "res://assets/items/z1/col_backward_ledger.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "“你的旧债清完了，那我所有的经济损失呢？”然后这书开始倒旧账了. ",
-		"min_profile_level": 18, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_24", "display_name": "压缩核心", "item_type": "collectible",
@@ -279,7 +279,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 39, "icon_path": "res://assets/items/z1/col_24.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "任何处理失误的成果都可以丢进去，迟早会引发新一轮宇宙大爆炸. ",
-		"min_profile_level": 23, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_word_swallowing_meter", "display_name": "吞声计量箱", "item_type": "collectible",
@@ -287,7 +287,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 40, "icon_path": "res://assets/items/z1/col_word_swallowing_meter.png",
 		"short_description": "5档藏品，可登记或出售。",
 		"flavor": "财务说过一次“报销”后这两个字就一直卡在里面，导致现在交单都像申请自费. ",
-		"min_profile_level": 28, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_23", "display_name": "签收遗书", "item_type": "collectible",
@@ -295,7 +295,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 41, "icon_path": "res://assets/items/z1/col_23.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "退件须知写着“请寄件人亲自到场”，遗书上的名字是你，日期是明天，签收栏已经填好. \n“欢迎来到通往明天的邀请函！”",
-		"min_profile_level": 20, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_absent_person_frame", "display_name": "缺席者相框", "item_type": "collectible",
@@ -303,7 +303,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 42, "icon_path": "res://assets/items/z1/col_absent_person_frame.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "据说这个照片里面的人最终都消失了，最终的归宿也没有人知道，隐隐约约会有人觉得在求救. \n可惜，零人在意. ",
-		"min_profile_level": 1, "channels": ["altar"],
+		"min_profile_level": 0, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_negative_floor_plate", "display_name": "负层门牌", "item_type": "collectible",
@@ -311,7 +311,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 43, "icon_path": "res://assets/items/z1/col_negative_floor_plate.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "门牌薄得能塞进信封，里面的电梯井却一直往下，物业按井深收公摊，卷尺还在放，似乎没有尽头。\n“向着星辰与……”",
-		"min_profile_level": 15, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_21", "display_name": "停五钟", "item_type": "collectible",
@@ -319,7 +319,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 44, "icon_path": "res://assets/items/z1/col_21.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "因为某个员工报点失误，这个钟表一怒一下怒了一下，然后把自己的全部时刻都改为了相同的标识. \n这算是人工损毁还是自然损毁？",
-		"min_profile_level": 1, "channels": ["altar"],
+		"min_profile_level": 0, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_borrowed_shadow_doll", "display_name": "借影人偶", "item_type": "collectible",
@@ -327,7 +327,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 45, "icon_path": "res://assets/items/z1/col_borrowed_shadow_doll.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "“我重生了，只有我知道，将来诡异即将降临公司，拿到这个人偶才能…...”\n“……你能不能好好看看我，我好歹也是个S级诡异. ”",
-		"min_profile_level": 25, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_13", "display_name": "吃字机", "item_type": "collectible",
@@ -335,7 +335,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 46, "icon_path": "res://assets/items/z1/col_13.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "本吃字改编已经过发行商和版权所有者授权. \n这个“授权”前面似乎有被吃过的痕迹？",
-		"min_profile_level": 29, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 	{
 		"item_id": "col_bottomless_ballast_canister", "display_name": "无底压舱罐", "item_type": "collectible",
@@ -343,7 +343,7 @@ const COLLECTIBLE_ROWS := [
 		"source_row": 47, "icon_path": "res://assets/items/z1/col_bottomless_ballast_canister.png",
 		"short_description": "6档藏品，可登记或出售。",
 		"flavor": "就算这个罐头没有底可以无限使用，但是规矩要立住，每天只能使用有限次，这样后面的人用着才不烧心. ",
-		"min_profile_level": 30, "channels": ["altar"],
+		"min_profile_level": 28, "channels": ["search", "chest", "altar"],
 	},
 ]
 const SUPPLY_ROWS := [
@@ -355,7 +355,7 @@ const SUPPLY_ROWS := [
 		"flavor": "尺码比登记的大一点，后勤说这是给未来的伤口留位置。",
 		"equipment_slot": "armor", "effect_kind": "max_hp", "effect_amount": 5,
 		"effect_params": {"trigger":"while_equipped","free_heal_on_equip":false},
-		"min_profile_level": 2, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 4, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_edge_opener", "display_name": "开刃器", "item_type": "equipment",
@@ -365,7 +365,7 @@ const SUPPLY_ROWS := [
 		"flavor": "验收时只拿它开箱，验收的人转身以后，用途就多了。",
 		"equipment_slot": "tool", "effect_kind": "combat_power", "effect_amount": 5,
 		"effect_params": {"trigger":"while_equipped"},
-		"min_profile_level": 2, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 4, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_recovery_bag", "display_name": "回收袋", "item_type": "equipment",
@@ -375,7 +375,7 @@ const SUPPLY_ROWS := [
 		"flavor": "加出来的口袋算员工福利，装进去的东西依然要上交。",
 		"equipment_slot": "rig", "effect_kind": "backpack_capacity", "effect_amount": 10,
 		"effect_params": {"trigger":"while_equipped","container":"loot"},
-		"min_profile_level": 2, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 4, "channels": ["camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_debris_brow_guard", "display_name": "挡屑额罩", "item_type": "equipment",
@@ -385,7 +385,7 @@ const SUPPLY_ROWS := [
 		"flavor": "挡住飞屑以后，检查员终于看清了员工脸上的意见。",
 		"equipment_slot": "head", "effect_kind": "physical_damage_reduce_percent", "effect_amount": 10,
 		"effect_params": {"trigger":"external_physical_direct_damage","max_uses":10,"min_block":1,"min_remaining_damage":1},
-		"min_profile_level": 4, "channels": ["chest","camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 10, "channels": ["chest"], "map_ids": ["classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_pressure_relief_wrench", "display_name": "泄压扳手", "item_type": "equipment",
@@ -395,7 +395,7 @@ const SUPPLY_ROWS := [
 		"flavor": "设备和同事都安静了，至于松开的是哪颗螺丝，维修单上没写。",
 		"equipment_slot": "tool", "effect_kind": "combat_mechanism_pressure_reduce", "effect_amount": 5,
 		"effect_params": {"trigger":"pressure_increase","pressure_sources":["combat","mechanism"],"max_uses":10,"per_source":true},
-		"min_profile_level": 5, "channels": ["chest"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 10, "channels": ["chest"], "map_ids": ["classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_goggles", "display_name": "护目镜", "item_type": "equipment",
@@ -405,7 +405,7 @@ const SUPPLY_ROWS := [
 		"flavor": "镜片边上多出来的画面原本算瑕疵，采购把它填进了功能栏。",
 		"equipment_slot": "head", "effect_kind": "scan_diagonal_reveal", "effect_amount": 1,
 		"effect_params": {"trigger":"basic_scan","unknown_only":true},
-		"min_profile_level": 7, "channels": ["chest","camp_shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 5, "channels": ["chest"], "map_ids": ["classic_10x10_standard","classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_insulated_sleeve", "display_name": "绝缘套", "item_type": "equipment",
@@ -415,7 +415,7 @@ const SUPPLY_ROWS := [
 		"flavor": "危险通知照常送达，情绪部门选择少签收一点。",
 		"equipment_slot": "gear", "effect_kind": "pressure_reduce_percent", "effect_amount": 25,
 		"effect_params": {"trigger":"pressure_increase","max_uses":5,"max_reduction":10,"rounding":"floor","per_source":true},
-		"min_profile_level": 11, "channels": ["search"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 15, "channels": ["search"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_buffer_buckle", "display_name": "缓冲腰扣", "item_type": "equipment",
@@ -425,7 +425,7 @@ const SUPPLY_ROWS := [
 		"flavor": "扣紧时像有人抱住了你，通常只有爆炸的时候才抱得这么紧。",
 		"equipment_slot": "rig", "effect_kind": "mine_damage_reduce", "effect_amount": 5,
 		"effect_params": {"trigger":"mine_hit","max_uses":3,"departure_shield":15,"shield_on_reequip":false},
-		"min_profile_level": 14, "channels": ["chest"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 10, "channels": ["chest"], "map_ids": ["classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_seam_finder_pendant", "display_name": "寻缝坠", "item_type": "equipment",
@@ -435,7 +435,7 @@ const SUPPLY_ROWS := [
 		"flavor": "零钱总从最不该有缝的地方掉出来，财务坚持那是节约出来的。",
 		"equipment_slot": "device", "effect_kind": "new_output_black_currency_percent", "effect_amount": 10,
 		"effect_params": {"trigger":"first_search_or_chest","max_uses":10,"value_basis":"new_output_base_value","reward_cap":-1,"recursive":false},
-		"min_profile_level": 17, "channels": ["search"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 10, "channels": ["search"], "map_ids": ["classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_etched_sleeve", "display_name": "刻线护袖", "item_type": "equipment",
@@ -445,7 +445,7 @@ const SUPPLY_ROWS := [
 		"flavor": "每办妥一件怪事，袖口就多一道刻痕，维修部正在研究第十一道该记到谁身上。",
 		"equipment_slot": "gear", "effect_kind": "event_stage_shield", "effect_amount": 5,
 		"effect_params": {"trigger":"valid_noncombat_event_stage","max_uses":10},
-		"min_profile_level": 20, "channels": ["chest"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 20, "channels": ["chest"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_signal_pin", "display_name": "信号针", "item_type": "equipment",
@@ -455,7 +455,7 @@ const SUPPLY_ROWS := [
 		"flavor": "针头会记住你打过的架，申请抢救时比本人说话有分量。",
 		"equipment_slot": "device", "effect_kind": "salvage_capacity", "effect_amount": 10,
 		"effect_params": {"trigger":"ordinary_actual_clear","max_uses":2,"per_clear_capacity":5,"total_capacity_bonus_cap":20,"distinct_rooms":true,"endings":["failure","abandon"]},
-		"min_profile_level": 21, "channels": ["mechanism_success"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 20, "channels": ["mechanism_success"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_folding_shovel", "display_name": "折叠铲", "item_type": "equipment",
@@ -465,7 +465,7 @@ const SUPPLY_ROWS := [
 		"flavor": "“这是开箱工具？”“用途申报先这么填。”",
 		"equipment_slot": "tool", "effect_kind": "combat_power", "effect_amount": 30,
 		"effect_params": {"trigger":"while_equipped","ordinary_clear_pressure":4,"actual_combat_only":true},
-		"min_profile_level": 23, "channels": ["chest"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 20, "channels": ["chest"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 		"art_status": "runtime_verified", "candidate_id": "eq_folding_shovel",
 		"candidate_sprite_path": "D:/AGAME2/_worktrees/z1-scene-art/outputs/supplies-art-20261115/icons/eq_folding_shovel.png", "candidate_sha256": "FDF45153D04C228699606C679B771A598C27C2219A80C7D1FE91E660BF5BA99F",
 	},
@@ -477,7 +477,7 @@ const SUPPLY_ROWS := [
 		"flavor": "设计师保证能扛下一整轮事故，员工试穿后希望事故别分期。",
 		"equipment_slot": "armor", "effect_kind": "ordinary_clear_shield", "effect_amount": 6,
 		"effect_params": {"trigger":"ordinary_actual_clear","max_uses":5,"departure_shield":30,"max_hp_delta":-10,"distinct_rooms":true,"shield_on_reequip":false},
-		"min_profile_level": 24, "channels": ["monster"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 20, "channels": ["monster"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "eq_old_work_badge", "display_name": "旧工牌", "item_type": "equipment",
@@ -487,7 +487,7 @@ const SUPPLY_ROWS := [
 		"flavor": "“系统里已经发过一次了。”“那就按历史惯例再发一次。”",
 		"equipment_slot": "device", "effect_kind": "event_extra_ordinary_item", "effect_amount": 1,
 		"effect_params": {"trigger":"noncombat_random_item_event","max_uses":3,"per_room_limit":1,"pool":"origin_event_ordinary_pool","max_collectible_tier":6,"backpack_capacity_delta":-10,"recursive":false,"excluded_rewards":["material_return","fixed_delivery","quest","research"],"overflow_policy":"unresolved"},
-		"min_profile_level": 26, "channels": ["mechanism_success"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 25, "channels": ["mechanism_success"], "map_ids": ["classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 		"art_status": "runtime_verified", "candidate_id": "eq_old_work_badge",
 		"candidate_sprite_path": "D:/AGAME2/_worktrees/z1-scene-art/outputs/supplies-art-20261115/icons/eq_old_work_badge.png", "candidate_sha256": "6BD6B19DC70E2A7852C1AE2285EF8236C1CA7C33201F77D1C4D7C17924CE9E96",
 	},
@@ -511,7 +511,7 @@ const SUPPLY_ROWS := [
 		"flavor": "建议配水服用，配方里的水需由员工自行提供。",
 		"equipment_slot": "", "effect_kind": "heal", "effect_amount": 10,
 		"effect_params": {"trigger":"use","blocked_when_full":true},
-		"min_profile_level": 1, "channels": ["search","starter_claim"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 0, "channels": ["search","starter_claim"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_tape_roll", "display_name": "胶带卷", "item_type": "consumable",
@@ -521,7 +521,7 @@ const SUPPLY_ROWS := [
 		"flavor": "修不了伤口的部分可以多缠两圈，至少登记时看不出来。",
 		"equipment_slot": "", "effect_kind": "physical_reduction_once", "effect_amount": 10,
 		"effect_params": {"trigger":"next_external_physical_direct_damage","max_hits":1,"min_remaining_damage":1,"nonstacking":true},
-		"min_profile_level": 1, "channels": ["search","starter_claim"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 0, "channels": ["search","starter_claim"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_range_powder", "display_name": "测距粉包", "item_type": "consumable",
@@ -531,7 +531,7 @@ const SUPPLY_ROWS := [
 		"flavor": "撒出去的粉先替你走两步，回来多少主要看前面的工作环境。",
 		"equipment_slot": "", "effect_kind": "reveal_two_away", "effect_amount": 1,
 		"effect_params": {"trigger":"use","distance":2,"direction_order":["up","right","down","left"],"unknown_only":true,"reveal_room_type":true,"reveal_adjacent_mines":true,"requires_target":true},
-		"min_profile_level": 1, "channels": ["search"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 0, "channels": ["search"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_med_patch", "display_name": "急救贴", "item_type": "consumable",
@@ -541,7 +541,7 @@ const SUPPLY_ROWS := [
 		"flavor": "贴好以后请继续作业，伤口若有异议，可以等下班再提。",
 		"equipment_slot": "", "effect_kind": "heal", "effect_amount": 25,
 		"effect_params": {"trigger":"use","blocked_when_full":true},
-		"min_profile_level": 1, "channels": ["first_aid_cabinet"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 0, "channels": ["first_aid_cabinet"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_calm_candy", "display_name": "镇静糖", "item_type": "consumable",
@@ -551,7 +551,7 @@ const SUPPLY_ROWS := [
 		"flavor": "包装上写着“别往心里去”，糖含完了，那几句话还在嘴里。",
 		"equipment_slot": "", "effect_kind": "pressure_reduce", "effect_amount": 10,
 		"effect_params": {"trigger":"use","next_pressure_reduction":2,"max_hits":2,"nonstacking":true,"requires_any_benefit":true},
-		"min_profile_level": 3, "channels": ["shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 7, "channels": ["shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_hard_shell_patch", "display_name": "硬壳补片", "item_type": "consumable",
@@ -571,7 +571,7 @@ const SUPPLY_ROWS := [
 		"flavor": "红线以下才批准使用，恢复到红线以上就说明审批很及时。",
 		"equipment_slot": "", "effect_kind": "heal_below_half", "effect_amount": 50,
 		"effect_params": {"trigger":"use","required_hp_below_percent":50},
-		"min_profile_level": 15, "channels": ["chest"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 15, "channels": ["chest"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_scan_pin", "display_name": "扫描针", "item_type": "consumable",
@@ -581,7 +581,7 @@ const SUPPLY_ROWS := [
 		"flavor": "它会把附近的坏消息一次报齐，省下逐个发现时的惊喜。",
 		"equipment_slot": "", "effect_kind": "basic_scan", "effect_amount": 4,
 		"effect_params": {"trigger":"use","direction_order":["up","right","down","left"],"triggers_basic_scan_bonuses":true},
-		"min_profile_level": 6, "channels": ["chest","shop"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 5, "channels": ["chest","shop"], "map_ids": ["classic_10x10_standard","classic_10x10_hard"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_ledger_seal_paper", "display_name": "封账纸", "item_type": "consumable",
@@ -591,7 +591,7 @@ const SUPPLY_ROWS := [
 		"flavor": "交出去的那部分钱终于安全了，折掉的部分被登记为手续齐全。",
 		"equipment_slot": "", "effect_kind": "black_to_safe_gold_percent", "effect_amount": 80,
 		"effect_params": {"trigger":"use","max_black_currency":100,"max_uses":1,"rounding":"floor","min_gold_gain":1,"safe_gold_all_endings":true},
-		"min_profile_level": 16, "channels": ["search"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 15, "channels": ["search"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_stabilizer", "display_name": "稳定剂", "item_type": "consumable",
@@ -601,7 +601,7 @@ const SUPPLY_ROWS := [
 		"flavor": "建议摇匀再喝，喝完还在晃的部分请交给医疗部门判断。",
 		"equipment_slot": "", "effect_kind": "pressure_reduce_and_cleanse", "effect_amount": 24,
 		"effect_params": {"trigger":"use","cleanse_count":1,"cleanse_priority":["poison","bleeding"],"other_cleanse_types_status":"unresolved","requires_any_benefit":true},
-		"min_profile_level": 18, "channels": ["monster"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 15, "channels": ["monster"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_cooling_patch", "display_name": "静脉冷贴", "item_type": "consumable",
@@ -611,7 +611,7 @@ const SUPPLY_ROWS := [
 		"flavor": "护士说贴上以后会有点冷，收费单上的“冷静处理”原来真有操作步骤。",
 		"equipment_slot": "", "effect_kind": "shield_and_pressure_reduce", "effect_amount": 30,
 		"effect_params": {"trigger":"use","pressure_reduction":10,"shield_cap":-1,"requires_any_benefit":true},
-		"min_profile_level": 19, "channels": ["chest"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 15, "channels": ["chest"], "map_ids": ["classic_13x13_normal","classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_red_battery", "display_name": "红电池", "item_type": "consumable",
@@ -633,7 +633,7 @@ const SUPPLY_ROWS := [
 		"flavor": "抢救登记时，最重的那件终于学会了少报十点体重。",
 		"equipment_slot": "", "effect_kind": "salvage_capacity", "effect_amount": 20,
 		"effect_params": {"trigger":"use","max_uses":1,"heaviest_selected_collectible_weight_reduction":10,"min_salvage_weight":1,"endings":["failure","abandon"]},
-		"min_profile_level": 22, "channels": ["salvage_seal_cabinet"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 21, "channels": ["salvage_seal_cabinet"], "map_ids": [], "required_research_id": "", "channels_status": "confirmed",
 	},
 	{
 		"item_id": "con_waiver_medicine", "display_name": "免责药", "item_type": "consumable",
@@ -643,7 +643,7 @@ const SUPPLY_ROWS := [
 		"flavor": "服用后可以继续站在事故现场，责任认定书会替你躺一会儿。",
 		"equipment_slot": "", "effect_kind": "physical_damage_reduce_percent", "effect_amount": 50,
 		"effect_params": {"trigger":"current_or_next_combat","max_hits":4,"duration_seconds":20,"pressure_cost":10,"healing_reduce_percent":50,"shielded_hit_counts":true,"nonstacking":true,"end_on_combat_end":true,"end_on_retreat":true,"ticks_in_menus":true},
-		"min_profile_level": 27, "channels": ["chest"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 20, "channels": ["chest"], "map_ids": ["classic_13x13_hard","classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 		"art_status": "runtime_verified", "candidate_id": "con_waiver_medicine",
 		"candidate_sprite_path": "D:/AGAME2/_worktrees/z1-scene-art/outputs/supplies-art-20261115/icons/con_waiver_medicine.png", "candidate_sha256": "C71037C6964F8AA1910C035660DF86B97A16A2093BABAF9886C318F862103022",
 	},
@@ -655,7 +655,7 @@ const SUPPLY_ROWS := [
 		"flavor": "说明书劝你别浪费最后十二秒，却没说明这是药效的还是你的。",
 		"equipment_slot": "", "effect_kind": "combat_power_percent", "effect_amount": 25,
 		"effect_params": {"trigger":"current_combat_or_next_first_attack","duration_seconds":12,"max_uses":1,"life_saves":1,"life_save_hp":1,"max_hp_cost":15,"requires_max_hp_above":15,"pressure_cost":12,"talent_life_save_first":true,"first_attack_buffed":true,"end_on_combat_end":true,"end_on_retreat":true,"ticks_in_menus":true},
-		"min_profile_level": 30, "channels": ["chest"], "map_ids": ["classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
+		"min_profile_level": 25, "channels": ["chest"], "map_ids": ["classic_13x13_hell"], "required_research_id": "", "channels_status": "confirmed",
 		"art_status": "runtime_verified", "candidate_id": "con_countdown_pill",
 		"candidate_sprite_path": "D:/AGAME2/_worktrees/z1-scene-art/outputs/supplies-art-20261115/icons/con_countdown_pill.png", "candidate_sha256": "292AC38AA8625E29EC08997C2813B2E931619C562F0F6E126603D015F1808B3E",
 	},

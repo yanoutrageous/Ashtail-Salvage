@@ -9,6 +9,12 @@ const Maps := preload("res://scripts/core/content/m7_content_catalog.gd")
 const ExclusiveDrop := preload("res://scripts/core/content/z2_exclusive_drop.gd")
 const Talents := preload("res://scripts/core/progression/z2_talent_runtime.gd")
 const CHANNELS := ["search", "chest", "monster", "mechanism_success", "compression", "recycle", "altar", "shop", "first_aid_cabinet", "salvage_seal_cabinet"]
+const COLLECTIBLE_SHARES := [
+	[0.72, 0.20, 0.06, 0.017, 0.0025, 0.0005],
+	[0.60, 0.26, 0.10, 0.033, 0.006, 0.001],
+	[0.48, 0.30, 0.15, 0.055, 0.0125, 0.0025],
+	[0.34, 0.34, 0.20, 0.09, 0.024, 0.006],
+]
 const MONSTER_MATERIALS := ["mon_old_gear_set", "mon_broken_patrol_badge", "mon_overheated_core", "mon_loader_black_box", "mon_abnormal_instruction", "sp_reset_spring"]
 # User-delegated Z2 trial rule, 2026-11-16: ordinary Monster clears only.
 # Reset spring remains in the complement; this grants no map/level eligibility.
@@ -75,8 +81,7 @@ static func _base_candidates(channel: String, frozen: Dictionary, map_id: String
 		return result
 	var difficulty := str(map.get("difficulty", "normal"))
 	var index := int({"simple": 0, "easy": 0, "normal": 1, "standard": 1, "hard": 2, "hell": 3}.get(difficulty, 1))
-	var shares: Array = Z1.HIGH_TIER_SHARES[index]
-	var groups := _groups(channel, shares, stage)
+	var groups := _groups(channel, index, stage)
 	var total := 0.0
 	for group: Array in groups:
 		# Remove ineligible definitions before within-group weights or category normalization.
@@ -178,14 +183,21 @@ static func _map_id(context: RunContext) -> String:
 	return str(context.run_start_config.get("map_config_id", "")) if context != null else ""
 
 
-static func _groups(channel: String, shares: Array, stage: int) -> Array:
+static func _groups(channel: String, difficulty: int, stage: int) -> Array:
+	if channel in ["search", "chest"]:
+		var groups: Array = []
+		for share: float in COLLECTIBLE_SHARES[difficulty]:
+			groups.append([[], 0.70 * share])
+		for item in Items.collectibles():
+			groups[int(item.collectible_level) - 1][0].append(str(item.item_id))
+		var consumables := _supplies(channel, "consumable")
+		var equipment := _supplies(channel, "equipment")
+		if channel == "search":
+			return groups + [[consumables, 0.25], [equipment, 0.05]]
+		consumables.append("sp_transit_lead_seal") # Z1 included S18 in this existing group.
+		return groups + [[consumables, 0.20], [equipment, 0.10]]
+	var shares: Array = Z1.HIGH_TIER_SHARES[difficulty]
 	match channel:
-		"search":
-			return [[_tier(1), 0.70 * (1.0 - shares[0])], [_tier(2), 0.70 * shares[0]], [_supplies(channel, "consumable"), 0.25], [_supplies(channel, "equipment"), 0.05]]
-		"chest":
-			var consumables := _supplies(channel, "consumable")
-			consumables.append("sp_transit_lead_seal") # Z1 included S18 in this existing group.
-			return [[_tier(3), 0.70 * (1.0 - shares[1])], [_tier(4), 0.70 * shares[1]], [consumables, 0.20], [_supplies(channel, "equipment"), 0.10]]
 		"monster":
 			return [[MONSTER_MATERIALS, 0.65], [_supplies(channel, "consumable"), 0.25], [_supplies(channel, "equipment"), 0.10]]
 		"mechanism_success":

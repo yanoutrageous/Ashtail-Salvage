@@ -364,7 +364,7 @@ static func codex_subject(entry_id: String) -> Dictionary:
 
 static func is_shop_unlocked(definition: Dictionary, meta: Dictionary) -> bool:
 	if Z2Rules.applies_to(meta):
-		return int(meta.get("profile_level", 0)) >= 2 and Z2ContentEligibility.is_eligible(str(definition.get("item_id", "")), "camp_shop", Z2ContentEligibility.freeze_profile(meta))
+		return Z2ContentEligibility.is_eligible(str(definition.get("item_id", "")), "camp_shop", Z2ContentEligibility.freeze_profile(meta))
 	match str(definition.get("unlock_kind", "default")):
 		"research":
 			return _array(meta.get("research_completed_ids", [])).has(str(definition.get("unlock_value", "")))

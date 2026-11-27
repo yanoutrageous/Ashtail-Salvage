@@ -223,6 +223,16 @@ func _test_relief() -> void:
 		_dispose(r)
 
 func _test_first_aid() -> void:
+	var tutorial = _runtime()
+	tutorial.context.run_start_config.map_config_id = "tutorial_5x5"
+	tutorial.context.run_start_config.profile_fields.content_eligibility = Eligibility.freeze_profile({"profile_level": 0})
+	var official := Z2LootCatalog.economy_catalog(tutorial.context)
+	if _prepare(tutorial, "first_aid", {}, official):
+		_check(_black(tutorial) == 300, "Lv0 teaching aid prepares without paying")
+		var purchase := _act(tutorial, "first_aid", "buy", {}, official)
+		var delivery: Dictionary = purchase.get("facts", {}).get("delivery", {})
+		_check(purchase.get("ok", false) and _black(tutorial) == 291 and delivery.get("item_id", "") == "con_med_patch", "Lv0 buys the official patch for nine black coins")
+	_dispose(tutorial)
 	for pressure in [39, 40]:
 		var r = _runtime()
 		r.context.pressure = pressure
@@ -428,7 +438,7 @@ func _test_empty_pools() -> void:
 			return Economy.choose(r.context, r.context.get_current_pos(), event, "prepare"))
 		_check(result.get("reason", "") == "missing_pool" and r.capture_authoritative_state() == before, event + ": no official fallback from fixture")
 		_dispose(r)
-	for event in ["shop", "first_aid", "seal", "compress"]:
+	for event in ["shop", "seal"]:
 		r = _runtime()
 		r.context.run_start_config.profile_fields.content_eligibility = Eligibility.freeze_profile({"profile_level": 0})
 		before = r.capture_authoritative_state()

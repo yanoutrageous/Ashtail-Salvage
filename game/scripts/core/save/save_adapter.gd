@@ -378,7 +378,13 @@ func _recovered_load_result(data: Dictionary, recovery_path: String, primary_sta
 func _normalize_meta_progress(data: Dictionary, fallback: Dictionary) -> Dictionary:
 	if Z2ProgressionRulesScript.applies_to(data):
 		# Current profiles own their explicit budget and receipts. Never synthesize rewards here.
-		return M7ProgressionServiceScript.normalize_meta(data)
+		var current := data
+		if current.get("z2_xp_curve_version", 0) == 0:
+			current = data.duplicate()
+			current["z2_xp_curve_version"] = Z2ProgressionRulesScript.XP_CURVE_VERSION
+			if bool(current.get("tutorial_completed", false)):
+				current["profile_level"] = Z2ProgressionRulesScript.level_for_exp(int(current.profile_exp))
+		return M7ProgressionServiceScript.normalize_meta(current)
 	var result := fallback.duplicate(true)
 	result["schema_version"] = maxi(int(data.get("schema_version", 1)), int(result.get("schema_version", 5)))
 	result["gold"] = maxi(0, int(data.get("gold", result.get("gold", 0))))

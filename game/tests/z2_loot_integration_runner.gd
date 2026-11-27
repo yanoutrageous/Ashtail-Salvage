@@ -82,8 +82,6 @@ func _catalog_and_channels() -> void:
 				if item.item_type == "collectible":
 					seen[item.item_id] = true
 					var tier := int(item.collectible_level)
-					if channel == "search": _check(tier in [1, 2], "search uses true tier")
-					if channel == "chest": _check(tier in [3, 4], "chest uses true tier")
 					if channel == "compression": _check(tier == 2, "compression true tier2")
 			_check(is_equal_approx(sum, 1.0), "normalized after filter " + channel)
 	_check(seen.size() == 42, "all 42 true collectibles reachable")
@@ -94,15 +92,8 @@ func _catalog_and_channels() -> void:
 	for channel in ["qualification", "event", "extra_drop", "unknown"]:
 		_check(loot.candidates(channel, _frozen(50), MAP).is_empty(), "no ambiguous acquisition channel " + channel)
 	for channel in CHANNELS:
-		_check(not bool(loot.preflight(channel, _frozen(0), MAP).ok), "empty required preflight " + channel)
-		_check(loot.roll(channel, Vector2i.ZERO, 3, _frozen(0), MAP).is_empty(), "empty roll has no fallback " + channel)
-	for item in Items.all_items():
-		var id := str(item.item_id)
-		if not str(item.required_research_id).is_empty(): continue
-		var minimum := int(item.min_profile_level)
-		for channel in item.channels:
-			_check(not Eligibility.is_eligible(id, channel, _frozen(minimum - 1), MAP), "level below " + id)
-			_check(Eligibility.is_eligible(id, channel, _frozen(minimum), MAP), "level boundary " + id)
+		_check(not bool(loot.preflight(channel, {}, MAP).ok), "missing freeze fails closed " + channel)
+		_check(loot.roll(channel, Vector2i.ZERO, 3, {}, MAP).is_empty(), "missing freeze has no fallback " + channel)
 	for id in ["mon_old_gear_set", "mon_overheated_core", "mon_loader_black_box", "sp_inspection_calibration_plate", "sp_transit_lead_seal", "sp_reset_spring", "sp_depressurized_valve_core", "sp_altar_residue"]:
 		var material: Dictionary = loot.definition(id)
 		var original := {}
@@ -114,26 +105,55 @@ func _catalog_and_channels() -> void:
 
 
 func _weights_and_boundaries() -> void:
-	for row in [["classic_7x7_simple", 0.15, 0.20], ["classic_13x13_normal", 0.25, 0.35], ["classic_13x13_hard", 0.35, 0.50], [MAP, 0.45, 0.65]]:
-		var search: Array = loot.candidates("search", _frozen(50), row[0])
-		_check(is_equal_approx(_tier_probability(search, 2), 0.70 * float(row[1])), "Z1 search difficulty share " + str(row[0]))
-		var chest: Array = loot.candidates("chest", _frozen(50), row[0])
-		_check(is_equal_approx(_tier_probability(chest, 4), 0.70 * float(row[2])), "Z1 chest difficulty share " + str(row[0]))
-	var initial: Array = loot.candidates("search", _frozen(1), MAP)
-	_check(is_equal_approx(_tier_probability(initial, 2), 0.70 * 0.45 / 0.95), "empty equipment category renormalizes before draw")
-	_check(is_equal_approx(_prob(initial, "con_ration") / _prob(initial, "con_tape_roll"), 1.5), "60:40 roll weights not physical weight")
-	for map_id in ["classic_7x7_simple", "classic_13x13_normal", "classic_13x13_hard", MAP]:
-		var chest_ids := _ids(loot.candidates("chest", _frozen(50), map_id))
-		var monster_ids := _ids(loot.candidates("monster", _frozen(50), map_id))
-		var mechanism_ids := _ids(loot.candidates("mechanism_success", _frozen(50), map_id))
-		_check(chest_ids.has("eq_folding_shovel") == map_id.begins_with("classic_13"), "shovel 13 maps " + map_id)
-		_check(chest_ids.has("con_waiver_medicine") == (map_id in ["classic_13x13_hard", MAP]), "waiver difficult13 " + map_id)
-		_check(chest_ids.has("con_countdown_pill") == (map_id == MAP), "pill hell " + map_id)
-		_check(monster_ids.has("mon_overheated_core") == map_id.begins_with("classic_13"), "research core maps " + map_id)
-		_check(monster_ids.has("mon_loader_black_box") == (map_id == MAP), "blackbox hell " + map_id)
-		_check(mechanism_ids.has("eq_old_work_badge") == (map_id in ["classic_13x13_hard", MAP]), "oldbadge difficult13 " + map_id)
+	var shares := [
+		[0.72, 0.20, 0.06, 0.017, 0.0025, 0.0005],
+		[0.60, 0.26, 0.10, 0.033, 0.006, 0.001],
+		[0.48, 0.30, 0.15, 0.055, 0.0125, 0.0025],
+		[0.34, 0.34, 0.20, 0.09, 0.024, 0.006],
+	]
+	var cases := [
+		["classic_7x7_simple", 1, 0, 0.95, 0.90], ["classic_7x7_normal", 3, 1, 0.95, 0.90],
+		["classic_10x10_easy", 3, 0, 0.95, 0.90], ["classic_10x10_standard", 5, 1, 0.95, 1.0],
+		["classic_10x10_hard", 10, 2, 1.0, 1.0], ["classic_13x13_normal", 15, 1, 1.0, 0.90],
+		["classic_13x13_hard", 20, 2, 1.0, 1.0], [MAP, 25, 3, 1.0, 1.0],
+	]
+	for row in cases:
+		var search: Array = loot.candidates("search", _frozen(row[1]), row[0])
+		var chest: Array = loot.candidates("chest", _frozen(row[1]), row[0])
+		var expected: Array = shares[row[2]]
+		var sum := 0.0
+		for tier in range(1, 7):
+			sum += float(expected[tier - 1])
+			_check(is_equal_approx(_tier_probability(search, tier), 0.70 / float(row[3]) * expected[tier - 1]), "search %s tier %d" % [row[0], tier])
+			_check(is_equal_approx(_tier_probability(chest, tier), 0.70 / float(row[4]) * expected[tier - 1]), "chest %s tier %d" % [row[0], tier])
+		_check(is_equal_approx(sum, 1.0), "difficulty row sums to 100% " + row[0])
+		var ratio := float(Legacy.COLLECTIBLE_WEIGHTS[0]) / float(Legacy.COLLECTIBLE_WEIGHTS[4])
+		_check(is_equal_approx(_prob(search, "col_01") / maxf(_prob(search, "col_05"), 0.000001), ratio), "search retains legacy item weight ratio " + row[0])
+		_check(is_equal_approx(_prob(chest, "col_01") / maxf(_prob(chest, "col_05"), 0.000001), ratio), "chest retains legacy item weight ratio " + row[0])
+	var counts := {0: 17, 1: 17, 2: 26, 11: 26, 12: 33, 27: 33, 28: 42, 50: 42}
+	for level in counts:
+		var search: Array = _collectible_ids(loot.candidates("search", _frozen(level), "classic_7x7_simple"))
+		var chest: Array = _collectible_ids(loot.candidates("chest", _frozen(level), "classic_7x7_simple"))
+		_check(search == chest and search.size() == counts[level], "both sources use every unlocked collectible at Lv%d" % level)
+	var initial: Array = loot.candidates("search", _frozen(0), "tutorial_5x5")
+	_check(_prob(initial, "con_ration") > 0.0 and is_equal_approx(_prob(initial, "con_ration") / maxf(_prob(initial, "con_tape_roll"), 0.000001), 1.5), "Lv0 basic search and 60:40 roll weights")
+	_check(_ids(loot.candidates("first_aid_cabinet", _frozen(0), "tutorial_5x5")) == ["con_med_patch"], "Lv0 tutorial first aid offer")
+	_check(_ids(loot.candidates("recycle", _frozen(0), "tutorial_5x5")).size() == 2, "Lv0 tutorial recycle offer")
+	_check(loot.candidates("shop", _frozen(6), "classic_7x7_simple").is_empty(), "shop before Lv7 is empty")
+	var shop_ids := _ids(loot.candidates("shop", _frozen(7), "classic_7x7_simple"))
+	shop_ids.sort()
+	_check(shop_ids == ["con_calm_candy", "con_scan_pin"], "Lv7 first-map shop offers both approved supplies")
 	_check(loot.candidates("chest", _frozen(50), "unknown_map").is_empty(), "unknown map fails closed")
 	_check(loot.roll("chest", Vector2i.ZERO, 1, _frozen(50), MAP, 0).is_empty(), "zero count does not invent reward")
+
+
+func _collectible_ids(pool: Array) -> Array:
+	var ids: Array = []
+	for entry: Dictionary in pool:
+		if loot.definition(entry.item_id).item_type == "collectible" and float(entry.probability) > 0.0:
+			ids.append(entry.item_id)
+	ids.sort()
+	return ids
 
 
 func _tier_probability(pool: Array, tier: int) -> float:
@@ -187,10 +207,14 @@ func _economy_and_process_contracts() -> void:
 	run.asset_ledger.add_currency(&"black_coin", 100)
 	var catalog: Dictionary = loot.economy_catalog(run)
 	_check(catalog.shop_pool == loot.candidates("shop", _frozen(50), MAP), "T10 actual weighted pool")
-	var prepared := Economy.choose(run, Vector2i(2, 2), "shop", "prepare", {}, catalog)
+	var first_shop := _context(7, "classic_7x7_simple")
+	first_shop.asset_ledger.add_currency(&"black_coin", 100)
+	var first_catalog: Dictionary = loot.economy_catalog(first_shop)
+	var prepared := Economy.choose(first_shop, Vector2i(2, 2), "shop", "prepare", {}, first_catalog)
 	_check(bool(prepared.ok), "actual T10 shop prepares from loot catalog")
-	var state := Economy.public_state(run, Vector2i(2, 2), "shop", catalog)
-	var bought := Economy.choose(run, Vector2i(2, 2), "shop", "buy", {"slot": 0, "quote_id": state.quote_id}, catalog)
+	var state := Economy.public_state(first_shop, Vector2i(2, 2), "shop", first_catalog)
+	_check(state.get("offers", []).size() == 3, "Lv7 shop prepares all three offers")
+	var bought := Economy.choose(first_shop, Vector2i(2, 2), "shop", "buy", {"slot": 0, "quote_id": state.get("quote_id", "")}, first_catalog)
 	_check(bool(bought.ok), "actual T10 weighted offer buys")
 	var empty := _context(0)
 	empty.asset_ledger.add_currency(&"black_coin", 100)

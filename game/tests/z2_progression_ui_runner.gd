@@ -241,7 +241,7 @@ func _test_levels_and_talents() -> void:
 
 
 func _test_catalog_context() -> void:
-	var meta := _summary(2)
+	var meta := _summary(4)
 	meta.gold = 48
 	var item := Items.definition("eq_old_vest")
 	# The UI must use supplied shop prices and the current item's description/weight.
@@ -267,8 +267,9 @@ func _test_catalog_context() -> void:
 	meta.gold = 2 * int(Items.definition("eq_edge_opener").purchase_price)
 	var new_purchase := Config.adjust_purchase_quantity(Config.default_config(1, meta), "eq_edge_opener", 1)
 	_check(Config.purchase_quantity(new_purchase.config, "eq_edge_opener") == 2, "quantity action resolves new-only camp item with current meta")
-	var locked := _claim_model(_summary(1))
-	_check(not _row(locked, "m7_shop_eq_old_vest").get("unlocked", true), "new camp qualification respects level gate")
+	var locked := _row(_claim_model(_summary(3)), "m7_shop_eq_old_vest")
+	_check(not locked.get("unlocked", true), "new camp qualification respects level gate")
+	_check(str(locked.get("unlock_text", "")).contains("4"), "locked shop row shows the actual Lv4 requirement")
 	var research := LongTerm.build_from_snapshot(&"research", {"meta_progress_summary": meta})
 	var research_cards: Array = research.m7_cards_by_group["research/unlock_interface"]
 	_check(research_cards.size() == 3 and research_cards[0].id == "research_hard_shell_patch", "research fallback uses new research definitions")

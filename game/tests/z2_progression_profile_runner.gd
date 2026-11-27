@@ -50,6 +50,24 @@ func _run() -> void:
 			reopened.load_or_create_default()
 			reopened.claim_initial_supplies()
 			_check(reopened.data.warehouse_items.size() == 2, "first claim receipt survives restart")
+	var old_curve_path := save_path + ".old_curve"
+	var old_curve := reopened.data.duplicate(true)
+	old_curve["profile_exp"] = 110
+	old_curve["profile_level"] = 3
+	old_curve["gold"] = 42
+	old_curve.erase("z2_xp_curve_version")
+	var old_curve_file := FileAccess.open(old_curve_path, FileAccess.WRITE)
+	old_curve_file.store_string(JSON.stringify(old_curve))
+	old_curve_file.close()
+	var upgraded := MetaScript.new()
+	upgraded.set_active_profile_path(old_curve_path, "new-z2")
+	_check(upgraded.get_summary().profile_level == 4 and upgraded.data.profile_exp == 110, "existing Z2 profile loads at revised threshold")
+	_check(upgraded.data.gold == 42 and upgraded.data.warehouse_items.size() == 2, "curve migration preserves wallet and earned items")
+	_check(upgraded.save(), "revised curve profile remains writable")
+	upgraded.load_or_create_default()
+	_check(upgraded.data.profile_level == 4 and upgraded.data.profile_exp == 110, "revised curve profile reloads")
+	upgraded.data.profile_level = 3
+	_check(not upgraded.save(), "current curve rejects an inconsistent stored level")
 	var legacy_path := save_path + ".legacy"
 	var adapter := SaveScript.new()
 	var legacy: Dictionary = adapter.default_meta_progress()

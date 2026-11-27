@@ -1236,7 +1236,7 @@ static func _claim_unlock_text(shop: Dictionary, unlocked: bool) -> String:
 	match str(shop.get("unlock_kind", "default")):
 		"research":
 			return "需完成研究：%s" % str(shop.get("unlock_value", ""))
-		"profile":
+		"profile", "z2_qualification":
 			return "档案等级达到 %s" % str(shop.get("unlock_value", ""))
 	return "尚未解锁"
 

@@ -13,7 +13,7 @@ func _run() -> void:
 	_check(ResourceLoader.exists(RULE_PATH), "Z2 independent growth rules exist")
 	if ResourceLoader.exists(RULE_PATH):
 		var rules = load(RULE_PATH)
-		var checkpoints := {2: 30, 3: 70, 4: 120, 5: 180, 10: 630, 15: 1385, 20: 2440, 25: 3795, 30: 5345, 50: 12650}
+		var checkpoints := {2: 30, 3: 60, 4: 110, 5: 160, 6: 230, 10: 510, 11: 610, 15: 1010, 16: 1210, 20: 2010, 21: 2260, 25: 3260, 26: 3560, 30: 4760, 31: 5070, 49: 12360, 50: 12860}
 		for level in checkpoints:
 			var xp: int = checkpoints[level]
 			_check(rules.exp_for_level(level) == xp, "curve threshold Lv%d" % level)
@@ -33,6 +33,20 @@ func _run() -> void:
 			_check(rules.map_blockers(meta, row[0]).is_empty(), "%s unlocks at exact threshold" % row[0])
 			meta.map_success_counts = {}
 			_check(rules.map_blockers(meta, row[0]).is_empty() == (row[2] == ""), "%s predecessor requirement" % row[0])
+		var settlement_cases := [
+			["tutorial_5x5", 0, 0, 0],
+			["classic_7x7_simple", 10, 20, 50], ["classic_7x7_normal", 10, 30, 50],
+			["classic_10x10_easy", 10, 50, 100], ["classic_10x10_standard", 12, 70, 120],
+			["classic_10x10_hard", 15, 100, 150], ["classic_13x13_normal", 15, 120, 200],
+			["classic_13x13_hard", 18, 150, 250], ["classic_13x13_hell", 20, 200, 300],
+		]
+		for row in settlement_cases:
+			var uncapped: Dictionary = rules.settle_scores(row[0], 10, 10, "success")
+			_check(uncapped.experience == row[1] and uncapped.talent_points == row[1], "success multiplier " + row[0])
+			for ending in ["success", "failure", "abandon"]:
+				var capped: Dictionary = rules.settle_scores(row[0], 1000, 1000, ending)
+				var factor := 1.0 if ending == "success" else 0.5
+				_check(capped.experience == int(row[2] * factor) and capped.talent_points == int(row[3] * factor), "caps and ending ratio " + row[0] + ending)
 		var success: Dictionary = rules.settle_scores("classic_10x10_standard", 100, 101, "success")
 		_check(success.experience == 70 and success.talent_points == 120, "success caps XP and talent independently")
 		for ending in ["failure", "abandon"]:

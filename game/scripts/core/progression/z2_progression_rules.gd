@@ -1,10 +1,22 @@
 extends RefCounted
 class_name Z2ProgressionRules
 
-# S1 + C3: I5 per-level requirements rounded up to 5; Lv50 totals 12650.
 const CONTENT_VERSION := "z2-system-20261116"
 const VERSION := 1
+const XP_CURVE_VERSION := 1
+# Index 0 is Lv1 by tutorial graduation. Later entries are incremental XP.
 const LEVEL_COSTS := [
+	0, 30, 30, 50, 50,
+	70, 70, 70, 70, 70,
+	100, 100, 100, 100, 100,
+	200, 200, 200, 200, 200,
+	250, 250, 250, 250, 250,
+	300, 300, 300, 300, 300,
+	310, 320, 330, 340, 350, 360, 370, 380, 390, 400,
+	410, 420, 430, 440, 450, 460, 470, 480, 490, 500,
+]
+# Original saved Z2 profiles have no curve version and store a level from this table.
+const LEGACY_LEVEL_COSTS := [
 	0, 30, 40, 50, 60, 70, 80, 90, 100, 110,
 	125, 140, 150, 165, 175, 185, 200, 210, 225, 235,
 	245, 260, 270, 285, 295, 300, 305, 310, 315, 320,
@@ -31,7 +43,8 @@ static func applies_to(meta: Dictionary) -> bool:
 
 static func default_fields() -> Dictionary:
 	var fields := {
-		"z2_progression_version": VERSION, "profile_level": 0, "profile_exp": 0,
+		"z2_progression_version": VERSION, "z2_xp_curve_version": XP_CURVE_VERSION,
+		"profile_level": 0, "profile_exp": 0,
 		"warehouse_items": [], "starter_grant_version": 0,
 		"talent_earned": 100, "talent_spent": 0, "talent_points": 100,
 		"talent_flags": [], "talent_budget_granted": 100, "talent_catalog_version": 2,
@@ -75,7 +88,11 @@ static func profile_error(meta: Dictionary) -> String:
 			return "invalid_" + field
 	if meta.tutorial_grant_receipt.get("amount", 0) != 100 or meta.talent_earned < 100:
 		return "invalid_tutorial_grant"
-	var expected_level := level_for_exp(int(meta.profile_exp)) if meta.tutorial_completed else 0
+	var curve_version: Variant = meta.get("z2_xp_curve_version", 0)
+	if curve_version != 0 and curve_version != XP_CURVE_VERSION:
+		return "unknown_z2_xp_curve"
+	var costs: Array = LEGACY_LEVEL_COSTS if curve_version == 0 else LEVEL_COSTS
+	var expected_level := _level_for_exp(int(meta.profile_exp), costs) if meta.tutorial_completed else 0
 	if meta.profile_level != expected_level:
 		return "invalid_profile_level"
 	return ""
@@ -91,9 +108,13 @@ static func exp_for_level(level: int) -> int:
 
 
 static func level_for_exp(experience: int) -> int:
+	return _level_for_exp(experience, LEVEL_COSTS)
+
+
+static func _level_for_exp(experience: int, costs: Array) -> int:
 	var total := 0
-	for index in range(1, LEVEL_COSTS.size()):
-		total += int(LEVEL_COSTS[index])
+	for index in range(1, costs.size()):
+		total += int(costs[index])
 		if experience < total:
 			return index
 	return 50

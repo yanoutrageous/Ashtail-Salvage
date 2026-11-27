@@ -23,17 +23,27 @@ func _run() -> void:
 	meta.data.gold = 100
 	meta.save()
 	_check(not meta.purchase_item("eq_old_vest").get("ok", true), "Lv1 shop blocked")
-	meta.data.profile_exp = 30
-	meta.data.profile_level = 2
+	meta.data.profile_exp = 109
+	meta.data.profile_level = 3
 	meta.save()
+	var pre_shop := meta.data.duplicate(true)
+	for item_id in ["eq_old_vest", "eq_edge_opener", "eq_recovery_bag"]:
+		_check(meta.purchase_item(item_id).get("status", "") == "locked", "Lv3 purchase rejected " + item_id)
+	_check(meta.data == pre_shop, "locked camp purchases consume no gold or inventory")
+	meta.data.profile_exp = 110
+	meta.data.profile_level = 4
+	_check(meta.save(), "Lv4 at 110 XP saves")
+	var shop_ids: Array = meta.get_summary().shop_catalog.map(func(item: Dictionary) -> String: return item.item_id)
+	shop_ids.sort()
+	_check(shop_ids == ["eq_edge_opener", "eq_old_vest", "eq_recovery_bag"], "only the first three items list on the camp shelf")
 	var bought: Dictionary = meta.purchase_item("eq_old_vest")
-	_check(bought.get("ok", false), "Lv2 camp vest available")
+	_check(bought.get("ok", false), "Lv4 camp vest available")
 	_check(meta.data.gold == 76, "vest uses approved24 price")
 	_check(meta.data.warehouse_items.size() == 1 and meta.data.warehouse_items[0].weight == 10, "new equipment instance freezes catalog weight")
 	_check(not meta.purchase_item("con_stabilizer").get("ok", true), "old camp item cannot bypass new channel gate")
 	var start: Dictionary = Start.authorize_with_meta({"map_config_id": "classic_7x7_simple", "difficulty": "simple", "selected_objective_id": "commission_recover_supply"}, meta.get_summary())
 	_check(start.get("ok", false), "eligible actual departure")
-	_check(start.get("config", {}).get("profile_fields", {}).get("content_eligibility", {}).get("profile_level", -1) == 2, "departure freezes content eligibility")
+	_check(start.get("config", {}).get("profile_fields", {}).get("content_eligibility", {}).get("profile_level", -1) == 4, "departure freezes content eligibility")
 	var fake := Z2ItemCatalog.definition("col_20")
 	fake["instance_id"] = "same-name-collectible"
 	meta.data.warehouse_items.append(fake)

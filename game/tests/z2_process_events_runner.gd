@@ -66,7 +66,7 @@ func _room(r, pos: Vector2i) -> void:
 func _rules() -> Dictionary:
 	# Explicit, small dependency fixtures. These are NOT official event distributions.
 	return {"difficulty": "normal", "mechanism_failure_damage_type": "physical", "electric_damage_type": "physical",
-		"pools": {"mechanism": {"channel": "mechanism_success", "items": ["eq_old_work_badge"]},
+		"pools": {"mechanism": {"channel": "mechanism_success", "items": ["eq_signal_pin"]},
 			"electric": {"channel": "chest", "items": ["con_hemostatic_clasp"]},
 			"recycle": {"channel": "search", "items": ["col_01"]},
 			"normal_search": {"channel": "search", "items": ["col_05"]},
@@ -190,6 +190,16 @@ func _test_mechanism() -> void:
 	_dispose(r)
 
 func _test_recycle() -> void:
+	var tutorial = _runtime()
+	tutorial.context.run_start_config.map_config_id = "tutorial_5x5"
+	tutorial.context.run_start_config.profile_fields.content_eligibility = Eligibility.freeze_profile({"profile_level": 0})
+	var official := Z2LootCatalog.process_rules(tutorial.context)
+	if _prepare(tutorial, "recycle", official):
+		var taken := _act(tutorial, "recycle", "take", {}, official)
+		var material_id := str(taken.get("facts", {}).get("item_instance_id", ""))
+		var material: Dictionary = tutorial.context.asset_ledger.item_instances.get(material_id, {})
+		_check(taken.get("ok", false) and material.get("item_id", "") in ["sp_transit_lead_seal", "sp_inspection_calibration_plate"], "Lv0 teaching recycle grants an eligible material instance")
+	_dispose(tutorial)
 	var r = _runtime()
 	if not _prepare(r, "recycle"):
 		_dispose(r)

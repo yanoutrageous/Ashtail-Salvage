@@ -102,7 +102,7 @@ func _test_boundaries() -> void:
 		return
 	var boundaries := {10: "classic_10x10_hard", 15: "classic_13x13_normal", 20: "classic_13x13_hard", 25: "classic_13x13_hell"}
 	var clears := {"classic_10x10_standard": 1, "classic_13x13_normal": 1, "classic_13x13_hard": 1}
-	for level: int in [10, 15, 20, 25, 30, 50]:
+	for level: int in [10, 15, 20, 25, 28, 50]:
 		for at: int in [level - 1, level]:
 			if not _stage(at, 0, clears):
 				return
@@ -111,14 +111,14 @@ func _test_boundaries() -> void:
 			var frozen := Eligibility.freeze_profile(disk.data)
 			var map_id: String = boundaries.get(level, "classic_13x13_hell")
 			var admission := Start.authorize_with_meta(_config(map_id, 3141), disk.get_summary())
-			_check(admission.get("ok", false) == (at == level or level >= 30), "actual admission boundary Lv%d -> %s" % [at, map_id])
+			_check(admission.get("ok", false) == (at == level or level >= 28), "actual admission boundary Lv%d -> %s" % [at, map_id])
 			if admission.get("ok", false):
 				_check(admission.config.profile_fields.content_eligibility.profile_level == at, "authorized config freezes exact stage")
 			var pool := Loot.candidates("altar", frozen, map_id, 5)
 			_check(not pool.is_empty(), "official stage5 pool at staged level")
 			_check(pool.all(func(row: Dictionary) -> bool: return Eligibility.is_eligible(str(row.item_id), "altar", frozen, map_id)), "official pool enforces actual altar channel")
-			if level == 30:
-				_check(pool.any(func(row: Dictionary) -> bool: return row.item_id == "col_bottomless_ballast_canister") == (at == 30), "Lv30 collectible unlock in actual pool")
+			if level == 28:
+				_check(pool.any(func(row: Dictionary) -> bool: return row.item_id == "col_bottomless_ballast_canister") == (at == 28), "Lv28 collectible unlock in actual pool")
 			if level == 50 and at == 50:
 				_check(Rules.level_for_exp(int(disk.data.profile_exp) + 1000) == 50 and Rules.exp_for_level(51) == -1, "Lv50 cap without invented Lv51")
 		evidence.append({"kind": "stage_boundary", "levels": [level - 1, level], "predecessor_clear_fixture": clears})
