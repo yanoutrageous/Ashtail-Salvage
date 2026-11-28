@@ -8,13 +8,36 @@ const Y_SPAN := 14.77
 const ELEVATION := 55.0
 const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
 const WALL_LIGHT_LAYER := 4
-const DOOR_LAMP_ENERGY := 2.65
+# A stronger rear/left wash reveals the brick faces; opposite doorways have shorter pools.
+const DOOR_LAMP_ENERGY := {"north": 3.9, "west": 3.55, "south": 2.0, "east": 1.85}
 const DOOR_LIGHT_POSITIONS := {
 	"north": [Vector3(-2.12, 1.5, -4.89), Vector3(2.12, 1.5, -4.89)],
 	"east": [Vector3(7.00, 1.4, -1.85), Vector3(7.00, 1.4, 1.85)],
 	"south": [Vector3(-2.12, 1.4, 5.20), Vector3(2.12, 1.4, 5.20)],
 	"west": [Vector3(-7.00, 1.4, -1.85), Vector3(-7.00, 1.4, 1.85)],
 }
+enum Lighting { EXPLORATION, SUPPLIES, DANGER, GUIDANCE }
+
+# Each practical has a pale core and a deeper pool of light on the stone.
+const PALETTES := {
+	Lighting.EXPLORATION: {
+		"pool": Color("#ff912f"), "flame": Color("#ffc47b"), "core": Color("#ffedc5"),
+		"ambient": Color("#788ba4"), "fill": Color("#a1adba"), "wall": Color("#b9cbd1"), "reach": 4.15,
+	},
+	Lighting.SUPPLIES: {
+		"pool": Color("#ffc264"), "flame": Color("#ffda93"), "core": Color("#fff1d3"),
+		"ambient": Color("#898c99"), "fill": Color("#c9beaa"), "wall": Color("#cfbb9c"), "reach": 5.35,
+	},
+	Lighting.DANGER: {
+		"pool": Color("#fa754d"), "flame": Color("#ff9563"), "core": Color("#ffdfb2"),
+		"ambient": Color("#78829f"), "fill": Color("#aaa1b1"), "wall": Color("#a4a4b9"), "reach": 4.85,
+	},
+	Lighting.GUIDANCE: {
+		"pool": Color("#83d9c5"), "flame": Color("#a9ead4"), "core": Color("#e2fff0"),
+		"ambient": Color("#758fa4"), "fill": Color("#adbfca"), "wall": Color("#adc2cc"), "reach": 5.15,
+	},
+}
+
 const IMPACT_SECONDS := 0.24
 const CHEST_OPEN_SECONDS := 0.28
 var entry: Dictionary = {}
@@ -44,7 +67,7 @@ func configure(next_entry: Dictionary) -> void:
 	next_key += "/" + str(next_entry.get("growth_key", ""))
 	if not (next_entry.get("breakables", []) as Array).is_empty():
 		next_key += "/with_furniture"
-	if _geometry_key == next_key and _ready_model:
+	if _ready_model and _geometry_key == next_key and _lighting_group(next_entry) == _lighting_group(entry):
 		show()
 		set_process(true)
 		return
@@ -88,18 +111,23 @@ func _build() -> void:
 	room_world = Node3D.new()
 	viewport.add_child(room_world)
 	var environment := WorldEnvironment.new()
+	var group := _lighting_group(entry)
+	var palette: Dictionary = PALETTES[group]
+	var art := VoxelArt.new()
+	art.sconce_flame = palette.flame
+	art.sconce_core = palette.core
 	var settings := Environment.new()
 	settings.background_mode = Environment.BG_CLEAR_COLOR
 	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	settings.ambient_light_color = Color("#8398a3")
-	settings.ambient_light_energy = 0.33 if entry.get("polished", false) else 0.25
+	settings.ambient_light_color = palette.ambient
+	settings.ambient_light_energy = 0.235 if entry.get("polished", false) else 0.19
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
 	room_world.add_child(environment)
 	if entry.get("generated", false):
-		model = _build_generated()
+		model = _build_generated(art, group)
 	else:
-		room_world.add_child(VoxelArt.new().build_event_shell(Layout.ROOM_WALL_RECTS, str(entry.get("growth_key", _geometry_key))))
+		room_world.add_child(art.build_event_shell(Layout.ROOM_WALL_RECTS, str(entry.get("growth_key", _geometry_key))))
 		model = (load(String(entry.model_path)) as PackedScene).instantiate() as Node3D
 		_place_authored_furniture()
 	room_world.add_child(model)
@@ -129,7 +157,7 @@ func _build() -> void:
 	occlusion.shader = preload("res://scripts/presentation/B/B_foreground_color.gdshader")
 	occlusion.set_shader_parameter("lit_room", viewport.get_texture())
 	front_sprite.material = occlusion
-	_build_lights()
+	_build_lights(group, palette)
 	_build_gates()
 	status_lamp = _box(room_world, Vector3.ZERO, Vector3(0.12, 0.12, 0.12), Color("86b7a2"))
 	var anchor: Vector2 = entry.interaction_pos
@@ -177,13 +205,13 @@ func _replace_offering_altar() -> void:
 	room_world.add_child(VoxelArt.new().build_offering_altar(Rect2(entry.body_rect)))
 
 
-func _build_generated() -> Node3D:
+func _build_generated(art: VoxelArt, group: Lighting) -> Node3D:
 	var key := var_to_str([
-		_geometry_key, entry.get("room_type"), entry.get("event_type"), entry.get("wall_rects"),
+		_geometry_key, group, entry.get("room_type"), entry.get("event_type"), entry.get("wall_rects"),
 		entry.get("props"), entry.get("object_rect"), entry.get("interaction_pos")
 	])
 	if not _generated_meshes.has(key):
-		var fresh := VoxelArt.new().build(entry)
+		var fresh := art.build(entry)
 		var meshes: Array[Dictionary] = []
 		for part: MeshInstance3D in fresh.get_children():
 			meshes.append({"name": part.name, "mesh": part.mesh, "transform": part.transform, "assembly": part.get_meta("B_assembly", &"")})
@@ -249,29 +277,51 @@ func _index_meshes(node: Node) -> void:
 	for child in node.get_children():
 		_index_meshes(child)
 
-func _build_lights() -> void:
+func _lighting_group(room: Dictionary) -> Lighting:
+	match StringName(room.get("room_type", &"")):
+		&"Mine", &"Monster", &"Boss", &"Combat":
+			return Lighting.DANGER
+		&"Chest":
+			return Lighting.SUPPLIES
+		&"Exit":
+			return Lighting.GUIDANCE
+		&"Event":
+			var event_id := String(room.get("event_type", room.get("id", ""))).trim_prefix("B_")
+			if room.has("numbered_id"):
+				event_id = "z1_event_" + String(room.numbered_id)
+			match Z2EventRuntime.canonical(event_id):
+				"shop", "trader", "savings", "consign", "pawn", "recycle", "expand", "compress", "coil", "clock_in", "seal":
+					return Lighting.SUPPLIES
+				"mechanism", "cage", "altar", "dice":
+					return Lighting.DANGER
+				"relief", "first_aid", "information", "recon", "shortcut", "demine":
+					return Lighting.GUIDANCE
+	return Lighting.EXPLORATION
+
+
+func _build_lights(group: Lighting, palette: Dictionary) -> void:
 	for side: String in DOOR_LIGHT_POSITIONS:
 		for point: Vector3 in DOOR_LIGHT_POSITIONS[side]:
 			var lamp := OmniLight3D.new()
 			lamp.position = point
-			lamp.light_color = Color("#ff912f")
-			lamp.light_energy = DOOR_LAMP_ENERGY
-			lamp.omni_range = 4.15
-			lamp.omni_attenuation = 1.30
+			lamp.light_color = palette.pool
+			lamp.light_energy = DOOR_LAMP_ENERGY[side]
+			lamp.omni_range = palette.reach * (1.05 if side in ["north", "west"] else 0.80)
+			lamp.omni_attenuation = 1.70
 			room_world.add_child(lamp)
 			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-76, -22, 0)
-	fill.light_color = Color("#9badb3")
+	fill.rotation_degrees = Vector3(-54, -132, 0)
+	fill.light_color = palette.fill
 	fill.shadow_enabled = true
-	fill.shadow_opacity = 0.36
+	fill.shadow_opacity = 0.53
 	fill.directional_shadow_max_distance = 45.0
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
 	var masonry := DirectionalLight3D.new()
 	masonry.name = "MasonryFill"
 	masonry.rotation_degrees = Vector3(-49.0, -37.0, 0.0)
-	masonry.light_color = Color("#b9cbd1")
+	masonry.light_color = palette.wall
 	masonry.light_energy = 0.24
 	masonry.light_cull_mask = WALL_LIGHT_LAYER
 	room_world.add_child(masonry)
@@ -283,39 +333,41 @@ func _build_lights() -> void:
 		lamp.light_energy = 0.72
 		lamp.omni_range = 5.2
 		room_world.add_child(lamp)
-	var kind := StringName(entry.get("room_type", &""))
 	var work := OmniLight3D.new()
 	work.name = "RoomSubjectLight"
-	work.position = local_to_model(entry.interaction_pos) + Vector3(0, 4.5, -0.8)
-	work.light_color = Color(1.0, 0.76, 0.44)
-	match kind:
-		&"Mine":
-			work.position = local_to_model(entry.interaction_pos) + Vector3(-0.45, 3.0, 0.65)
-			work.light_color = Color("#ffd59a")
-			work.light_energy = 1.36
-		&"Normal", &"Spawn":
-			work.position = local_to_model(Vector2(0.50, 0.5)) + Vector3(-0.7, 4.0, 0.6)
-			work.light_color = Color("#ecdac2")
-			work.light_energy = 0.86
-		&"Monster", &"Combat", &"Boss":
-			work.light_color = Color("#e5bad2") if kind == &"Boss" else Color("#ddd7c8")
-			work.light_energy = 0.64
-		&"Event":
-			work.position = local_to_model(Vector2(0.5, 0.5)) + Vector3(-0.60, 4.2, 2.1)
-			work.light_color = Color("#ffe2c1")
-			# The spot identifies the service while the door candles keep their shared color.
-			match String(entry.get("id", entry.get("event_type", ""))).trim_prefix("B_"):
-				"relief", "first_aid": work.light_color = Color("#b4e5cd")
-				"recon", "information", "seal": work.light_color = Color("#b8d9f0")
-				"altar", "dice": work.light_color = Color("#dbbce5")
-				"mechanism", "trap", "coil": work.light_color = Color("#ffbe82")
-			work.light_energy = 0.78
-		&"Exit":
-			work.light_color = Color("#b0e4ce")
-			work.light_energy = 0.78
-		_:
-			work.light_energy = 0.70
+	var center := local_to_model(Vector2(0.5, 0.5))
+	work.position = center + Vector3(-0.7, 4.0, 0.6)
+	work.light_color = Color("#ecdac2")
+	work.light_energy = 1.10
 	work.omni_range = 7.0
+	match group:
+		Lighting.SUPPLIES:
+			work.position = center + Vector3(-0.6, 2.95, 1.05)
+			work.light_color = Color("#ffbd72")
+			work.light_energy = 1.82
+			work.omni_range = 7.4
+		Lighting.DANGER:
+			work.position = center + Vector3(-1.05, 2.7, 1.0)
+			work.light_color = Color("#ff8964")
+			work.light_energy = 1.75
+			work.omni_range = 7.6
+			if entry.room_type == &"Mine":
+				work.position = local_to_model(entry.interaction_pos) + Vector3(-0.65, 2.05, 0.65)
+				work.omni_range = 4.6
+		Lighting.GUIDANCE:
+			work.position = center + Vector3(0.45, 3.3, 0.80)
+			work.light_color = Color("#cae4d0")
+			work.light_energy = 1.82
+			work.omni_range = 8.0
+			if entry.room_type == &"Exit":
+				work.position = local_to_model(entry.interaction_pos) + Vector3(0, 2.7, 1.35)
+				work.omni_range = 5.6
+		Lighting.EXPLORATION:
+			if entry.get("room_type") == &"Shell":
+				# Match the anonymous masonry baked for unexplored neighbours.
+				work.position = center + Vector3(0, 4.5, -0.8)
+				work.light_color = Color(1.0, 0.76, 0.44)
+				work.light_energy = 0.70
 	work.shadow_enabled = false
 	room_world.add_child(work)
 

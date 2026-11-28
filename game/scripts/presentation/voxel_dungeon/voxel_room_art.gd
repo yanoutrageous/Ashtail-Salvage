@@ -32,6 +32,8 @@ const GATE_HALF_WIDTH := 1.075
 const GATE_HEIGHT := 1.64
 const CAP_CENTER := WALL_HEIGHT + 0.075
 const CAP_THICKNESS := 0.175
+var sconce_flame := AMBER
+var sconce_core := Color("#ffedc5")
 var growth_key := ""
 var rng := RandomNumberGenerator.new()
 var boxes: Array
@@ -77,7 +79,8 @@ func build(entry: Dictionary) -> Node3D:
 			_exit(station)
 		"Event":
 			_floor_seal(station, TEAL, 2.85)
-	_room_inlay(kind, station)
+	if kind in ["Normal", "Spawn"]:
+		_corner_stones()
 	_finish(scene)
 	return scene
 
@@ -736,8 +739,8 @@ func _frame_dressing() -> void:
 			_box(p + Vector3.UP * 0.72, Vector3(0.32, 0.05, 0.32), BRASS.darkened(0.20), "", 0.0, Finish.BRONZE)
 			_box(p + Vector3.UP * 0.88, Vector3(0.18, 0.28, 0.18), Color("#d7b88a"))
 			_box(p + Vector3(0.084, 0.93, 0.05), Vector3(0.045, 0.15, 0.075), Color("#e2cba5"))
-			_box(p + Vector3.UP * 1.08, Vector3(0.13, 0.15, 0.13), AMBER, "Embers")
-			_box(p + Vector3(0.016, 1.19, -0.018), Vector3(0.075, 0.095, 0.075), Color("#ffedc5"), "Embers")
+			_box(p + Vector3.UP * 1.08, Vector3(0.13, 0.15, 0.13), sconce_flame, "Embers")
+			_box(p + Vector3(0.016, 1.19, -0.018), Vector3(0.075, 0.095, 0.075), sconce_core, "Embers")
 		for corner in [-1.0, 1.0]:
 			for index in 12:
 				var offset := rng.randf_range(0.16, 1.1)
@@ -745,34 +748,12 @@ func _frame_dressing() -> void:
 				var cube := rng.randf_range(0.06, 0.24)
 				_box(p + Vector3.UP * cube * 0.2, Vector3(cube, cube * 0.55, cube * 1.4), _shade(STONE, 0.23), "", rng.randf_range(-0.3, 0.3))
 
-func _room_inlay(kind: String, anchor: Vector2) -> void:
-	match kind:
-		"Spawn", "Normal":
-			for side in [-1.0, 1.0]:
-				for i in 8:
-					_box(Vector3(side * (1.17 + (i % 2) * 0.12), 0.088, -3.70 + i * 1.05), Vector3(0.14, 0.02, 0.42), BRASS.darkened(0.30))
-			for quadrant in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
-				var p := Vector3(quadrant.x * 4.5, 0.084, quadrant.y * 3.78)
-				for row in 3:
-					for col in 3:
-						_box(p + Vector3(col * 0.17, 0, row * 0.17), Vector3(0.14, 0.021, 0.14), BRICK.darkened(0.31 if (row + col) % 2 == 0 else 0.16))
-		"Monster", "Combat", "Boss":
-			var hint := Color("#a26a55") if kind != "Boss" else Color("#8e718f")
-			for side in [-1.0, 1.0]:
-				for i in 12:
-					var p := Vector3(side * (3.37 + (i % 3) * 0.089), 0.087, -4.08 + i * 0.71)
-					_box(p, Vector3(0.09, 0.028, 0.46), hint.darkened(0.27))
-					_box(p + Vector3(side * 0.31, 0.006, 0.19), Vector3(0.21, 0.028, 0.13), METAL.darkened(0.13))
-		"Exit":
-			var p := _point(anchor, 0.087)
-			var tint := TEAL.darkened(0.44)
-			for direction in [-1.0, 1.0]:
-				for i in 7:
-					var mark := p + Vector3(direction * (1.16 + 0.15 * (i % 2)), 0, 0.98 + i * 0.48)
-					_box(mark, Vector3(0.13, 0.023, 0.32), tint)
-					_box(mark + Vector3(direction * 0.28, 0.012, 0.14), Vector3(0.093, 0.021, 0.091), tint.darkened(0.30))
-		_:
-			pass
+func _corner_stones() -> void:
+	for quadrant in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+		var p := Vector3(quadrant.x * 4.5, 0.084, quadrant.y * 3.78)
+		for row in 3:
+			for col in 3:
+				_box(p + Vector3(col * 0.17, 0, row * 0.17), Vector3(0.14, 0.021, 0.14), BRICK.darkened(0.31 if (row + col) % 2 == 0 else 0.16))
 
 
 func _floor_seal(local: Vector2, tint: Color, width: float) -> void:
