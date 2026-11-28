@@ -32,6 +32,8 @@ const GATE_HALF_WIDTH := 1.075
 const GATE_HEIGHT := 1.64
 const CAP_CENTER := WALL_HEIGHT + 0.075
 const CAP_THICKNESS := 0.175
+var sconce_flame := AMBER
+var sconce_core := Color("#ffedc5")
 var growth_key := ""
 var rng := RandomNumberGenerator.new()
 var boxes: Array
@@ -736,8 +738,8 @@ func _frame_dressing() -> void:
 			_box(p + Vector3.UP * 0.72, Vector3(0.32, 0.05, 0.32), BRASS.darkened(0.20), "", 0.0, Finish.BRONZE)
 			_box(p + Vector3.UP * 0.88, Vector3(0.18, 0.28, 0.18), Color("#d7b88a"))
 			_box(p + Vector3(0.084, 0.93, 0.05), Vector3(0.045, 0.15, 0.075), Color("#e2cba5"))
-			_box(p + Vector3.UP * 1.08, Vector3(0.13, 0.15, 0.13), AMBER, "Embers")
-			_box(p + Vector3(0.016, 1.19, -0.018), Vector3(0.075, 0.095, 0.075), Color("#ffedc5"), "Embers")
+			_box(p + Vector3.UP * 1.08, Vector3(0.13, 0.15, 0.13), sconce_flame, "Embers")
+			_box(p + Vector3(0.016, 1.19, -0.018), Vector3(0.075, 0.095, 0.075), sconce_core, "Embers")
 		for corner in [-1.0, 1.0]:
 			for index in 12:
 				var offset := rng.randf_range(0.16, 1.1)
