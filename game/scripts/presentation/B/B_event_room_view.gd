@@ -289,9 +289,9 @@ func _lighting_group(room: Dictionary) -> Lighting:
 			if room.has("numbered_id"):
 				event_id = "z1_event_" + String(room.numbered_id)
 			match Z2EventRuntime.canonical(event_id):
-				"shop", "trader", "savings", "consign", "pawn", "recycle", "expand", "compress":
+				"shop", "trader", "savings", "consign", "pawn", "recycle", "expand", "compress", "coil", "clock_in", "seal":
 					return Lighting.SUPPLIES
-				"mechanism", "cage":
+				"mechanism", "cage", "altar", "dice":
 					return Lighting.DANGER
 				"relief", "first_aid", "information", "recon", "shortcut", "demine":
 					return Lighting.GUIDANCE
@@ -350,11 +350,17 @@ func _build_lights(group: Lighting, palette: Dictionary) -> void:
 			work.light_color = Color("#ff8964")
 			work.light_energy = 1.60
 			work.omni_range = 7.6
+			if entry.room_type == &"Mine":
+				work.position = local_to_model(entry.interaction_pos) + Vector3(-0.65, 2.05, 0.65)
+				work.omni_range = 4.6
 		Lighting.GUIDANCE:
 			work.position = center + Vector3(0.45, 3.3, 0.80)
 			work.light_color = Color("#cae4d0")
 			work.light_energy = 1.65
 			work.omni_range = 8.0
+			if entry.room_type == &"Exit":
+				work.position = local_to_model(entry.interaction_pos) + Vector3(0, 2.7, 1.35)
+				work.omni_range = 5.6
 		Lighting.EXPLORATION:
 			if entry.get("room_type") == &"Shell":
 				# Match the anonymous masonry baked for unexplored neighbours.
