@@ -8,7 +8,8 @@ const Y_SPAN := 14.77
 const ELEVATION := 55.0
 const FRAME := Rect2(-0.08, -0.28, 1.16, 1.40)
 const WALL_LIGHT_LAYER := 4
-const DOOR_LAMP_ENERGY := 2.65
+# A stronger rear/left wash reveals the brick faces; opposite doorways have shorter pools.
+const DOOR_LAMP_ENERGY := {"north": 3.9, "west": 3.55, "south": 2.0, "east": 1.85}
 const DOOR_LIGHT_POSITIONS := {
 	"north": [Vector3(-2.12, 1.5, -4.89), Vector3(2.12, 1.5, -4.89)],
 	"east": [Vector3(7.00, 1.4, -1.85), Vector3(7.00, 1.4, 1.85)],
@@ -21,19 +22,19 @@ enum Lighting { EXPLORATION, SUPPLIES, DANGER, GUIDANCE }
 const PALETTES := {
 	Lighting.EXPLORATION: {
 		"pool": Color("#ff912f"), "flame": Color("#ffc47b"), "core": Color("#ffedc5"),
-		"ambient": Color("#8398a3"), "fill": Color("#9badb3"), "wall": Color("#b9cbd1"), "reach": 4.15,
+		"ambient": Color("#788ba4"), "fill": Color("#a1adba"), "wall": Color("#b9cbd1"), "reach": 4.15,
 	},
 	Lighting.SUPPLIES: {
 		"pool": Color("#ffc264"), "flame": Color("#ffda93"), "core": Color("#fff1d3"),
-		"ambient": Color("#b9a18b"), "fill": Color("#d8c9aa"), "wall": Color("#cfbb9c"), "reach": 5.35,
+		"ambient": Color("#898c99"), "fill": Color("#c9beaa"), "wall": Color("#cfbb9c"), "reach": 5.35,
 	},
 	Lighting.DANGER: {
 		"pool": Color("#fa754d"), "flame": Color("#ff9563"), "core": Color("#ffdfb2"),
-		"ambient": Color("#7d85a5"), "fill": Color("#a5a0bc"), "wall": Color("#a4a4b9"), "reach": 4.85,
+		"ambient": Color("#78829f"), "fill": Color("#aaa1b1"), "wall": Color("#a4a4b9"), "reach": 4.85,
 	},
 	Lighting.GUIDANCE: {
 		"pool": Color("#83d9c5"), "flame": Color("#a9ead4"), "core": Color("#e2fff0"),
-		"ambient": Color("#819cad"), "fill": Color("#b3c7ce"), "wall": Color("#adc2cc"), "reach": 5.15,
+		"ambient": Color("#758fa4"), "fill": Color("#adbfca"), "wall": Color("#adc2cc"), "reach": 5.15,
 	},
 }
 
@@ -119,7 +120,7 @@ func _build() -> void:
 	settings.background_mode = Environment.BG_CLEAR_COLOR
 	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	settings.ambient_light_color = palette.ambient
-	settings.ambient_light_energy = 0.33 if entry.get("polished", false) else 0.25
+	settings.ambient_light_energy = 0.235 if entry.get("polished", false) else 0.19
 	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.environment = settings
 	room_world.add_child(environment)
@@ -304,16 +305,16 @@ func _build_lights(group: Lighting, palette: Dictionary) -> void:
 			var lamp := OmniLight3D.new()
 			lamp.position = point
 			lamp.light_color = palette.pool
-			lamp.light_energy = DOOR_LAMP_ENERGY
-			lamp.omni_range = palette.reach
-			lamp.omni_attenuation = 1.30
+			lamp.light_energy = DOOR_LAMP_ENERGY[side]
+			lamp.omni_range = palette.reach * (1.05 if side in ["north", "west"] else 0.80)
+			lamp.omni_attenuation = 1.70
 			room_world.add_child(lamp)
 			candle_lights.append(lamp)
 	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-76, -22, 0)
+	fill.rotation_degrees = Vector3(-54, -132, 0)
 	fill.light_color = palette.fill
 	fill.shadow_enabled = true
-	fill.shadow_opacity = 0.36
+	fill.shadow_opacity = 0.53
 	fill.directional_shadow_max_distance = 45.0
 	fill.light_energy = 0.27 if entry.get("polished", false) else 0.12
 	room_world.add_child(fill)
@@ -337,18 +338,18 @@ func _build_lights(group: Lighting, palette: Dictionary) -> void:
 	var center := local_to_model(Vector2(0.5, 0.5))
 	work.position = center + Vector3(-0.7, 4.0, 0.6)
 	work.light_color = Color("#ecdac2")
-	work.light_energy = 0.86
+	work.light_energy = 1.10
 	work.omni_range = 7.0
 	match group:
 		Lighting.SUPPLIES:
 			work.position = center + Vector3(-0.6, 2.95, 1.05)
 			work.light_color = Color("#ffbd72")
-			work.light_energy = 1.65
+			work.light_energy = 1.82
 			work.omni_range = 7.4
 		Lighting.DANGER:
 			work.position = center + Vector3(-1.05, 2.7, 1.0)
 			work.light_color = Color("#ff8964")
-			work.light_energy = 1.60
+			work.light_energy = 1.75
 			work.omni_range = 7.6
 			if entry.room_type == &"Mine":
 				work.position = local_to_model(entry.interaction_pos) + Vector3(-0.65, 2.05, 0.65)
@@ -356,7 +357,7 @@ func _build_lights(group: Lighting, palette: Dictionary) -> void:
 		Lighting.GUIDANCE:
 			work.position = center + Vector3(0.45, 3.3, 0.80)
 			work.light_color = Color("#cae4d0")
-			work.light_energy = 1.65
+			work.light_energy = 1.82
 			work.omni_range = 8.0
 			if entry.room_type == &"Exit":
 				work.position = local_to_model(entry.interaction_pos) + Vector3(0, 2.7, 1.35)
